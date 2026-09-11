@@ -59,7 +59,7 @@ public class ScrapeStoreTests
     {
         var store = CreateStore();
         var jobId = await store.EnsureJob("ps5", CancellationToken.None);
-        var original = new ListingSummary("111111111111", "PS5", 100m, "GBP", "https://x/itm/1", false);
+        var original = new ListingSummary("111111111111", "PS5", 100m, "GBP", "https://x/itm/1", false, null, null, null);
         await store.UpsertListings(jobId, [original], CancellationToken.None);
 
         await store.UpsertListings(jobId, [original with { Price = 90m }], CancellationToken.None);
@@ -109,7 +109,7 @@ public class ScrapeStoreTests
     {
         var store = CreateStore();
         var jobId = await store.EnsureJob("ps5", CancellationToken.None);
-        var first = new ListingSummary("111111111111", "PS5", 100m, "GBP", "https://x/itm/1", false);
+        var first = new ListingSummary("111111111111", "PS5", 100m, "GBP", "https://x/itm/1", false, null, null, null);
         var second = first with { Price = 90m };
 
         await store.UpsertListings(jobId, [first, second], CancellationToken.None);

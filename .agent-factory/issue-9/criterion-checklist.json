@@ -1,0 +1,38 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A run whose stub scrape client returns a known search page persists the expected listings in an isolated database.",
+      "plannedImplementation": "Test RunPipelinePersistsListingsTests.Should_persist_the_expected_listings_from_a_known_search_page composes the real ScrapeStore, SearchPageService, EbaySearchParser, EbaySearchUrlService and ScrapeRunService over a unique temp SQLite database (Path.GetTempPath + Guid, EnsureCreated, deleted in TearDown) and a stub IScrapeClient returning a known search page. It drives EnsureJob -> EnqueueRun -> ClaimNextQueuedRun -> Run, then reads state back through GetListings and GetRun.",
+      "plannedVerification": "The test asserts the two persisted ListingSummary rows (listing id, title, decimal price, currency prefix, item URL, sold flag) and that the run status is Completed. Existing checks ScrapeStoreTests.Should_upsert_listings_by_listing_id, SearchPageServiceTests.Should_collect_listings_from_active_pages and ScrapeRunServiceTests.Should_persist_listings_and_complete_the_run each cover one piece with mocks/in-memory substitutes; none crosses the real parser + real store + real database boundary, so no existing check fully covers this criterion.",
+      "materialConcerns": [
+        "persistence compatibility (EF Core SQLite decimal/text round-trip)",
+        "isolated test database lifecycle and cleanup"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A run whose stub scrape client fails records a failed run carrying the failure reason.",
+      "plannedImplementation": "Test RunPipelineRecordsFailureReasonTests.Should_record_a_failed_run_carrying_the_scrape_failure_reason runs the same real pipeline over an isolated temp SQLite database with a stub IScrapeClient whose GetPageHtml returns a faulted Task carrying a known reason, then reads back the run via GetRun and the listings via GetListings.",
+      "plannedVerification": "The test asserts run status equals Failed, ErrorMessage equals the exact failure reason string, and no listings were persisted. Existing ScrapeRunServiceTests.Should_fail_the_run_when_collection_throws uses a substituted IScrapeStore and ScrapeStoreTests.Should_record_a_failed_run_with_its_cause uses a manually built store without the real ScrapeRunService, so neither crosses the ScrapeRunService -> SearchPageService -> ScrapeStore boundary this criterion pins.",
+      "materialConcerns": [
+        "failure-reason fidelity as the exception message crosses service and persistence boundaries"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-3",
+      "criterion": "The tests run without any external service or network access.",
+      "plannedImplementation": "Test RunPipelineUsesInProcessScraperTests.Should_run_the_pipeline_through_an_in_process_scrape_client composes the pipeline manually (not through AddCoreServices, which registers HttpScrapeClient and the Azure blob store) with an in-process IScrapeClient keyed to the exact URL produced by the real EbaySearchUrlService for the configured search term and page. Any other URL returns a faulted task, so an unexpected outbound request fails the run instead of silently reaching the network; the database is a local temp SQLite file.",
+      "plannedVerification": "The test asserts client.RequestedUrls is exactly the single expected eBay search URL, the run status is Completed, and one listing was persisted. Because the only IScrapeClient is the in-process double and it refuses every URL but the expected one, and because no HTTP handler or cloud store is registered, a correct run cannot contact an external service. The suite is executed by `dotnet test` against local SQLite with no network credentials.",
+      "materialConcerns": [
+        "environmental network isolation cannot be asserted directly; it is encoded through a strict in-process client that rejects unexpected URLs"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    }
+  ]
+}
