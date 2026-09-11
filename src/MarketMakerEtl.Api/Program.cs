@@ -5,7 +5,7 @@ using MarketMakerEtl.Core.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddCoreServices();
+builder.Services.AddCoreServices(builder.Configuration);
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
