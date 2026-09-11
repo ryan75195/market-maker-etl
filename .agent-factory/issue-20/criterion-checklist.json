@@ -1,0 +1,66 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "An active Buy-It-Now page yields its title, a numeric price and currency, its condition, and an active status.",
+      "plannedImplementation": "EbayItemPageParser.Parse parses the captured item page with AngleSharp and returns an ItemPageListing: read h1.x-item-title__mainTitle for Title, span.x-price-primary__price for a non-zero decimal Price and its currency symbol, div.x-item-condition-text for Condition, and default Status to Active when div.x-photos-cvip > span.ux-textspans is neither SOLD nor ENDED.",
+      "plannedVerification": "BuyItNowPageExposesTitlePriceCurrencyConditionAndActiveStatusTests.Should_expose_the_title_price_currency_condition_and_active_status parses an unquoted-attribute Buy-It-Now fixture and asserts Title equals 'Apple iPhone 15 Pro 256GB', Price equals 749.99m, Currency equals '£', Condition equals 'Pre-owned' and Status equals 'Active'. At base Parse throws NotImplementedException, so the assertions fail on the missing behaviour. No existing check parses item pages; EbaySearchParser only covers search cards.",
+      "materialConcerns": [
+        "raw captures use unquoted attributes so the parser must tolerate them",
+        "currency is carried as the symbol shown in the price text, matching ListingSummary.Currency",
+        "the page is not persisted by this work item, so no schema or migration impact"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-2",
+      "criterion": "An active auction page yields an auction buying format.",
+      "plannedImplementation": "EbayItemPageParser.Parse detects the auction marker div.x-bid-price in the captured page and sets ItemPageListing.BuyingFormat to 'Auction', while a Buy-It-Now marker div.x-bin-price maps to 'Buy It Now'.",
+      "plannedVerification": "AuctionPageExposesAuctionBuyingFormatTests.Should_report_an_auction_buying_format parses an unquoted-attribute fixture carrying div.x-bid-price and asserts BuyingFormat equals 'Auction'. At base Parse throws NotImplementedException so the assertion fails on the missing behaviour. No existing check reads item-page buying format; EbaySearchParser's card-level match is a different page shape.",
+      "materialConcerns": [
+        "the auction marker must win over any default so an auction is not reported as Buy It Now",
+        "the buying-format vocabulary reuses the 'Auction' value already used by ListingSummary.BuyingFormat"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A sold page yields a sold status, the sold price, and the sold date.",
+      "plannedImplementation": "EbayItemPageParser.Parse reads the status badge div.x-photos-cvip > span.ux-textspans, sets Status to 'Sold' for SOLD, reads div.x-item-condensed-card__sold-price for the SoldPrice decimal, and extracts the sold date text from div.d-top-panel-message ('This listing sold on Fri, 11 Sep at 6:09 PM.') into SoldDate without the 'sold on ' prefix or trailing period.",
+      "plannedVerification": "SoldPageExposesSoldStatusPriceAndDateTests.Should_report_sold_status_the_sold_price_and_the_sold_date parses an unquoted-attribute sold fixture and asserts Status equals 'Sold', SoldPrice equals 180.50m, and SoldDate equals 'Fri, 11 Sep at 6:09 PM'. At base Parse throws NotImplementedException so the assertions fail on the missing behaviour. No existing check derives sold status or sold date from an item page.",
+      "materialConcerns": [
+        "sold date is exposed as the captured display text rather than a parsed DateTime to avoid a locale-dependent conversion",
+        "status must be content-derived because ended pages can return HTTP 404 with a full body",
+        "sold price is separate from the active Price field"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-4",
+      "criterion": "An ended page whose price displays as `0.00` yields no price rather than zero.",
+      "plannedImplementation": "EbayItemPageParser.Parse maps a parsed active price of zero to a null Price so a placeholder 0.00 on an ended page is not recorded as a real price; ended status is read from the ENDED status badge.",
+      "plannedVerification": "EndedPageWithZeroPriceExposesNoPriceTests.Should_report_no_price_when_an_ended_page_displays_zero parses an unquoted-attribute ended fixture whose span.x-price-primary__price is '£0.00' and asserts the returned listing is a listing with Price equal to null. At base Parse throws NotImplementedException so the assertion fails on the missing behaviour. No existing check covers zero-price suppression.",
+      "materialConcerns": [
+        "a zero price must not be stored as zero or it would corrupt downstream price analysis",
+        "the ended page is still a listing, so Parse must return a non-null ItemPageListing with only Price absent"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-5",
+      "criterion": "A non-listing page (anti-bot or catalog) is reported as not a listing, with no partial values.",
+      "plannedImplementation": "EbayItemPageParser.Parse returns null when the page lacks the item-page identity (no h1.x-item-title__mainTitle and no item structure), so an anti-bot interstitial or a catalog browse page is reported as not a listing and no partial ItemPageListing is produced.",
+      "plannedVerification": "NonListingPageIsNotReportedAsAListingTests.Should_report_an_anti_bot_page_as_not_a_listing and Should_report_a_catalog_page_as_not_a_listing parse an anti-bot interstitial and a catalog browse page and assert Parse returns null. At base Parse throws NotImplementedException so both assertions fail on the missing behaviour. No existing check classifies non-listing pages.",
+      "materialConcerns": [
+        "anti-bot interstitials can contain text and anchors that must not be mistaken for item fields",
+        "returning null guarantees no partial values leak to the capture layer"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    }
+  ]
+}

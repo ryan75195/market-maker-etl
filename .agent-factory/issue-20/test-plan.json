@@ -1,0 +1,14 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~BuyItNowPageExposesTitlePriceCurrencyConditionAndActiveStatusTests|FullyQualifiedName~AuctionPageExposesAuctionBuyingFormatTests|FullyQualifiedName~SoldPageExposesSoldStatusPriceAndDateTests|FullyQualifiedName~EndedPageWithZeroPriceExposesNoPriceTests|FullyQualifiedName~NonListingPageIsNotReportedAsAListingTests\"",
+  "rationale": "The ticket adds an item-page parser and its model that turn a captured eBay item page into the buy-side and sell-side fields the capture layer needs, without touching the search-page parser, the database schema, or the fetch path. Each acceptance criterion gets its own fixture named for the outcome it protects: BuyItNowPageExposesTitlePriceCurrencyConditionAndActiveStatusTests pins title/price/currency/condition/active status, AuctionPageExposesAuctionBuyingFormatTests pins the auction buying format, SoldPageExposesSoldStatusPriceAndDateTests pins sold status/sold price/sold date, EndedPageWithZeroPriceExposesNoPriceTests pins that a displayed 0.00 yields null rather than zero, and NonListingPageIsNotReportedAsAListingTests pins that an anti-bot or catalog page returns null rather than partial values. All fixtures use unquoted attributes as the real captures do, so the implementation must use a real HTML parser. Shape declared: a public ItemPageListing record and an internal static EbayItemPageParser whose Parse throws NotImplementedException, so at base every test fails because the behaviour is missing rather than because the tree will not compile. Measured at base: the six contract assertions are the only Unit failures (63 other Unit tests pass), the Architecture suite passes 25/25, dotnet format is clean, so declaredRedTests is empty and no collateral is expected.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Models/Ebay/ItemPageListing.cs",
+    "src/MarketMakerEtl.Core/Services/EbayItemPageParser.cs"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Models/Ebay/ItemPageListing.cs": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5"],
+    "src/MarketMakerEtl.Core/Services/EbayItemPageParser.cs": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5"]
+  },
+  "declaredRedTests": []
+}
