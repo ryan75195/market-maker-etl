@@ -1,3 +1,4 @@
+using AngleSharp.Html.Parser;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Scraper;
@@ -6,6 +7,10 @@ namespace MarketMakerEtl.Core.Services;
 
 public sealed class SearchPageService : ISearchPageService
 {
+    private const string ListingCardSelector = "li.s-card, li.s-item, a[href*='/itm/']";
+
+    private static readonly HtmlParser DocumentParser = new();
+
     private readonly IScrapeClient _client;
     private readonly IEbaySearchUrlService _urls;
     private readonly ISearchPageParser _parser;
@@ -51,6 +56,12 @@ public sealed class SearchPageService : ISearchPageService
 
             if (pageResults.Count == 0)
             {
+                if (ContainsListingMarkup(html))
+                {
+                    throw new InvalidOperationException(
+                        $"Search page '{url}' contained listing markup but parsed to zero results.");
+                }
+
                 return;
             }
 
@@ -59,5 +70,11 @@ public sealed class SearchPageService : ISearchPageService
                 merged[listing.ListingId] = listing;
             }
         }
+    }
+
+    private static bool ContainsListingMarkup(string html)
+    {
+        var document = DocumentParser.ParseDocument(html);
+        return document.QuerySelector(ListingCardSelector) is not null;
     }
 }

@@ -33,7 +33,7 @@ public sealed class EbaySearchParser : ISearchPageParser
     private static IHtmlCollection<IElement> SelectItems(IDocument document)
     {
         var cards = document.QuerySelectorAll("li.s-card[data-viewport]");
-        return cards.Length > 0 ? cards : document.QuerySelectorAll("li.s-item[id]");
+        return cards.Length > 0 ? cards : document.QuerySelectorAll("li.s-item");
     }
 
     private static ListingSummary? BuildSummary(IElement item)
