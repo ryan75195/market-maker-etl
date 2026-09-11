@@ -123,6 +123,12 @@ public sealed class ScrapeStore : IScrapeStore
             .ToList();
     }
 
+    public Task<IReadOnlyList<ListingRefreshTarget>> GetActiveListings(CancellationToken ct) =>
+        throw new NotImplementedException($"{ct}");
+
+    public Task RecordStatusChange(int listingEntityId, string status, decimal? price, CancellationToken ct) =>
+        throw new NotImplementedException($"{listingEntityId}{status}{price}{ct}");
+
     private static void Apply(
         EtlDbContext db,
         int jobId,

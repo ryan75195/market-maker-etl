@@ -1,0 +1,22 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~ListingRefreshServiceTests|FullyQualifiedName~ListingRefreshRecordsStatusChangeForNewlySoldListingTests|FullyQualifiedName~ListingRefreshLeavesStillActiveListingUnchangedTests|FullyQualifiedName~ListingRefreshIgnoresAntiBotPageTests|FullyQualifiedName~ListingRefreshDoesNotChangeTerminalListingTests|FullyQualifiedName~ScrapeStoreTests\"",
+  "rationale": "The ticket adds a refresh service that re-checks stored active listings by fetching their item pages, parsing the observed status, and recording a status-change history row only when the stored status actually changes; it must not touch the search capture path or the parser. The four criteria are pinned by four behaviour-named fixtures, each seeding a unique temp SQLite database, running the real ListingRefreshService against the real ScrapeStore with an in-process stub IScrapeClient (no live fetch), and asserting the persisted Listings row plus the ListingStatusChanges history: ListingRefreshRecordsStatusChangeForNewlySoldListingTests (exactly one change for the one listing whose page turned Sold, stored status becomes Sold), ListingRefreshLeavesStillActiveListingUnchangedTests (an active page writes no history), ListingRefreshIgnoresAntiBotPageTests (a title-less anti-bot page writes no history), and ListingRefreshDoesNotChangeTerminalListingTests (Sold/Ended listings are never changed). ListingRefreshServiceTests is the architecture-required fixture for the new public class and also satisfies CI0002 by invoking RefreshActiveListings; the two new IScrapeStore methods are covered inside the existing ScrapeStoreTests fixture because CI0002 maps ScrapeStore coverage to that name. Shape was declared by stubbing: IListingRefreshService, ListingRefreshTarget, a throwing ListingRefreshService constructor, two throwing ScrapeStore methods, and the AddCoreServices registration. Measured at base: the seven declared contract assertions are the only Unit failures (73 pre-existing Unit tests still pass), the Architecture suite is green at 25/25, the build has 0 warnings, and dotnet format --verify-no-changes exits 0, so declaredRedTests is empty and no collateral is expected. Each refresh test seeds the stored active listing with a null ItemStatus, matching the capture path (UpsertListings never sets ItemStatus), so the implementation must treat null as the active state rather than a new status.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Interfaces/IListingRefreshService.cs",
+    "src/MarketMakerEtl.Core/Services/ListingRefreshService.cs",
+    "src/MarketMakerEtl.Core/Models/Ebay/ListingRefreshTarget.cs",
+    "src/MarketMakerEtl.Core/Interfaces/IScrapeStore.cs",
+    "src/MarketMakerEtl.Core/Data/ScrapeStore.cs",
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Interfaces/IListingRefreshService.cs": ["AC-1", "AC-2", "AC-3", "AC-4"],
+    "src/MarketMakerEtl.Core/Services/ListingRefreshService.cs": ["AC-1", "AC-2", "AC-3", "AC-4"],
+    "src/MarketMakerEtl.Core/Models/Ebay/ListingRefreshTarget.cs": ["AC-1", "AC-4"],
+    "src/MarketMakerEtl.Core/Interfaces/IScrapeStore.cs": ["AC-1", "AC-2", "AC-3", "AC-4"],
+    "src/MarketMakerEtl.Core/Data/ScrapeStore.cs": ["AC-1", "AC-2", "AC-3", "AC-4"],
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs": ["AC-1"]
+  },
+  "declaredRedTests": []
+}

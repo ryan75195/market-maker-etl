@@ -1,4 +1,5 @@
 using MarketMakerEtl.Core.Data;
+using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Services;
@@ -120,6 +121,100 @@ public class ScrapeStoreTests
             Assert.That(listings, Has.Count.EqualTo(1));
             Assert.That(listings[0].Price, Is.EqualTo(90m));
         });
+    }
+
+    [Test]
+    public async Task Should_return_active_listings_for_refresh()
+    {
+        var store = CreateStore();
+        var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.Listings.AddRange(
+                new ListingEntity
+                {
+                    ListingId = "refresh-active-open",
+                    Url = "https://x/itm/open",
+                    ItemStatus = null,
+                    CreatedUtc = DateTime.UtcNow
+                },
+                new ListingEntity
+                {
+                    ListingId = "refresh-active-labelled",
+                    Url = "https://x/itm/labelled",
+                    ItemStatus = "Active",
+                    CreatedUtc = DateTime.UtcNow
+                },
+                new ListingEntity
+                {
+                    ListingId = "refresh-terminal-sold",
+                    Url = "https://x/itm/sold",
+                    ItemStatus = "Sold",
+                    CreatedUtc = DateTime.UtcNow
+                },
+                new ListingEntity
+                {
+                    ListingId = "refresh-terminal-ended",
+                    Url = "https://x/itm/ended",
+                    ItemStatus = "Ended",
+                    CreatedUtc = DateTime.UtcNow
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var targets = await store.GetActiveListings(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                targets.Select(t => t.ListingId),
+                Is.EquivalentTo(new[] { "refresh-active-open", "refresh-active-labelled" }));
+            Assert.That(
+                targets.Single(t => t.ListingId == "refresh-active-open").Url,
+                Is.EqualTo("https://x/itm/open"));
+        });
+    }
+
+    [Test]
+    public async Task Should_record_a_status_change_against_a_listing()
+    {
+        var store = CreateStore();
+        var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        var listingId = 0;
+
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var listing = new ListingEntity
+            {
+                ListingId = "refresh-becomes-sold",
+                Url = "https://x/itm/becomes-sold",
+                ItemStatus = "Active",
+                Price = 100m,
+                CreatedUtc = DateTime.UtcNow
+            };
+            db.Listings.Add(listing);
+            await db.SaveChangesAsync();
+            listingId = listing.Id;
+        }
+
+        await store.RecordStatusChange(listingId, "Sold", 275.50m, CancellationToken.None);
+
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var listing = await db.Listings.SingleAsync(l => l.Id == listingId);
+            var changes = await db.ListingStatusChanges
+                .Where(c => c.ListingEntityId == listingId)
+                .ToListAsync();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(listing.ItemStatus, Is.EqualTo("Sold"));
+                Assert.That(listing.Price, Is.EqualTo(275.50m));
+                Assert.That(changes, Has.Count.EqualTo(1));
+                Assert.That(changes[0].Status, Is.EqualTo("Sold"));
+            });
+        }
     }
 
     private ScrapeStore CreateStore() =>

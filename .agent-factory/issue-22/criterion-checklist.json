@@ -1,0 +1,65 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "Given stored active listings where exactly one item page now reports sold, exactly one status change is recorded for that listing and its stored status becomes sold.",
+      "plannedImplementation": "Add IListingRefreshService.RefreshActiveListings(CancellationToken), implemented by ListingRefreshService, which asks IScrapeStore.GetActiveListings for every non-terminal listing, fetches each stored Url through IScrapeClient, parses the page with the existing EbayItemPageParser, and, only when the parsed status differs from the stored status, calls IScrapeStore.RecordStatusChange to set ListingEntity.ItemStatus and append one ListingStatusChangeEntity. ScrapeStore.GetActiveListings returns the rows whose ItemStatus is null or Active so a captured listing (which never had ItemStatus set) is re-checked. Register IListingRefreshService in AddCoreServices so the host can resolve it.",
+      "plannedVerification": "ListingRefreshRecordsStatusChangeForNewlySoldListingTests.Should_record_one_status_change_only_for_the_listing_whose_page_became_sold seeds two active listings with distinct URLs and null ItemStatus, maps one URL to a SOLD item page and the other to an active page via StubScrapeClient, runs the real service and store against a temp SQLite database, then asserts ListingStatusChanges has exactly one row linked to the sold listing with Status Sold, that listing's ItemStatus is Sold, and the still-active listing has no history row. At base RefreshActiveListings throws NotImplementedException, so the assertion set cannot pass. The pre-existing ListingStatusChangeHistoryStoresRecordsTests only writes a history row directly; it does not exercise the refresh transition.",
+      "materialConcerns": [
+        "persistence compatibility: the refresh writes existing Listings columns (ItemStatus/UpdatedUtc) and the ListingStatusChanges table added by the issue #21 migration; no new migration is required",
+        "data integrity: exactly one history row must be written per transition, not one per re-check",
+        "public-contract compatibility: extending IScrapeStore forces every implementer (ScrapeStore and any test substitute) to keep compiling"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "with no re-check yet, each stored listing is observed with ItemStatus null; after RefreshActiveListings the listing whose page reports SOLD is observed with ItemStatus Sold and one ListingStatusChanges row, while the listing whose page reports Active is observed with no history row.",
+        "whenHeldValueAbsent": "when the stored listing holds no prior ItemStatus (null, the state the capture path leaves), the SOLD page is still recorded as a transition from active to Sold rather than being suppressed for lack of a held value."
+      }
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A listing that is still active records no status change.",
+      "plannedImplementation": "RefreshActiveListings compares the parsed status against the stored status with an active-equivalent normalisation: a stored null ItemStatus is treated as the Active state, so parsing Active from the item page matches and RecordStatusChange is not called. ScrapeStore.GetActiveListings includes null-status rows, so a listing captured before ItemStatus existed is re-checked instead of skipped.",
+      "plannedVerification": "ListingRefreshLeavesStillActiveListingUnchangedTests.Should_leave_a_listing_that_is_still_active_without_a_status_change_record seeds one active listing with null ItemStatus, maps its URL to an active item page, runs the real service and store, and asserts the ListingStatusChanges table is empty and the stored ItemStatus is neither Sold nor Ended. At base RefreshActiveListings throws NotImplementedException. The pre-existing tests never re-check a stored listing against a page that stays active.",
+      "materialConcerns": [
+        "the capture path (ScrapeStore.UpsertListings) never assigns ItemStatus, so a real stored active listing has null; treating null as a change would create a spurious status change on every active re-check",
+        "an implementation that filters GetActiveListings to ItemStatus == \"Active\" would silently skip captured listings"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "before the re-check the stored listing is observed with ItemStatus null; after the re-check it is observed with no ListingStatusChanges row and still not Sold or Ended.",
+        "whenHeldValueAbsent": "when the stored listing holds no ItemStatus, the parsed Active value is treated as the same active state and no change is recorded."
+      }
+    },
+    {
+      "id": "AC-3",
+      "criterion": "When a re-check returns an anti-bot or error page, no status change is recorded for that listing.",
+      "plannedImplementation": "RefreshActiveListings only calls RecordStatusChange after EbayItemPageParser.Parse returns a non-null item page with a title; an anti-bot/error page has no listing title, Parse returns null, and the service skips that listing without writing history or changing ItemStatus.",
+      "plannedVerification": "ListingRefreshIgnoresAntiBotPageTests.Should_record_no_status_change_when_the_item_page_is_an_anti_bot_page seeds one active listing, maps its URL to a title-less anti-bot page (only a verification message, as the parser's NonListingPageIsNotReportedAsAListingTests uses), runs the real service and store, and asserts no ListingStatusChanges row exists for the listing and ItemStatus is neither Sold nor Ended. At base RefreshActiveListings throws NotImplementedException. The existing parser test covers Parse returning null but not the refresh consequence.",
+      "materialConcerns": [
+        "the anti-bot page must not be interpreted as the parser default Active status",
+        "an unhandled parse must not abort the whole refresh or write a partial status"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-4",
+      "criterion": "A re-check does not change listings whose status is already terminal.",
+      "plannedImplementation": "ScrapeStore.GetActiveListings filters out rows whose ItemStatus is Sold or Ended, returning only rows that are null or Active, so terminal listings are never fetched or written by RefreshActiveListings. The terminal set is owned by the store query rather than the parser.",
+      "plannedVerification": "ListingRefreshDoesNotChangeTerminalListingTests.Should_leave_sold_and_ended_listings_unchanged_on_recheck seeds one Sold and one Ended listing whose URLs map to an active-looking page, runs the real service and store, and asserts ListingStatusChanges is empty and both stored statuses remain Sold and Ended. At base GetActiveListings and RefreshActiveListings throw NotImplementedException. The store coverage test Should_return_active_listings_for_refresh additionally asserts the query excludes Sold and Ended rows. No pre-existing test filters terminal listings out of a refresh.",
+      "materialConcerns": [
+        "terminal must cover both Sold and Ended, not only Sold",
+        "asserting a page that reports Active is deliberately used so a service that fetched a terminal listing would be forced to either change it (failing) or correctly treat it as terminal"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "before the re-check the Sold and Ended listings are observed with those terminal statuses; after the re-check they are observed with the same statuses and no ListingStatusChanges rows.",
+        "whenHeldValueAbsent": "when a stored listing holds no terminal status (null or Active) it is not terminal, so it remains eligible for re-check and may transition; the terminal exclusion only applies to a held Sold or Ended value."
+      }
+    }
+  ]
+}
