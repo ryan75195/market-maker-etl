@@ -1,0 +1,17 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~MigrationsCreateMissingDatabase|FullyQualifiedName~MigrationsPreserveExistingRows|FullyQualifiedName~MigrationsLeaveUpToDateDatabaseUnchanged\"",
+  "rationale": "The ticket replaces EnsureCreated with EF Core migrations applied on host startup. The three contract fixtures encode the three acceptance criteria as observable database outcomes: a missing database is materialised by migrations (applied-migration history non-empty plus a store round-trip), a legacy EnsureCreated database that already holds listing and run rows keeps those rows when migrations are applied, and reapplying migrations to an up-to-date database changes nothing and throws nothing. At base the shared startup surface ApplyMigrations throws NotImplementedException, so all three fail for the missing behaviour rather than for setup.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Data/DatabaseMigrationExtensions.cs",
+    "src/MarketMakerEtl.Api/Program.cs",
+    "src/MarketMakerEtl.Etl/Program.cs"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Data/DatabaseMigrationExtensions.cs": "AC-1, AC-2, AC-3",
+    "src/MarketMakerEtl.Api/Program.cs": "AC-3",
+    "src/MarketMakerEtl.Etl/Program.cs": "AC-3"
+  },
+  "implementationPaths": [],
+  "declaredRedTests": []
+}
