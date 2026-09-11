@@ -1,0 +1,49 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A test fails if a run status string literal appears outside the run-status type.",
+      "plannedImplementation": "Add RunStatusLiteralPlacementTests, which enumerates the ScrapeRunStatus member names via Enum.GetNames<ScrapeRunStatus>() and scans every production .cs file under src, excluding ScrapeRunStatus.cs itself, for a quoted literal equal to any member name.",
+      "plannedVerification": "RunStatusLiteralPlacementTests.Should_keep_run_status_names_out_of_string_literals_outside_the_status_type collects each offending file and literal and asserts the violation list is empty. It is green on the current tree because ScrapeStore and ScrapeRunStateService reference the enum through nameof and enum members, and it was confirmed red when a temporary file introduced \"Queued\".",
+      "materialConcerns": [
+        "The check reads production source text, so literals in generated or test code are deliberately out of scope; the invariant is about production status handling."
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A test fails if the API assembly references a persistence type.",
+      "plannedImplementation": "Add ApiPersistenceBoundaryTests, which uses NetArchTest to assert the API assembly has no dependency on the Core.Data.Entities namespace or the concrete ScrapeStore.",
+      "plannedVerification": "ApiPersistenceBoundaryTests.Should_not_reference_persistence_store_or_entity_types_from_the_api_assembly runs Types.InAssembly(ApiAssembly).ShouldNot().HaveDependencyOnAny(...) and asserts success. It is green now because the endpoints resolve IScrapeStore and IScrapeClient interfaces, and it was confirmed red when a temporary API type held a ListingEntity property.",
+      "materialConcerns": [
+        "Persistence compatibility: the API host bootstrap still references EtlDbContext to create or upgrade the schema at startup, so the boundary is pinned at entity and concrete-store types rather than every type in Core.Data; a stricter reading would require moving schema startup behind a Core abstraction."
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A test fails if a scrape-fetch interface method omits a cancellation token.",
+      "plannedImplementation": "Add ScrapeFetchCancellationTests, which reflects over IScrapeClient, IScrapeContentStore and ISearchPageService and requires every declared method to take a CancellationToken parameter.",
+      "plannedVerification": "ScrapeFetchCancellationTests.Should_declare_a_cancellation_token_on_every_scrape_fetch_interface_method builds a violation list of methods lacking a CancellationToken parameter and asserts it is empty. It is green now and was confirmed red when a default interface method without a token was added to IScrapeClient.",
+      "materialConcerns": [
+        "The scrape-fetch interface set is enumerated explicitly, so a newly introduced fetch interface must be added here before the invariant covers its methods."
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-4",
+      "criterion": "A test fails if the database location is derived from the process working directory.",
+      "plannedImplementation": "Add DatabaseLocationIndependenceTests, which scans production .cs files under src that contain database-configuration tokens (UseSqlite, Data Source, DataSource, marketmakeretl.db) and fails if any of them references Directory.GetCurrentDirectory or Environment.CurrentDirectory.",
+      "plannedVerification": "DatabaseLocationIndependenceTests.Should_not_derive_the_database_location_from_the_process_working_directory collects offending files and working-directory API tokens and asserts the violation list is empty. It is green now because ServiceCollectionExtensions configures SQLite from a literal, and it was confirmed red when a temporary file combined a UseSqlite token with Directory.GetCurrentDirectory.",
+      "materialConcerns": [
+        "The current registration still uses the relative literal Data Source=marketmakeretl.db, which SQLite resolves against the working directory at open time; this test pins the prohibited working-directory API usage while issue #4 makes the location configuration-driven and shared by both hosts.",
+        "Release impact: a future change that legitimately calls a working-directory API inside a database-configuring file will be blocked and must either be relocated or the invariant revisited deliberately."
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    }
+  ]
+}

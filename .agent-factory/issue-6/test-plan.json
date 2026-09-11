@@ -1,0 +1,8 @@
+{
+  "testRepair": true,
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Architecture/MarketMakerEtl.Tests.Architecture.csproj --filter \"FullyQualifiedName~RunStatusLiteralPlacementTests|FullyQualifiedName~ApiPersistenceBoundaryTests|FullyQualifiedName~ScrapeFetchCancellationTests|FullyQualifiedName~DatabaseLocationIndependenceTests\"",
+  "rationale": "The deliverable is the architecture-test suite itself: four new tests pin ETL invariants that production already satisfies, with no production surface declared. RunStatusLiteralPlacementTests fails when a ScrapeRunStatus member name is written as a string literal outside ScrapeRunStatus.cs. ApiPersistenceBoundaryTests fails when the API assembly gains a dependency on a Core.Data entity type or the concrete ScrapeStore. ScrapeFetchCancellationTests fails when a scrape-fetch interface method omits a CancellationToken. DatabaseLocationIndependenceTests fails when a database-configuring production file derives the location from Directory.GetCurrentDirectory or Environment.CurrentDirectory. Each test was confirmed to go red under an introduced violation and to pass at base, so the contract is green-at-base by design rather than a tautology.",
+  "implementationPaths": [],
+  "declaredRedTests": []
+}
