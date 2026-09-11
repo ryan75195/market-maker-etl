@@ -1,0 +1,13 @@
+{
+  "ownedPaths": [
+    ".githooks/**",
+    ".claude/**",
+    ".codex/**",
+    ".editorconfig",
+    "tests/.editorconfig",
+    "Directory.Build.props",
+    "src/MarketMakerEtl.Analyzers/**",
+    "CLAUDE.md",
+    "harness-manifest.json"
+  ]
+}

@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MarketMakerEtl.Analyzers/MarketMakerEtl.Analyzers.csproj" />
+    <Project Path="src/MarketMakerEtl.Api/MarketMakerEtl.Api.csproj" />
+    <Project Path="src/MarketMakerEtl.Core/MarketMakerEtl.Core.csproj" />
+    <Project Path="src/MarketMakerEtl.Etl/MarketMakerEtl.Etl.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MarketMakerEtl.Tests.Analyzers/MarketMakerEtl.Tests.Analyzers.csproj" />
+    <Project Path="tests/MarketMakerEtl.Tests.Architecture/MarketMakerEtl.Tests.Architecture.csproj" />
+    <Project Path="tests/MarketMakerEtl.Tests.Integration/MarketMakerEtl.Tests.Integration.csproj" />
+    <Project Path="tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj" />
+  </Folder>
+</Solution>
