@@ -50,7 +50,7 @@ public class MigrationsCreateMissingDatabaseTests
 
         var store = new ScrapeStore(factory, new ScrapeRunStateService());
         var jobId = await store.EnsureJob("new-database-search", CancellationToken.None);
-        var listing = new ListingSummary("111111111111", "Fresh PS5", 100m, "GBP", "https://x/itm/1", false);
+        var listing = new ListingSummary("111111111111", "Fresh PS5", 100m, "GBP", "https://x/itm/1", false, null, null, null);
         await store.UpsertListings(jobId, [listing], CancellationToken.None);
 
         var listings = await store.GetListings(jobId, CancellationToken.None);

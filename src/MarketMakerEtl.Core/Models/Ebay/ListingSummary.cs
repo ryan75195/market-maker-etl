@@ -6,4 +6,7 @@ public sealed record ListingSummary(
     decimal? Price,
     string? Currency,
     string? Url,
-    bool IsSold);
+    bool IsSold,
+    string? Condition,
+    string? PrimaryImageUrl,
+    string? BuyingFormat);

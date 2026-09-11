@@ -110,7 +110,16 @@ public sealed class ScrapeStore : IScrapeStore
             .ToListAsync(ct);
 
         return listings
-            .Select(l => new ListingSummary(l.ListingId, l.Title, l.Price, l.Currency, l.Url, l.IsSold))
+            .Select(l => new ListingSummary(
+                l.ListingId,
+                l.Title,
+                l.Price,
+                l.Currency,
+                l.Url,
+                l.IsSold,
+                l.Condition,
+                l.PrimaryImageUrl,
+                l.BuyingFormat))
             .ToList();
     }
 
@@ -131,6 +140,9 @@ public sealed class ScrapeStore : IScrapeStore
                 Currency = listing.Currency,
                 Url = listing.Url,
                 IsSold = listing.IsSold,
+                Condition = listing.Condition,
+                PrimaryImageUrl = listing.PrimaryImageUrl,
+                BuyingFormat = listing.BuyingFormat,
                 CreatedUtc = DateTime.UtcNow
             });
             return;
@@ -141,6 +153,9 @@ public sealed class ScrapeStore : IScrapeStore
         existing.Currency = listing.Currency;
         existing.Url = listing.Url;
         existing.IsSold = listing.IsSold;
+        existing.Condition = listing.Condition;
+        existing.PrimaryImageUrl = listing.PrimaryImageUrl;
+        existing.BuyingFormat = listing.BuyingFormat;
         existing.UpdatedUtc = DateTime.UtcNow;
     }
 

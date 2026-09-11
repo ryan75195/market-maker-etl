@@ -54,17 +54,21 @@ public static class DatabaseMigrationExtensions
         EtlDbContext db,
         CancellationToken cancellationToken)
     {
-        var initialMigration = db.Database.GetMigrations().FirstOrDefault();
-        if (initialMigration is null)
+        var migrations = db.Database.GetMigrations().ToList();
+        if (migrations.Count == 0)
         {
             return;
         }
 
         var history = db.GetService<IHistoryRepository>();
         await db.Database.ExecuteSqlRawAsync(history.GetCreateIfNotExistsScript(), cancellationToken);
-        await db.Database.ExecuteSqlRawAsync(
-            history.GetInsertScript(new HistoryRow(initialMigration, ProductInfo.GetVersion())),
-            cancellationToken);
+
+        foreach (var migration in migrations)
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                history.GetInsertScript(new HistoryRow(migration, ProductInfo.GetVersion())),
+                cancellationToken);
+        }
     }
 
     private static async Task OpenAsync(DbConnection connection, CancellationToken cancellationToken)
