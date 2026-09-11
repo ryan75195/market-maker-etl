@@ -1,0 +1,7 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit --filter \"FullyQualifiedName~SoldListingsFromSoldSearchTests|FullyQualifiedName~BrokenSearchParseFailsTheRunTests|FullyQualifiedName~EmptySearchResultsCompleteTheRunTests\"",
+  "rationale": "The ticket has three observable acceptance criteria and all three can be pinned through the existing public surface (ScrapeRunService.Run -> SearchPageService.Collect -> EbaySearchParser.Parse -> ScrapeStore/EtlDbContext); no new production API is required, so no shape is declared. SoldListingsFromSoldSearchTests drives a sold search against a sold-listing card in the eBay s-item layout and asserts the real SQLite database ends with that listing marked IsSold while a previously captured active listing survives; at base the sold card is not selected, so nothing is persisted and the test is red. BrokenSearchParseFailsTheRunTests drives a page whose card contains an /itm/ listing link that parses to zero summaries and asserts the persisted run is Failed; at base the collection silently reports a clean empty run (Completed), so the test is red. EmptySearchResultsCompleteTheRunTests pins the other half of that distinction: a genuinely empty page (no cards, no /itm/ links) must persist Completed with zero listings, which guards the implementation against over-eager failure detection. The filter names the three contract fixtures explicitly and runs only those tests, never a repo-wide gate or coverage threshold.",
+  "implementationPaths": [],
+  "declaredRedTests": []
+}

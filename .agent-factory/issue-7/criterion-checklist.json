@@ -1,0 +1,38 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "After a sold search run against a page containing sold listing cards, the database contains listings marked as sold.",
+      "plannedImplementation": "Extend collection/parsing of the eBay sold-results card layout so a sold-tagged listing card is selected and mapped to a ListingSummary with IsSold=true, then persisted through the existing ScrapeRunService -> ScrapeStore.UpsertListings path. The sold-results cards observed in the live capture use the s-item layout without the data-viewport/id attributes the current EbaySearchParser.SelectItems requires, so the card is currently never selected.",
+      "plannedVerification": "SoldListingsFromSoldSearchTests.Should_persist_a_listing_marked_sold_after_a_sold_search_run runs the real EbaySearchParser, SearchPageService, ScrapeRunService and a real SQLite ScrapeStore over a sold page in the s-item layout. It asserts GetListings(jobId) contains exactly listing id 204512345678 with IsSold=true and that a pre-existing active listing for the same job (legacy-state fixture seeded before the run) is still present and still IsSold=false. Existing check reused for the narrow sold-tag mapping: EbaySearchParserTests.Should_mark_a_listing_with_a_sold_tag_as_sold already verifies the s-card tag path but does not cover the s-item sold layout nor persistence, so a new end-to-end assertion is required.",
+      "materialConcerns": [
+        "persistence compatibility: Listings.IsSold already exists and the schema is unchanged, so no migration is needed; the seeded legacy listing proves an existing row is not lost or mutated by a sold upsert"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A page that contains listing links but parses to zero results causes the run to record a failure rather than a clean completion.",
+      "plannedImplementation": "Make SearchPageService/collection distinguish a page that carried listing markup (cards / /itm/ links) from a genuinely empty page. When a page yields zero parsed listings but contained listing links, the collection must raise an error so ScrapeRunService.Run reaches its existing catch and calls ScrapeStore.FailRun instead of CompleteRun.",
+      "plannedVerification": "BrokenSearchParseFailsTheRunTests.Should_fail_the_run_when_a_page_has_listing_links_but_parses_to_zero_results runs the real parser, service, run service and SQLite store over a page containing an s-card with an /itm/ link whose id is non-numeric (so it parses to zero). It asserts GetRun(runId).Status == Failed. At base the run is Completed, so the test is red for the missing behaviour. Existing check reused: ScrapeRunServiceTests.Should_fail_the_run_when_collection_throws already proves collection errors reach FailRun; the new test proves the broken-parse page actually produces such an error.",
+      "materialConcerns": [
+        "public-contract compatibility: no change to ISearchPageService/ISearchPageParser signatures is required, so existing consumers keep compiling",
+        "the raised failure must not be an OperationCanceledException and must not be swallowed, or the run would still complete"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A genuinely empty result page completes successfully with zero found.",
+      "plannedImplementation": "Preserve the clean-completion path for a page with no listing cards and no /itm/ links: collection stops paging, persists no listings, and the run completes. The broken-parse detection added for AC-2 must key off the presence of listing links/cards, not merely an empty parse result.",
+      "plannedVerification": "EmptySearchResultsCompleteTheRunTests.Should_complete_the_run_with_zero_listings_for_a_genuinely_empty_result_page runs the real pipeline against a no-results page with no cards and no /itm/ links and asserts GetRun(runId).Status == Completed and GetListings(jobId) is empty. This test is green at base and remains the regression guard preventing the AC-2 failure detection from misclassifying a genuinely empty page.",
+      "materialConcerns": [
+        "regression risk: over-broad broken-parse detection would flip this green guard to Failed and is directly pinned here"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    }
+  ]
+}
