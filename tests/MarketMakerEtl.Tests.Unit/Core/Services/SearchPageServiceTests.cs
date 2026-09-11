@@ -33,6 +33,16 @@ public class SearchPageServiceTests
     }
 
     [Test]
+    public async Task Should_deduplicate_listings_seen_in_both_directions()
+    {
+        var harness = Build(new ScrapeOptions(MaxPages: 1, CollectSold: true));
+
+        var listings = await harness.Service.Collect("ps5", CancellationToken.None);
+
+        Assert.That(listings, Has.Count.EqualTo(1));
+    }
+
+    [Test]
     public async Task Should_stop_paging_when_a_page_has_no_results()
     {
         var harness = Build(new ScrapeOptions(MaxPages: 3, CollectSold: false), empty: true);

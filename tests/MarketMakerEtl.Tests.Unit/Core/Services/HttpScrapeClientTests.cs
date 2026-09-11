@@ -1,14 +1,19 @@
 using System.Net;
 using System.Text;
+using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
 [TestFixture]
 public class HttpScrapeClientTests
 {
+    private const string BlobUri =
+        "http://127.0.0.1:10000/devstoreaccount1/html/job-1/page.html";
+
     private static ScrapeClientOptions Options => new(
         "http://scraper.test",
         "key",
@@ -18,13 +23,12 @@ public class HttpScrapeClientTests
     [Test]
     public async Task Should_return_page_html_from_the_first_result_blob()
     {
-        var handler = new StubScrapeHandler("<html><body>listing</body></html>");
-        var client = new HttpScrapeClient(
-            new HttpClient(handler),
-            Options,
-            NullLogger<HttpScrapeClient>.Instance);
+        var handler = new StubScrapeHandler(BlobUri);
+        var content = Substitute.For<IScrapeContentStore>();
+        content.GetHtml(BlobUri, Arg.Any<CancellationToken>()).Returns("<html><body>listing</body></html>");
 
-        var html = await client.GetPageHtml("https://www.ebay.co.uk/sch/i.html", CancellationToken.None);
+        var html = await CreateClient(handler, content)
+            .GetPageHtml("https://www.ebay.co.uk/sch/i.html", CancellationToken.None);
 
         Assert.That(html, Is.EqualTo("<html><body>listing</body></html>"));
     }
@@ -32,38 +36,35 @@ public class HttpScrapeClientTests
     [Test]
     public void Should_throw_when_the_job_ends_in_failure()
     {
-        var handler = new StubScrapeHandler("<html></html>", failJob: true);
-        var client = new HttpScrapeClient(
-            new HttpClient(handler),
-            Options,
-            NullLogger<HttpScrapeClient>.Instance);
+        var handler = new StubScrapeHandler(BlobUri, failJob: true);
+        var content = Substitute.For<IScrapeContentStore>();
 
         Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await client.GetPageHtml("https://www.ebay.co.uk/sch/i.html", CancellationToken.None));
+            await CreateClient(handler, content).GetPageHtml("https://www.ebay.co.uk/sch/i.html", CancellationToken.None));
     }
 
     [Test]
     public void Should_throw_when_no_content_is_stored()
     {
-        var handler = new StubScrapeHandler(null);
-        var client = new HttpScrapeClient(
-            new HttpClient(handler),
-            Options,
-            NullLogger<HttpScrapeClient>.Instance);
+        var handler = new StubScrapeHandler(blobUri: null);
+        var content = Substitute.For<IScrapeContentStore>();
 
         Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await client.GetPageHtml("https://www.ebay.co.uk/sch/i.html", CancellationToken.None));
+            await CreateClient(handler, content).GetPageHtml("https://www.ebay.co.uk/sch/i.html", CancellationToken.None));
     }
+
+    private static HttpScrapeClient CreateClient(HttpMessageHandler handler, IScrapeContentStore content) =>
+        new(new HttpClient(handler), Options, content, NullLogger<HttpScrapeClient>.Instance);
 
     private sealed class StubScrapeHandler : HttpMessageHandler
     {
-        private const string BlobUri = "http://blob.test/page.html";
-        private readonly string? _html;
+        private readonly string? _blobUri;
         private readonly bool _failJob;
+        private int _statusCalls;
 
-        public StubScrapeHandler(string? html, bool failJob = false)
+        public StubScrapeHandler(string? blobUri, bool failJob = false)
         {
-            _html = html;
+            _blobUri = blobUri;
             _failJob = failJob;
         }
 
@@ -75,19 +76,26 @@ public class HttpScrapeClientTests
             var response = path switch
             {
                 "/api/NewJob" => Json("{\"jobId\":\"job-1\"}"),
-                "/api/GetStatus" => Json(_failJob
-                    ? "{\"job\":{\"jobId\":\"job-1\",\"status\":\"failure\"}}"
-                    : "{\"job\":{\"jobId\":\"job-1\",\"status\":\"success\"}}"),
-                "/api/GetResults" => Json(_html is null
+                "/api/GetStatus" => Json(StatusBody()),
+                "/api/GetResults" => Json(_blobUri is null
                     ? "[{\"blobUri\":null}]"
-                    : $"[{{\"blobUri\":\"{BlobUri}\"}}]"),
-                "/page.html" => new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(_html!, Encoding.UTF8, "text/html")
-                },
+                    : $"[{{\"blobUri\":\"{_blobUri}\"}}]"),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound)
             };
             return Task.FromResult(response);
+        }
+
+        private string StatusBody()
+        {
+            _statusCalls++;
+            if (_failJob)
+            {
+                return "{\"job\":{\"jobId\":\"job-1\",\"status\":\"failure\"}}";
+            }
+
+            return _statusCalls == 1
+                ? "{\"job\":{\"jobId\":\"job-1\",\"status\":\"processing\"}}"
+                : "{\"job\":{\"jobId\":\"job-1\",\"status\":\"success\"}}";
         }
 
         private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK)

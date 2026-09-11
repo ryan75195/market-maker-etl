@@ -76,7 +76,7 @@ public sealed class ScrapeStore : IScrapeStore
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
 
-        foreach (var listing in listings)
+        foreach (var listing in listings.GroupBy(l => l.ListingId).Select(g => g.Last()))
         {
             var existing = await db.Listings
                 .FirstOrDefaultAsync(l => l.ListingId == listing.ListingId, ct);

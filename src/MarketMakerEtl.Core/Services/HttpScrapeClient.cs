@@ -13,15 +13,18 @@ public sealed class HttpScrapeClient : IScrapeClient
 
     private readonly HttpClient _http;
     private readonly ScrapeClientOptions _options;
+    private readonly IScrapeContentStore _content;
     private readonly ILogger<HttpScrapeClient> _logger;
 
     public HttpScrapeClient(
         HttpClient http,
         ScrapeClientOptions options,
+        IScrapeContentStore content,
         ILogger<HttpScrapeClient> logger)
     {
         _http = http;
         _options = options;
+        _content = content;
         _logger = logger;
     }
 
@@ -99,13 +102,20 @@ public sealed class HttpScrapeClient : IScrapeClient
             throw new InvalidOperationException($"Scrape returned no content for {url}: {item.Error}");
         }
 
-        return await _http.GetStringAsync(item.BlobUri, ct);
+        return await _content.GetHtml(item.BlobUri, ct);
     }
 
     private string BuildUri(string relativePath)
     {
-        var baseUrl = _options.BaseUrl.TrimEnd('/');
-        return $"{baseUrl}/{relativePath}";
+        var uri = $"{_options.BaseUrl.TrimEnd('/')}/{relativePath}";
+
+        if (string.IsNullOrEmpty(_options.ApiKey))
+        {
+            return uri;
+        }
+
+        var separator = uri.Contains('?', StringComparison.Ordinal) ? '&' : '?';
+        return $"{uri}{separator}code={Uri.EscapeDataString(_options.ApiKey)}";
     }
 
     private static JsonSerializerOptions BuildJsonOptions()
