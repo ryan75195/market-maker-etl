@@ -98,7 +98,9 @@ public sealed class EbaySearchParser : ISearchPageParser
     private static string? ExtractCondition(IElement item)
     {
         var text = item.QuerySelector(".s-card__condition")?.TextContent
-            ?? item.QuerySelector(".s-item__condition")?.TextContent;
+            ?? item.QuerySelector(".s-item__condition")?.TextContent
+            ?? item.QuerySelector(".s-card__subtitle-row .s-card__subtitle")?.TextContent
+            ?? item.QuerySelector(".s-card__subtitle")?.TextContent;
 
         return NormaliseOptional(text);
     }
@@ -106,6 +108,7 @@ public sealed class EbaySearchParser : ISearchPageParser
     private static string? ExtractPrimaryImageUrl(IElement item)
     {
         var src = item.QuerySelector("img.s-card__image")?.GetAttribute("src")
+            ?? item.QuerySelector(".s-card__image img")?.GetAttribute("src")
             ?? item.QuerySelector("img.s-item__image-img")?.GetAttribute("src");
 
         return NormaliseOptional(src);
@@ -113,10 +116,45 @@ public sealed class EbaySearchParser : ISearchPageParser
 
     private static string? ExtractBuyingFormat(IElement item)
     {
-        var text = item.QuerySelector(".s-card__buying-format")?.TextContent
+        var explicitText = item.QuerySelector(".s-card__buying-format")?.TextContent
             ?? item.QuerySelector(".s-item__buying-format")?.TextContent;
+        var explicitFormat = NormaliseOptional(explicitText);
 
-        return NormaliseOptional(text);
+        return explicitFormat ?? ExtractBuyingFormatMarker(item);
+    }
+
+    private static string? ExtractBuyingFormatMarker(IElement item)
+    {
+        foreach (var row in item.QuerySelectorAll(".s-card__attribute-row"))
+        {
+            var format = MatchBuyingFormat(row.TextContent);
+            if (format is not null)
+            {
+                return format;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? MatchBuyingFormat(string? text)
+    {
+        if (text is null)
+        {
+            return null;
+        }
+
+        if (text.Contains("Buy It Now", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Buy It Now";
+        }
+
+        if (text.Contains("Auction", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Auction";
+        }
+
+        return null;
     }
 
     private static string? NormaliseOptional(string? value)
