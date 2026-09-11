@@ -24,6 +24,14 @@ public sealed class ListingEntity
 
     public string? BuyingFormat { get; set; }
 
+    public string? ItemStatus { get; set; }
+
+    public decimal? SoldPrice { get; set; }
+
+    public DateTime? SoldDate { get; set; }
+
+    public string? Seller { get; set; }
+
     public DateTime CreatedUtc { get; set; }
 
     public DateTime? UpdatedUtc { get; set; }

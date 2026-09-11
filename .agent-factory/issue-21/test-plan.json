@@ -1,0 +1,20 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~MigratedListingSchemaIncludesStatusSaleFieldsAndHistoryTests|FullyQualifiedName~ListingMigrationPreservesExistingRowsAndValuesTests|FullyQualifiedName~SoldListingStoresStatusPriceAndDateTests|FullyQualifiedName~ListingStatusChangeHistoryStoresRecordsTests\"",
+  "rationale": "The ticket extends the capture schema with item status, sold price, sold date, seller and a status-change history. Scope is schema and entities only, so the contract pins the four storage outcomes and nothing about fetch/parse/refresh. The contract declares shape only: ListingEntity gains ItemStatus/SoldPrice/SoldDate/Seller, a new ListingStatusChangeEntity holds Status/ChangedUtc/ListingEntityId, and EtlDbContext exposes the ListingStatusChanges set. No migration is written (it is the implementer's deliverable), so at base EF reports pending model changes and the database has no new columns or history table. Measured at base: the four contract tests (one per criterion) fail on the missing migration, and three pre-existing migration tests (Should_create_a_missing_database_with_the_migrated_schema, Should_preserve_rows_created_before_migrations_were_adopted, Should_start_against_an_up_to_date_database_without_changing_the_schema) are collateral red because they call ApplyMigrations against the now-ahead model; the implementer's migration and snapshot update clear all three. The Unit baseline before the shape change was 63 passed / 0 failed, the Architecture suite is 25/25 green, and dotnet format --verify-no-changes exits 0. Each criterion gets its own fixture named for the behaviour it protects; criterion 2 uses a legacy database built at the previous migration so it exercises an upgrade of existing rows rather than a fresh empty database.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Data/Entities/ListingEntity.cs",
+    "src/MarketMakerEtl.Core/Data/Entities/ListingStatusChangeEntity.cs",
+    "src/MarketMakerEtl.Core/Data/EtlDbContext.cs"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Data/Entities/ListingEntity.cs": ["AC-1", "AC-3"],
+    "src/MarketMakerEtl.Core/Data/Entities/ListingStatusChangeEntity.cs": ["AC-1", "AC-4"],
+    "src/MarketMakerEtl.Core/Data/EtlDbContext.cs": ["AC-1", "AC-4"]
+  },
+  "declaredRedTests": [
+    "Should_create_a_missing_database_with_the_migrated_schema",
+    "Should_preserve_rows_created_before_migrations_were_adopted",
+    "Should_start_against_an_up_to_date_database_without_changing_the_schema"
+  ]
+}
