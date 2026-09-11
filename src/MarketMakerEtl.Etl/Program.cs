@@ -4,7 +4,7 @@ using MarketMakerEtl.Etl.Workers;
 using Microsoft.EntityFrameworkCore;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddCoreServices();
+builder.Services.AddCoreServices(builder.Configuration);
 builder.Services.AddHostedService<ScrapeWorker>();
 var host = builder.Build();
 

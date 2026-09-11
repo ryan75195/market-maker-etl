@@ -1,0 +1,18 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~MarketMakerEtl.Tests.Unit.Core.Configuration\"",
+  "rationale": "The work item moves ETL settings out of the hard-coded Core registration and into configuration while preserving the current values as defaults. The contract builds an in-memory IConfiguration for each acceptance criterion, calls the new AddCoreServices(services, configuration) overload, and asserts the configured values reach the resolved ScrapeClientOptions, ScrapeContentOptions, ScrapeOptions and SQLite database location that the scraper, content store and DbContextFactory consume. The database criterion additionally pins that the default location is absolute and identical no matter which process directory each host is started from, and the defaults criterion pins the current values when configuration is empty. At base the new overload only throws NotImplementedException, so every check fails for the missing behaviour rather than for setup, build or lint reasons; the existing parameterless overload is retained so the pre-existing DI and chaining tests stay green.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs",
+    "src/MarketMakerEtl.Core/MarketMakerEtl.Core.csproj",
+    "src/MarketMakerEtl.Api/Program.cs",
+    "src/MarketMakerEtl.Etl/Program.cs"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5"],
+    "src/MarketMakerEtl.Core/MarketMakerEtl.Core.csproj": ["AC-1"],
+    "src/MarketMakerEtl.Api/Program.cs": ["AC-1", "AC-4"],
+    "src/MarketMakerEtl.Etl/Program.cs": ["AC-1", "AC-4"]
+  },
+  "declaredRedTests": []
+}

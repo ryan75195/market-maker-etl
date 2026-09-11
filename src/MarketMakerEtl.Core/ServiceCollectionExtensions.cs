@@ -3,6 +3,7 @@ using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MarketMakerEtl.Core;
@@ -38,5 +39,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISearchPageService, SearchPageService>();
         services.AddSingleton<IScrapeRunService, ScrapeRunService>();
         return services;
+    }
+
+    public static IServiceCollection AddCoreServices(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+        throw new NotImplementedException();
     }
 }
