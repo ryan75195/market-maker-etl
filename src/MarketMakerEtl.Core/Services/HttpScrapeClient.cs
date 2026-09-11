@@ -44,7 +44,7 @@ public sealed class HttpScrapeClient : IScrapeClient
 
     private async Task<string> StartJob(string url, CancellationToken ct)
     {
-        var request = new ScrapeJobRequest([url]);
+        var request = new ScrapeJobRequest([url], _options.SessionReference);
         var response = await _http.PostAsJsonAsync(BuildUri("api/NewJob"), request, JsonOptions, ct);
         response.EnsureSuccessStatusCode();
 
@@ -120,7 +120,11 @@ public sealed class HttpScrapeClient : IScrapeClient
 
     private static JsonSerializerOptions BuildJsonOptions()
     {
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
         options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
         return options;
     }

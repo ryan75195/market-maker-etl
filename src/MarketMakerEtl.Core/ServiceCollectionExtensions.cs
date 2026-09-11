@@ -63,7 +63,8 @@ public static class ServiceCollectionExtensions
             ReadString(configuration, "Scraper:BaseUrl", DefaultBaseUrl),
             ReadString(configuration, "Scraper:ApiKey", DefaultApiKey),
             DefaultFetchTimeout,
-            DefaultPollInterval);
+            DefaultPollInterval,
+            ReadOptionalString(configuration, "Scraper:SessionReference"));
 
     private static ScrapeContentOptions BuildScrapeContentOptions(IConfiguration? configuration) =>
         new(
@@ -96,6 +97,12 @@ public static class ServiceCollectionExtensions
     {
         var value = configuration?[key];
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    private static string? ReadOptionalString(IConfiguration? configuration, string key)
+    {
+        var value = configuration?[key];
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private static int ReadInt(IConfiguration? configuration, string key, int fallback)
