@@ -17,6 +17,8 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton(DefaultScrapeOptions);
         services.AddHttpClient<IScrapeClient, HttpScrapeClient>();
+        services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
+        services.AddSingleton<ISearchPageParser, EbaySearchParser>();
         return services;
     }
 }
