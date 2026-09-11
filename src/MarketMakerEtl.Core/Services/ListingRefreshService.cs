@@ -36,14 +36,21 @@ public sealed class ListingRefreshService : IListingRefreshService
         var html = await _client.GetPageHtml(target.Url, ct);
         var page = EbayItemPageParser.Parse(html);
 
-        if (page?.Status is null)
+        if (page is null)
         {
             return;
         }
 
-        if (HasStatusChanged(target.ItemStatus, page.Status))
+        var status = page.Status;
+
+        if (status is null || string.IsNullOrWhiteSpace(page.Title))
         {
-            await _store.RecordStatusChange(target.Id, page.Status, page.Price, ct);
+            return;
+        }
+
+        if (HasStatusChanged(target.ItemStatus, status))
+        {
+            await _store.RecordStatusChange(target.Id, status, page.Price, ct);
         }
     }
 

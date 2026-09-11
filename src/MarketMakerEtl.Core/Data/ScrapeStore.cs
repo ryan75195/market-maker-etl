@@ -8,6 +8,8 @@ namespace MarketMakerEtl.Core.Data;
 
 public sealed class ScrapeStore : IScrapeStore
 {
+    private const string ActiveStatus = "Active";
+
     private readonly IDbContextFactory<EtlDbContext> _factory;
     private readonly IScrapeRunStateService _states;
 
@@ -127,7 +129,7 @@ public sealed class ScrapeStore : IScrapeStore
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var listings = await db.Listings
-            .Where(l => l.ItemStatus == null || l.ItemStatus == "Active")
+            .Where(l => l.ItemStatus == null || l.ItemStatus == ActiveStatus)
             .OrderBy(l => l.Id)
             .ToListAsync(ct);
 
@@ -142,6 +144,13 @@ public sealed class ScrapeStore : IScrapeStore
         var listing = await db.Listings.FindAsync([listingEntityId], ct);
 
         if (listing is null)
+        {
+            return;
+        }
+
+        var current = string.IsNullOrWhiteSpace(listing.ItemStatus) ? ActiveStatus : listing.ItemStatus;
+
+        if (string.Equals(current, status, StringComparison.Ordinal))
         {
             return;
         }
