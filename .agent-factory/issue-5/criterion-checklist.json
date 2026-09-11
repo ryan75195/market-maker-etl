@@ -1,0 +1,49 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A database that does not exist is created by applying migrations.",
+      "plannedImplementation": "Generate an initial EF Core migration from the EtlDbContext model in a Migrations folder under MarketMakerEtl.Core, and implement DatabaseMigrationExtensions.ApplyMigrations so it creates the database and applies all pending migrations with Database.MigrateAsync. Both hosts call the helper on startup instead of EnsureCreated.",
+      "plannedVerification": "MigrationsCreateMissingDatabaseTests.Should_create_a_missing_database_with_the_migrated_schema: on a SQLite path that does not exist, ApplyMigrations returns without throwing, the database file is created, Database.GetAppliedMigrationsAsync() is non-empty, and a listing written through ScrapeStore reads back with the seeded title and price. No existing check covers this; the current ScrapeStoreTests call EnsureCreated directly and would not detect a missing migration.",
+      "materialConcerns": [
+        "the migrations folder must be tracked and not hidden by the .gitignore data/ rule",
+        "the generated migration must match the existing model exactly - scope forbids renaming or adding columns"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-2",
+      "criterion": "Applying migrations to a database that already contains listing and run rows preserves those rows.",
+      "plannedImplementation": "ApplyMigrations must detect a pre-migrations (EnsureCreated) database that already has the schema tables but no __EFMigrationsHistory, baseline it by recording the current migration ids as applied, then apply only pending migrations without recreating tables.",
+      "plannedVerification": "MigrationsPreserveExistingRowsTests.Should_preserve_rows_created_before_migrations_were_adopted: build the legacy schema with EnsureCreatedAsync, write a job, a queued run and a listing through ScrapeStore, call ApplyMigrations, then read the same rows back through the store and assert listing title/price/IsSold and run SearchTerm/Status, plus Database.GetPendingMigrationsAsync() empty. The legacy EnsureCreated database is the upgrade fixture required because the criterion touches persistent state that predates migrations.",
+      "materialConcerns": [
+        "data loss if Migrate tries to recreate tables that already exist",
+        "an EnsureCreated database has no migration history and must be baselined before Migrate",
+        "persistence compatibility with the already-shipping EnsureCreated schema"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "Before ApplyMigrations the legacy database already holds the seeded job, queued run and listing rows created while the schema was EnsureCreated-managed.",
+        "whenHeldValueAbsent": "If a held row is absent after ApplyMigrations (dropped, recreated or inaccessible), GetListings returns no listing or GetRun returns null and the title/price/status assertions fail."
+      }
+    },
+    {
+      "id": "AC-3",
+      "criterion": "Starting a host against an up-to-date database performs no schema change and starts normally.",
+      "plannedImplementation": "ApplyMigrations applies only pending migrations, so an already-migrated database is left untouched. The Api and Etl Program startup paths resolve the IDbContextFactory and call ApplyMigrations before serving or running work.",
+      "plannedVerification": "MigrationsLeaveUpToDateDatabaseUnchangedTests.Should_start_against_an_up_to_date_database_without_changing_the_schema: call ApplyMigrations twice against the same database, assert neither call throws, GetAppliedMigrationsAsync is non-empty and identical before and after, and GetPendingMigrationsAsync is empty both times.",
+      "materialConcerns": [
+        "startup must not throw or rewrite an up-to-date database",
+        "idempotency of the shared startup migration routine used by both hosts"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "After the first ApplyMigrations the applied-migration list is non-empty and the pending-migration list is empty.",
+        "whenHeldValueAbsent": "If the held applied-migration list differs after the second call, the equality assertion fails, which indicates the schema was changed again."
+      }
+    }
+  ]
+}

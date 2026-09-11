@@ -11,8 +11,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
-    using var db = factory.CreateDbContext();
-    db.Database.EnsureCreated();
+    await factory.ApplyMigrations();
 }
 
 app.MapGet("/health", () => Results.Ok(new HealthResponse("healthy")));
@@ -38,7 +37,7 @@ app.MapGet("/api/scrape/jobs/{jobId:int}/listings", async (
     IScrapeStore store,
     CancellationToken ct) => Results.Ok(await store.GetListings(jobId, ct)));
 
-app.Run();
+await app.RunAsync();
 
 namespace MarketMakerEtl.Api
 {
