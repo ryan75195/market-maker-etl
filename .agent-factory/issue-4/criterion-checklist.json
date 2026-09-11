@@ -1,0 +1,71 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "The scraper base URL and API key are read from configuration, and changing the configured base URL changes which endpoint the client calls.",
+      "plannedImplementation": "Add AddCoreServices(IServiceCollection services, IConfiguration configuration) in src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs. Read Scraper:BaseUrl and Scraper:ApiKey from the supplied configuration and register the resulting ScrapeClientOptions, falling back to the current http://localhost:7126 base URL and empty API key. The API and ETL hosts call the configuration overload with builder.Configuration.",
+      "plannedVerification": "ScraperClientConfigurationTests.Should_read_scraper_base_url_from_configuration, Should_read_scraper_api_key_from_configuration and Should_change_resolved_base_url_when_configuration_changes build a container with AddCoreServices(configuration), resolve ScrapeClientOptions and assert the configured values reach the options HttpScrapeClient builds its endpoint URIs from.",
+      "materialConcerns": [
+        "public-contract compatibility: the existing parameterless AddCoreServices overload must remain so existing callers and the architecture DI test still compile and pass"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "the first resolution returns the base URL supplied by configuration",
+        "whenHeldValueAbsent": "when no configured base URL is held, the client resolves the existing default http://localhost:7126"
+      }
+    },
+    {
+      "id": "AC-2",
+      "criterion": "The content-store connection string and container name are read from configuration.",
+      "plannedImplementation": "Read ContentStore:ConnectionString and ContentStore:ContainerName in AddCoreServices(services, configuration) and register ScrapeContentOptions, defaulting to UseDevelopmentStorage=true and html.",
+      "plannedVerification": "ContentStoreConfigurationTests.Should_read_content_store_connection_string_from_configuration and Should_read_content_store_container_name_from_configuration resolve ScrapeContentOptions from the container built by AddCoreServices(configuration) and assert the configured connection string and container name reach the options BlobScrapeContentStore consumes.",
+      "materialConcerns": [
+        "secret handling: the connection string can carry credentials and must come from configuration rather than a hard-coded literal"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-3",
+      "criterion": "The number of search pages and whether sold listings are collected are read from configuration.",
+      "plannedImplementation": "Read Scrape:MaxPages and Scrape:CollectSold in AddCoreServices(services, configuration) and register ScrapeOptions, defaulting to 2 pages and true.",
+      "plannedVerification": "ScrapeLimitsConfigurationTests.Should_read_max_pages_from_configuration and Should_read_collect_sold_from_configuration resolve ScrapeOptions from the container built by AddCoreServices(configuration) and assert the configured page count and sold-listings flag reach the options SearchPageService consumes.",
+      "materialConcerns": [],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-4",
+      "criterion": "The database location is read from configuration, and both hosts use the same database regardless of the directory each is started from.",
+      "plannedImplementation": "Read Database:ConnectionString in AddCoreServices(services, configuration) and configure the SQLite DbContextFactory from it; when absent derive an absolute default path to marketmakeretl.db that does not depend on the process working directory. Both the API and ETL hosts pass builder.Configuration.",
+      "plannedVerification": "DatabaseLocationConfigurationTests.Should_use_the_database_location_from_configuration builds the container with AddCoreServices(configuration) while its ServiceProvider is still alive, resolves IDbContextFactory<EtlDbContext>, and asserts the open SQLite connection's DataSource equals the configured path. Should_resolve_the_same_default_database_location_regardless_of_the_process_directory resolves the default data source once with Environment.CurrentDirectory set to the temp directory and once from the repository directory, holding the provider alive for each read, then asserts both data sources are equal, are rooted absolute paths, and keep the marketmakeretl.db file name. The fixture no longer disposes the ServiceProvider before the DataSource is evaluated, which was the disputed test-only ObjectDisposedException.",
+      "materialConcerns": [
+        "persistence compatibility: the default database location changes from a working-directory-relative path to an absolute path, so the file name marketmakeretl.db is pinned to keep existing database files discoverable",
+        "both hosts must agree on the default location or they will silently write to separate databases",
+        "operators that relied on the previous working-directory-relative file must point Database:ConnectionString at the existing file"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "each host resolves an absolute marketmakeretl.db path from the same default",
+        "whenHeldValueAbsent": "when no Database:ConnectionString is held, the shared absolute marketmakeretl.db default is produced rather than a working-directory-relative path"
+      }
+    },
+    {
+      "id": "AC-5",
+      "criterion": "With no configuration supplied, the current defaults apply and the solution builds and tests green.",
+      "plannedImplementation": "AddCoreServices(services, empty configuration) falls back to the current ScrapeClientOptions, ScrapeContentOptions and ScrapeOptions values and the current database file name. The existing parameterless overload keeps the same defaults so existing hosts and tests still build.",
+      "plannedVerification": "CoreServicesDefaultsTests.Should_apply_scraper_client_defaults_when_configuration_is_empty, Should_apply_content_store_defaults_when_configuration_is_empty, Should_apply_scrape_defaults_when_configuration_is_empty and Should_apply_database_location_default_when_configuration_is_empty build the container from an empty IConfiguration and assert the current default values (http://localhost:7126, empty key, 5 minute timeout, 5 second poll, UseDevelopmentStorage=true, html, 2 pages, sold enabled, marketmakeretl.db). The repository build plus the Unit and Architecture test projects are the green-solution evidence.",
+      "materialConcerns": [
+        "the parameterless AddCoreServices overload is exercised by DiRegistrationTests and ServiceCollectionExtensionsTests and must keep working"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "the first resolution with empty configuration returns the current default values",
+        "whenHeldValueAbsent": "when no configuration value is held, the defaults are produced rather than null or zero"
+      }
+    }
+  ]
+}
