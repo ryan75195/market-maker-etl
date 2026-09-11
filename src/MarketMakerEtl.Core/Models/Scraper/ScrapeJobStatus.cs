@@ -4,7 +4,7 @@ public enum ScrapeJobStatus
 {
     Unknown,
     Pending,
-    Running,
+    Processing,
     Success,
     Failure
 }

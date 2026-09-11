@@ -15,16 +15,22 @@ public static class ServiceCollectionExtensions
         TimeSpan.FromMinutes(5),
         TimeSpan.FromSeconds(5));
 
+    private static readonly ScrapeContentOptions DefaultScrapeContent = new(
+        "UseDevelopmentStorage=true",
+        "html");
+
     private static readonly ScrapeOptions DefaultScrape = new(MaxPages: 2, CollectSold: true);
 
     public static IServiceCollection AddCoreServices(this IServiceCollection services)
     {
         services.AddSingleton(DefaultScrapeOptions);
+        services.AddSingleton(DefaultScrapeContent);
         services.AddSingleton(DefaultScrape);
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite("Data Source=marketmakeretl.db"));
 
         services.AddHttpClient<IScrapeClient, HttpScrapeClient>();
+        services.AddSingleton<IScrapeContentStore, BlobScrapeContentStore>();
         services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
         services.AddSingleton<ISearchPageParser, EbaySearchParser>();
         services.AddSingleton<IScrapeRunStateService, ScrapeRunStateService>();
