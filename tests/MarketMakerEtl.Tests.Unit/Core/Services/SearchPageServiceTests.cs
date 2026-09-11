@@ -10,7 +10,7 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 public class SearchPageServiceTests
 {
     private static readonly ListingSummary Listing =
-        new("111111111111", "PS5", 100m, "GBP", "https://x/itm/1", false);
+        new("111111111111", "PS5", 100m, "GBP", "https://x/itm/1", false, null, null, null);
 
     [Test]
     public async Task Should_collect_listings_from_active_pages()

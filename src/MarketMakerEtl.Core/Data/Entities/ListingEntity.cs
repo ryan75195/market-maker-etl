@@ -18,6 +18,12 @@ public sealed class ListingEntity
 
     public bool IsSold { get; set; }
 
+    public string? Condition { get; set; }
+
+    public string? PrimaryImageUrl { get; set; }
+
+    public string? BuyingFormat { get; set; }
+
     public DateTime CreatedUtc { get; set; }
 
     public DateTime? UpdatedUtc { get; set; }

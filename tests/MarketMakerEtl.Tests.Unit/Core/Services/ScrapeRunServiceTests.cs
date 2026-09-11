@@ -16,7 +16,7 @@ public class ScrapeRunServiceTests
     {
         var search = Substitute.For<ISearchPageService>();
         search.Collect("ps5", Arg.Any<CancellationToken>())
-            .Returns([new ListingSummary("111111111111", "PS5", 1m, "GBP", "https://x/itm/1", false)]);
+            .Returns([new ListingSummary("111111111111", "PS5", 1m, "GBP", "https://x/itm/1", false, null, null, null)]);
         var store = Substitute.For<IScrapeStore>();
         var service = new ScrapeRunService(search, store);
 

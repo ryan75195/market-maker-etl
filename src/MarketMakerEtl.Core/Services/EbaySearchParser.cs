@@ -52,7 +52,10 @@ public sealed class EbaySearchParser : ISearchPageParser
             Price: ExtractPrice(item),
             Currency: ExtractCurrency(item),
             Url: url,
-            IsSold: IsSold(item));
+            IsSold: IsSold(item),
+            Condition: ExtractCondition(item),
+            PrimaryImageUrl: ExtractPrimaryImageUrl(item),
+            BuyingFormat: ExtractBuyingFormat(item));
     }
 
     private static string? ExtractUrl(IElement item)
@@ -90,6 +93,36 @@ public sealed class EbaySearchParser : ISearchPageParser
         var tag = item.QuerySelector(".s-item__title--tagblock, .POSITIVE, [class*='sold']");
         return tag is not null
             && tag.TextContent.Contains("Sold", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ExtractCondition(IElement item)
+    {
+        var text = item.QuerySelector(".s-card__condition")?.TextContent
+            ?? item.QuerySelector(".s-item__condition")?.TextContent;
+
+        return NormaliseOptional(text);
+    }
+
+    private static string? ExtractPrimaryImageUrl(IElement item)
+    {
+        var src = item.QuerySelector("img.s-card__image")?.GetAttribute("src")
+            ?? item.QuerySelector("img.s-item__image-img")?.GetAttribute("src");
+
+        return NormaliseOptional(src);
+    }
+
+    private static string? ExtractBuyingFormat(IElement item)
+    {
+        var text = item.QuerySelector(".s-card__buying-format")?.TextContent
+            ?? item.QuerySelector(".s-item__buying-format")?.TextContent;
+
+        return NormaliseOptional(text);
+    }
+
+    private static string? NormaliseOptional(string? value)
+    {
+        var trimmed = value?.Trim();
+        return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
     private static decimal? ExtractPrice(IElement item)
