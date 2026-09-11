@@ -39,6 +39,18 @@ swappable and testable without a live scraper.
 
 Encoding of the blob name must match the scraper's convention; a contract test pins it.
 
+The `api/NewJob` request wire contract is pinned by `ScrapeJobRequest`'s explicit
+`[JsonPropertyName]` annotations and by the `Should_pin_the_new_job_wire_field_names`
+regression test, so the field names cannot drift when the serializer options change. The
+session reference is an optional field sent only when configured:
+
+```json
+{ "Urls": ["https://www.ebay.co.uk/sch/i.html"], "SessionReference": "<session>" }
+```
+
+The scraper must accept `SessionReference` on the request; the ETL depends on that
+producer contract and cannot test it from this repository.
+
 ### 2. Runtime split: Api enqueues and reads; Etl executes
 
 The API never runs a scrape. It creates work and serves read models. The ETL host executes

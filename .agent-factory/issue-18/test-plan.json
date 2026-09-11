@@ -1,0 +1,14 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~SessionReferenceCarriedOnSearchFetchTests|FullyQualifiedName~FetchRequestWithoutSessionReferenceTests|FullyQualifiedName~SessionReferenceFromConfigurationTests\"",
+  "rationale": "The ticket makes the ETL scrape client apply the operator's configured eBay session reference to outgoing search fetches, which are otherwise anonymous and gated for sold/completed results. The contract pins the three observable outcomes without touching the scraper service or the session capture step: configured reference reaches the api/NewJob request body (SessionReferenceCarriedOnSearchFetchTests), an unconfigured client omits the field and still posts the search url (FetchRequestWithoutSessionReferenceTests), and the value comes from Scraper:SessionReference in configuration with the absent case producing no literal (SessionReferenceFromConfigurationTests). No existing check inspects the NewJob body or reads a session key, so each criterion gets its own fixture named for the behaviour it protects. Shape declared: ScrapeClientOptions and ScrapeJobRequest each gain an optional nullable SessionReference parameter, so every existing call site still compiles; no production body performs the wiring, so at base the configured reference is never carried and the null field is serialized rather than omitted. Measured at base: the contract's four assertions fail on the missing behaviour (one guard test passes), the full Unit suite shows only those four failures, and the Architecture suite plus dotnet format are clean, so declaredRedTests is empty.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Models/Scraper/ScrapeClientOptions.cs",
+    "src/MarketMakerEtl.Core/Models/Scraper/ScrapeJobRequest.cs"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Models/Scraper/ScrapeClientOptions.cs": ["AC-1", "AC-2", "AC-3"],
+    "src/MarketMakerEtl.Core/Models/Scraper/ScrapeJobRequest.cs": ["AC-1", "AC-2"]
+  },
+  "declaredRedTests": []
+}

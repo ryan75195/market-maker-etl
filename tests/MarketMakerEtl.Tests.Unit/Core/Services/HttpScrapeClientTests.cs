@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
@@ -53,6 +54,27 @@ public class HttpScrapeClientTests
             await CreateClient(handler, content).GetPageHtml("https://www.ebay.co.uk/sch/i.html", CancellationToken.None));
     }
 
+    [Test]
+    public async Task Should_pin_the_new_job_wire_field_names()
+    {
+        var handler = new StubScrapeHandler(BlobUri);
+        var content = Substitute.For<IScrapeContentStore>();
+        content.GetHtml(BlobUri, Arg.Any<CancellationToken>()).Returns("<html></html>");
+        var options = new ScrapeClientOptions(
+            "http://scraper.test",
+            "key",
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(1),
+            "operator-session-token");
+
+        await new HttpScrapeClient(new HttpClient(handler), options, content, NullLogger<HttpScrapeClient>.Instance)
+            .GetPageHtml("https://www.ebay.co.uk/sch/i.html", CancellationToken.None);
+
+        using var document = JsonDocument.Parse(handler.NewJobBody!);
+        var names = document.RootElement.EnumerateObject().Select(property => property.Name).ToList();
+        Assert.That(names, Is.EqualTo(new[] { "Urls", "SessionReference" }));
+    }
+
     private static HttpScrapeClient CreateClient(HttpMessageHandler handler, IScrapeContentStore content) =>
         new(new HttpClient(handler), Options, content, NullLogger<HttpScrapeClient>.Instance);
 
@@ -68,21 +90,29 @@ public class HttpScrapeClientTests
             _failJob = failJob;
         }
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        public string? NewJobBody { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
+
+            if (path == "/api/NewJob")
+            {
+                NewJobBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+                return Json("{\"jobId\":\"job-1\"}");
+            }
+
             var response = path switch
             {
-                "/api/NewJob" => Json("{\"jobId\":\"job-1\"}"),
                 "/api/GetStatus" => Json(StatusBody()),
                 "/api/GetResults" => Json(_blobUri is null
                     ? "[{\"blobUri\":null}]"
                     : $"[{{\"blobUri\":\"{_blobUri}\"}}]"),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound)
             };
-            return Task.FromResult(response);
+            return response;
         }
 
         private string StatusBody()

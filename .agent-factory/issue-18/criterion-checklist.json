@@ -1,0 +1,44 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "When a session reference is configured, an eBay search fetch request carries it.",
+      "plannedImplementation": "Add a nullable SessionReference to ScrapeClientOptions and ScrapeJobRequest, then have HttpScrapeClient.StartJob build the api/NewJob request with _options.SessionReference so the configured value is serialized into the outgoing request body alongside the search url.",
+      "plannedVerification": "SessionReferenceCarriedOnSearchFetchTests.Should_carry_the_configured_session_reference_on_the_new_job_request constructs an HttpScrapeClient with ScrapeClientOptions whose SessionReference is 'operator-session-token', runs GetPageHtml against a capturing HttpMessageHandler, parses the captured api/NewJob body and asserts the session-reference property equals the configured value. At base StartJob still builds ScrapeJobRequest([url]) so the captured body has a null reference and the assertion fails on the missing behaviour. No existing check inspects the NewJob request body; EbaySearchUrlServiceTests only covers url construction.",
+      "materialConcerns": [
+        "wire compatibility with the external scraper: the NewJob body must carry the reference in a field the scraper accepts",
+        "the session reference is credential-like and must not be written to logs"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-2",
+      "criterion": "When no session reference is configured, the fetch request carries none and behaves as today.",
+      "plannedImplementation": "Leave SessionReference null when the Scraper:SessionReference configuration value is absent and omit a null session reference from the serialized NewJob body, so an unconfigured fetch keeps the current urls-only request.",
+      "plannedVerification": "FetchRequestWithoutSessionReferenceTests.Should_omit_the_session_reference_when_none_is_configured constructs an HttpScrapeClient with SessionReference unset, captures the api/NewJob body and asserts it contains no session-reference property while still containing the search url. At base the null property is serialized as \"SessionReference\":null, so the absence assertion fails while the url assertion shows the request is otherwise unchanged. No existing check inspects the NewJob body.",
+      "materialConcerns": [
+        "public-contract compatibility: callers that do not configure a session reference must see the same request as today",
+        "the anonymous NewJob body must keep working against the scraper without a session field"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-3",
+      "criterion": "The session reference is read from configuration, not hard-coded.",
+      "plannedImplementation": "Read Scraper:SessionReference in ServiceCollectionExtensions.BuildScrapeClientOptions and pass it into the registered ScrapeClientOptions so the HTTP client receives the operator-configured value rather than a literal.",
+      "plannedVerification": "SessionReferenceFromConfigurationTests resolves ScrapeClientOptions from AddCoreServices(configuration): Should_read_the_session_reference_from_configuration asserts Scraper:SessionReference='configured-session' reaches options.SessionReference; Should_change_the_resolved_session_reference_when_configuration_changes asserts two different configured values resolve to their own values; Should_leave_the_session_reference_unset_when_configuration_does_not_provide_it asserts the value is null or empty when the key is absent. At base BuildScrapeClientOptions never reads Scraper:SessionReference, so the first two fail. The existing ScraperClientConfigurationTests covers only Scraper:BaseUrl and Scraper:ApiKey.",
+      "materialConcerns": [
+        "secret handling: a session reference is sensitive and must come from configuration rather than source",
+        "the configuration key must sit in the existing Scraper section so operators configure it the same way as BaseUrl and ApiKey"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "the first configuration value resolves to its own session reference, e.g. 'first-session' in configuration produces options.SessionReference 'first-session'",
+        "whenHeldValueAbsent": "when no Scraper:SessionReference value is held, options.SessionReference is null or empty rather than a hard-coded literal"
+      }
+    }
+  ]
+}
