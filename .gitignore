@@ -53,3 +53,6 @@ data/
 # Source data-access layer is code, not runtime data; the broad data/ rule above hides it.
 !src/MarketMakerEtl.Core/Data/
 !src/MarketMakerEtl.Core/Data/**
+
+!tests/**/Data/
+!tests/**/Data/**

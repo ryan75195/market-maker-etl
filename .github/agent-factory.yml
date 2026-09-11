@@ -1,0 +1,12 @@
+# agent-factory repository policy. Read from the DEFAULT BRANCH only - the factory
+# cannot project work items for this repo until this file is on the default branch.
+version: 1
+enabled: true
+defaultProvider: opencode
+baseBranch: main
+authorizedMaintainers:
+  - ryan75195
+concurrencyLimit: 5
+retry:
+  maxAttempts: 3
+  backoffSeconds: 30
