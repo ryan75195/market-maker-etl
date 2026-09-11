@@ -55,6 +55,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IScrapeStore, ScrapeStore>();
         services.AddSingleton<ISearchPageService, SearchPageService>();
         services.AddSingleton<IScrapeRunService, ScrapeRunService>();
+        services.AddSingleton<IListingRefreshService, ListingRefreshService>();
         return services;
     }
 

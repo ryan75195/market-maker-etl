@@ -8,6 +8,8 @@ namespace MarketMakerEtl.Core.Data;
 
 public sealed class ScrapeStore : IScrapeStore
 {
+    private const string ActiveStatus = "Active";
+
     private readonly IDbContextFactory<EtlDbContext> _factory;
     private readonly IScrapeRunStateService _states;
 
@@ -121,6 +123,48 @@ public sealed class ScrapeStore : IScrapeStore
                 l.PrimaryImageUrl,
                 l.BuyingFormat))
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<ListingRefreshTarget>> GetActiveListings(CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var listings = await db.Listings
+            .Where(l => l.ItemStatus == null || l.ItemStatus == ActiveStatus)
+            .OrderBy(l => l.Id)
+            .ToListAsync(ct);
+
+        return listings
+            .Select(l => new ListingRefreshTarget(l.Id, l.ListingId, l.Url, l.ItemStatus))
+            .ToList();
+    }
+
+    public async Task RecordStatusChange(int listingEntityId, string status, decimal? price, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var listing = await db.Listings.FindAsync([listingEntityId], ct);
+
+        if (listing is null)
+        {
+            return;
+        }
+
+        var current = string.IsNullOrWhiteSpace(listing.ItemStatus) ? ActiveStatus : listing.ItemStatus;
+
+        if (string.Equals(current, status, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        listing.ItemStatus = status;
+        listing.Price = price ?? listing.Price;
+        listing.UpdatedUtc = DateTime.UtcNow;
+        db.ListingStatusChanges.Add(new ListingStatusChangeEntity
+        {
+            ListingEntityId = listingEntityId,
+            Status = status,
+            ChangedUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync(ct);
     }
 
     private static void Apply(

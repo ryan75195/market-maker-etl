@@ -20,4 +20,8 @@ public interface IScrapeStore
     Task<ScrapeRunView?> GetRun(int runId, CancellationToken ct);
 
     Task<IReadOnlyList<ListingSummary>> GetListings(int jobId, CancellationToken ct);
+
+    Task<IReadOnlyList<ListingRefreshTarget>> GetActiveListings(CancellationToken ct);
+
+    Task RecordStatusChange(int listingEntityId, string status, decimal? price, CancellationToken ct);
 }
