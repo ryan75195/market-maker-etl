@@ -4,4 +4,5 @@ public sealed record ScrapeClientOptions(
     string BaseUrl,
     string ApiKey,
     TimeSpan FetchTimeout,
-    TimeSpan PollInterval);
+    TimeSpan PollInterval,
+    string? SessionReference = null);
