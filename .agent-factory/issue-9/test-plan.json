@@ -1,0 +1,7 @@
+{
+  "testGateable": true,
+  "testRepair": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Integration/MarketMakerEtl.Tests.Integration.csproj --filter \"FullyQualifiedName~RunPipelinePersistsListingsTests|FullyQualifiedName~RunPipelineRecordsFailureReasonTests|FullyQualifiedName~RunPipelineUsesInProcessScraperTests\"",
+  "rationale": "The work item's deliverable is the integration tests themselves; its scope explicitly excludes production code changes and forbids tests requiring the live scraper or eBay. The production run pipeline (ScrapeRunService -> SearchPageService -> ScrapeStore) already exists, so adding end-to-end tests that pin its observable outcomes is a test-repair-style deliverable: no production surfaces are declared and the contract is expected to be green at base. The three fixtures each pin one acceptance criterion against a unique temp SQLite database with an in-process IScrapeClient: RunPipelinePersistsListingsTests asserts the exact listings persisted by a successful run, RunPipelineRecordsFailureReasonTests asserts a failed run carries the scrape failure reason, and RunPipelineUsesInProcessScraperTests asserts the pipeline is driven only by the expected in-process search URL so no external service or network is needed. testCommand names only these three fixtures, never a repo-wide gate or coverage threshold.",
+  "declaredRedTests": []
+}
