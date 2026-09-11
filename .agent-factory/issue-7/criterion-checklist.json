@@ -1,0 +1,43 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "After a sold search run against a page containing sold listing cards, the database contains listings marked as sold.",
+      "plannedImplementation": "EbaySearchParser.SelectItems must select the sold-results card layout (li.s-item, not only li.s-item[id]) in addition to the active li.s-card[data-viewport] layout, so a sold card maps to a ListingSummary with IsSold=true. The existing pipeline (SearchPageService.Collect -> ScrapeRunService.Run -> ScrapeStore.UpsertListings) persists that summary without any persistence change.",
+      "plannedVerification": "SoldListingsFromSoldSearchTests.Should_persist_a_listing_marked_sold_after_a_sold_search_run runs ScrapeRunService.Run with CollectSold:true against a sold-only results page whose cards are li.s-item (no id) and then reads rows back from a real SQLite database through ScrapeStore.GetListings; it asserts the sold listing id 111111111111 is present with IsSold=true and Price 249.99m while the pre-seeded legacy active row 999999999999 (IsSold=false) survives. The existing EbaySearchParserTests.Should_mark_a_listing_with_a_sold_tag_as_sold only exercises the li.s-card[data-viewport] layout, so it does not cover this sold layout or the persisted outcome.",
+      "materialConcerns": [
+        "persistence compatibility: capturing sold listings must not drop or overwrite listings already stored for the job, so the verification seeds a legacy active row before the run and checks it survives",
+        "data loss: the merge key is ListingId; a sold row that reuses an active row's id would update rather than duplicate, which is the intended upsert semantics"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "At the first observation the database already holds the pre-seeded legacy active listing 999999999999 with IsSold=false and no listing 111111111111.",
+        "whenHeldValueAbsent": "If the held legacy row is absent after the run, the assertion listings.Any(l => l.ListingId == \"999999999999\" && !l.IsSold) fails; if the sold listing is absent, soldListingIds and soldPrice fail, indicating the sold page was still not captured."
+      },
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A page that contains listing links but parses to zero results causes the run to record a failure rather than a clean completion.",
+      "plannedImplementation": "SearchPageService must distinguish a page that still carries listing markup (li.s-card, li.s-item or an /itm/ listing link) but produces zero parsed listings from a genuinely empty page, and surface it as an error. ScrapeRunService already converts any non-cancellation exception into FailRun, so the run is recorded as Failed.",
+      "plannedVerification": "BrokenSearchParseFailsTheRunTests.Should_fail_the_run_when_a_page_has_listing_links_but_parses_to_zero_results runs the real pipeline over a page whose only listing anchor has a non-numeric id (so the parser yields zero summaries), then reads the run back from SQLite and asserts ScrapeRunStatus.Failed with an empty listing set. The existing RunPipelineRecordsFailureReasonTests only covers a scrape client that throws, not a page that parses empty while carrying listing links.",
+      "materialConcerns": [
+        "public-contract compatibility: the failure must flow through the existing ScrapeRunService catch/ FailRun path, not a new public surface, so callers of IScrapeRunService see no signature change",
+        "release impact: a too-eager detection would turn legitimate pages into failures, which is guarded by AC-3"
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A genuinely empty result page completes successfully with zero found.",
+      "plannedImplementation": "SearchPageService must keep stopping paging and let the run complete when a page carries no listing links at all; ScrapeRunService records Completed with no listings persisted.",
+      "plannedVerification": "EmptySearchResultsCompleteTheRunTests.Should_complete_the_run_with_zero_listings_for_a_genuinely_empty_result_page runs the pipeline over an empty-results page with MaxPages 3 and asserts the persisted run status is ScrapeRunStatus.Completed and GetListings is empty. The existing SearchPageServiceTests.Should_stop_paging_when_a_page_has_no_results covers stop-paging with a mocked parser only, so it does not pin the persisted run outcome that this criterion requires.",
+      "materialConcerns": [
+        "regression risk: the new broken-parse detection from AC-2 must not fire for a page without listing markup, so this fixture is the compliant input the change must continue to accept"
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    }
+  ]
+}
