@@ -51,6 +51,7 @@ public sealed class SearchPageService : ISearchPageService
 
             if (pageResults.Count == 0)
             {
+                ThrowIfListingMarkupProducedNoResults(html);
                 return;
             }
 
@@ -60,4 +61,20 @@ public sealed class SearchPageService : ISearchPageService
             }
         }
     }
+
+    private static void ThrowIfListingMarkupProducedNoResults(string html)
+    {
+        if (!ContainsListingMarkup(html))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "Search page contained listing markup but produced no parsed listings.");
+    }
+
+    private static bool ContainsListingMarkup(string html) =>
+        html.Contains("s-card", StringComparison.Ordinal)
+        || html.Contains("s-item", StringComparison.Ordinal)
+        || html.Contains("/itm/", StringComparison.Ordinal);
 }
