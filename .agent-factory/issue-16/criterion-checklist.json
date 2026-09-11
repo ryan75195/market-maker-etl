@@ -1,0 +1,62 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A listing parsed from a card whose condition text appears in the subtitle row exposes the condition.",
+      "plannedImplementation": "Update EbaySearchParser.ExtractCondition to read the condition text from the card's subtitle row (the `s-card__subtitle` node inside `s-card__subtitle-row`) instead of the non-existent `.s-card__condition`/`.s-item__condition`, while leaving id/title/price/url extraction untouched.",
+      "plannedVerification": "ConditionReadFromCardSubtitleRowTests.Should_read_condition_from_the_card_subtitle_row parses one `li.s-card[data-viewport]` whose condition is `div.s-card__subtitle-row > div.s-card__subtitle > span` containing `Pre-owned` and asserts ListingSummary.Condition equals `Pre-owned`. At base the value is null because the parser only queries `.s-card__condition`/`.s-item__condition`, so the assertion fails on the missing behaviour. The pre-existing EbaySearchParserExposesConditionPrimaryImageAndBuyingFormatTests uses `.s-card__condition`, which the ticket states does not exist on the real page, so it does not cover this criterion.",
+      "materialConcerns": [
+        "real-markup compatibility: the live page nests the condition text one element below the subtitle row",
+        "the existing code-shaped fixture EbaySearchParserExposesConditionPrimaryImageAndBuyingFormatTests must keep passing or be updated by the implementer, so the old selector cannot simply be deleted"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A listing parsed from a card with an `s-card__image` / `ebayimg` image exposes a primary image url.",
+      "plannedImplementation": "Update EbaySearchParser.ExtractPrimaryImageUrl to read the image url from the `s-card__image` container (for example `.s-card__image img` or an `img[src*='ebayimg']` descendant) instead of requiring the class on the `img` element itself.",
+      "plannedVerification": "PrimaryImageReadFromCardImageContainerTests.Should_read_primary_image_url_from_the_card_image_container parses one card whose `div.s-card__image` contains `img[src='https://i.ebayimg.com/images/g/abc123/s-l500.webp']` and asserts ListingSummary.PrimaryImageUrl equals that exact url. At base the value is null because the parser queries `img.s-card__image`, and the `s-card__image` class is on the container `div`, so the assertion fails on the missing behaviour. No existing check covers an image container; the pre-existing test puts `s-card__image` on the `img` itself.",
+      "materialConcerns": [
+        "real-markup compatibility: the image container is a `div`, not the `img`, so an `img.s-card__image` selector returns nothing"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A listing parsed from a card that indicates Buy It Now or auction exposes a buying format.",
+      "plannedImplementation": "Update EbaySearchParser.ExtractBuyingFormat to recognise the buying-format marker text that appears in the card (the `Buy It Now` and `Auction` markers carried in an `s-card__attribute-row`) instead of querying only the non-existent `.s-card__buying-format`/`.s-item__buying-format`.",
+      "plannedVerification": "BuyingFormatReadFromCardFormatMarkerTests.Should_read_buying_format_when_the_card_shows_a_buy_it_now_marker asserts ListingSummary.BuyingFormat equals `Buy It Now` for a card carrying that marker, and Should_read_buying_format_when_the_card_shows_an_auction_marker asserts it equals `Auction` for a card carrying the auction marker. At base both are null because the parser queries `.s-card__buying-format`, which the live card does not have, so both assertions fail on the missing behaviour. No existing check parses a real-card format marker.",
+      "materialConcerns": [
+        "implementer guidance in the ticket says condition, image and buying formats are empty against real pages; the marker is textual, not the removed class name"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Where a card does not carry a field, the listing stores it absent rather than guessed.",
+      "plannedImplementation": "Keep ExtractCondition, ExtractPrimaryImageUrl and ExtractBuyingFormat returning null when the card has no subtitle row, no image container and no format marker, so the parsed ListingSummary and the persisted ListingEntity keep the three columns null.",
+      "plannedVerification": "AbsentCardAttributesStayAbsentTests.Should_leave_missing_card_attributes_absent parses a real-shaped card that has only a title, price and link, persists it through the real ScrapeStore on a unique temp SQLite database, and asserts both the parsed summary and the stored row have Condition, PrimaryImageUrl and BuyingFormat null. This guard is green at base because the parser already returns null for the removed selectors; it exists to fail if the new extraction starts falling back to unrelated card text. The pre-existing ParsedListingAbsentFieldsRemainAbsentTests covers storage of absent fields but only with the code-shaped `s-card__condition` fixture.",
+      "materialConcerns": [
+        "persistence compatibility: the three ListingEntity columns must accept and round-trip null",
+        "the parser must not guess a field from unrelated text such as the title, price row or subtitle when the field is genuinely absent",
+        "the existing ParsedListingAbsentFieldsRemainAbsentTests relies on `.s-card__condition`; the implementer must keep that fallback or update the fixture"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-5",
+      "criterion": "A test fails if any of the three extractions stops matching a fixture shaped like the real markup.",
+      "plannedImplementation": "The three extraction methods must all match the single real-shaped card fixture simultaneously; no additional production surface is implied beyond AC-1 to AC-3.",
+      "plannedVerification": "RealCardMarkupExtractsAllListingAttributesTests.Should_extract_condition_image_and_buying_format_from_a_real_card parses one full card with a subtitle-row condition, an `s-card__image` container holding an `i.ebayimg.com` image and a `Buy It Now` marker, and asserts all three fields at once inside Assert.Multiple. Because any extraction that stops matching the real fixture nulls its field, this single test turns red for a regression in any of the three, satisfying the criterion. At base all three are null so it fails on the missing behaviour.",
+      "materialConcerns": [
+        "the combined test must reuse the exact real-markup shape so a regression in one extraction cannot hide behind the other two"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    }
+  ]
+}
