@@ -1,6 +1,8 @@
-﻿using MarketMakerEtl.Core.Interfaces;
+﻿using MarketMakerEtl.Core.Data;
+using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MarketMakerEtl.Core;
@@ -16,9 +18,14 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddCoreServices(this IServiceCollection services)
     {
         services.AddSingleton(DefaultScrapeOptions);
+        services.AddDbContextFactory<EtlDbContext>(options =>
+            options.UseSqlite("Data Source=marketmakeretl.db"));
+
         services.AddHttpClient<IScrapeClient, HttpScrapeClient>();
         services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
         services.AddSingleton<ISearchPageParser, EbaySearchParser>();
+        services.AddSingleton<IScrapeRunStateService, ScrapeRunStateService>();
+        services.AddSingleton<IScrapeStore, ScrapeStore>();
         return services;
     }
 }
