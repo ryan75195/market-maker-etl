@@ -1,0 +1,57 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A database migrated from empty has storage for status, sold price, sold date, seller, and a status-change history.",
+      "plannedImplementation": "Add ItemStatus, SoldPrice, SoldDate and Seller properties to ListingEntity; introduce a ListingStatusChangeEntity holding Id, ListingEntityId, Status and ChangedUtc; expose it as EtlDbContext.ListingStatusChanges; and add an EF migration (with matching model snapshot and designer) that adds the four nullable Listings columns and creates the ListingStatusChanges table with its ListingEntityId/Status columns.",
+      "plannedVerification": "MigratedListingSchemaIncludesStatusSaleFieldsAndHistoryTests.Should_include_status_sale_fields_and_history_storage_after_migrating_an_empty_database applies migrations to a fresh file database, then reads the real SQLite schema through pragma_table_info and sqlite_master and asserts the Listings table contains the columns mapped for ItemStatus, SoldPrice, SoldDate and Seller and that the ListingStatusChanges table exists with columns for Status and ListingEntityId. At base no migration exists, so ApplyMigrations raises PendingModelChangesWarning and the schema assertions cannot pass. The pre-existing MigrationsCreateMissingDatabaseTests only checks that a migrated database can hold Title and Price, so it does not cover this criterion.",
+      "materialConcerns": [
+        "persistence compatibility: existing installed databases are upgraded by an in-place migration, never recreated",
+        "SQLite column types and nullable mappings must round-trip through the EF value converters"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-2",
+      "criterion": "Migrating a database that already contains listing rows preserves those rows and their existing values.",
+      "plannedImplementation": "The new migration must add nullable columns to the existing Listings table and create the new history table without dropping or rebuilding Listings, and the model snapshot must be updated so the migrated schema matches the model.",
+      "plannedVerification": "ListingMigrationPreservesExistingRowsAndValuesTests.Should_preserve_existing_listing_rows_and_values_when_applying_the_new_migration builds a legacy database by migrating only to 20260911130612_AddListingFields, inserts a listing row with raw SQL (ListingId legacy-listing-001, Title 'Legacy PS5', Price 199.99, Currency GBP, IsSold true, Condition Used, PrimaryImageUrl, BuyingFormat Auction), applies all migrations, then reads the row back through the new ListingEntity and asserts each legacy value is unchanged and each newly added field (ItemStatus, SoldPrice, SoldDate, Seller) is null. At base the pending migration is absent, so ApplyMigrations warns or the post-migration read fails. The pre-existing MigrationsPreserveExistingRowsTests uses EnsureCreated before the model change and does not exercise an in-place upgrade of a pre-existing database.",
+      "materialConcerns": [
+        "data loss: the migration must not drop or recreate Listings, which would discard existing rows",
+        "schema migration: legacy rows must survive with new columns materialising as null rather than defaults",
+        "persistence compatibility: the upgrade path starts from the previously shipped migration, not a fresh schema"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "the legacy listing is first observed before the new migration with Title 'Legacy PS5', Price 199.99, Currency GBP, IsSold true, Condition Used, PrimaryImageUrl and BuyingFormat Auction, and after migration the same row is read back with exactly those values.",
+        "whenHeldValueAbsent": "when a legacy row holds no value for the newly added ItemStatus, SoldPrice, SoldDate or Seller fields, those fields are read back as null after migration rather than a fabricated default."
+      }
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A listing can be stored with a sold status together with its sold price and sold date.",
+      "plannedImplementation": "ListingEntity gains nullable ItemStatus, SoldPrice and SoldDate properties and the migration adds the corresponding Listings columns, so a persisted listing can carry a sold status, price and date alongside the existing IsSold flag.",
+      "plannedVerification": "SoldListingStoresStatusPriceAndDateTests.Should_store_and_read_back_a_sold_listing_with_its_status_price_and_date applies migrations, saves a ListingEntity with IsSold true, ItemStatus 'Sold', SoldPrice 275.50 and SoldDate 2026-03-14T09:30:00Z, then loads it in a new context and asserts the status, price, date and sold flag match. At base the columns do not exist, so the save or reload fails. The pre-existing ScrapeStoreRoundTripsConditionPrimaryImageAndBuyingFormatTests round-trips only Condition, PrimaryImageUrl and BuyingFormat.",
+      "materialConcerns": [
+        "decimal and DateTime fidelity across the SQLite TEXT storage used for Price-style columns",
+        "the existing IsSold column keeps its meaning; the new status is additive"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-4",
+      "criterion": "A status-change record can be stored against a listing and read back.",
+      "plannedImplementation": "Introduce ListingStatusChangeEntity with Id, ListingEntityId, Status and ChangedUtc, expose DbSet<ListingStatusChangeEntity> ListingStatusChanges on EtlDbContext, and add the ListingStatusChanges table (with ListingEntityId and Status columns) to the new migration so a record is linked to a listing and persisted.",
+      "plannedVerification": "ListingStatusChangeHistoryStoresRecordsTests.Should_store_and_read_back_a_status_change_record_against_a_listing applies migrations, saves a listing, saves a ListingStatusChangeEntity linked by ListingEntityId with Status 'Sold' and ChangedUtc 2026-03-15T12:00:00Z, then loads the record in a new context and asserts the link, status and timestamp. At base the ListingStatusChanges table does not exist, so the insert fails. No existing check stores status-change history.",
+      "materialConcerns": [
+        "persistence compatibility: the history table is new and must be created by the migration without affecting existing tables",
+        "the record must stay tied to its listing through ListingEntityId"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    }
+  ]
+}

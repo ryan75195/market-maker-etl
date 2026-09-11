@@ -16,6 +16,8 @@ public sealed class EtlDbContext : DbContext
 
     public DbSet<ListingEntity> Listings => Set<ListingEntity>();
 
+    public DbSet<ListingStatusChangeEntity> ListingStatusChanges => Set<ListingStatusChangeEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ScrapeJobEntity>(entity =>
