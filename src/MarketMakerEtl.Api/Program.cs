@@ -1,10 +1,19 @@
 ﻿using MarketMakerEtl.Api;
 using MarketMakerEtl.Core;
+using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCoreServices();
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+    using var db = factory.CreateDbContext();
+    db.Database.EnsureCreated();
+}
 
 app.MapGet("/health", () => Results.Ok(new HealthResponse("healthy")));
 
