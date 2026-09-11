@@ -104,6 +104,24 @@ public class ScrapeStoreTests
         Assert.That(run!.Status, Is.EqualTo(ScrapeRunStatus.Completed));
     }
 
+    [Test]
+    public async Task Should_deduplicate_listings_within_a_single_upsert()
+    {
+        var store = CreateStore();
+        var jobId = await store.EnsureJob("ps5", CancellationToken.None);
+        var first = new ListingSummary("111111111111", "PS5", 100m, "GBP", "https://x/itm/1", false);
+        var second = first with { Price = 90m };
+
+        await store.UpsertListings(jobId, [first, second], CancellationToken.None);
+
+        var listings = await store.GetListings(jobId, CancellationToken.None);
+        Assert.Multiple(() =>
+        {
+            Assert.That(listings, Has.Count.EqualTo(1));
+            Assert.That(listings[0].Price, Is.EqualTo(90m));
+        });
+    }
+
     private ScrapeStore CreateStore() =>
         new(
             _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),

@@ -25,21 +25,22 @@ public sealed class SearchPageService : ISearchPageService
 
     public async Task<IReadOnlyList<ListingSummary>> Collect(string searchTerm, CancellationToken ct)
     {
-        var results = new List<ListingSummary>();
-        await CollectDirection(searchTerm, sold: false, results, ct);
+        var merged = new Dictionary<string, ListingSummary>(StringComparer.Ordinal);
+
+        await CollectDirection(searchTerm, sold: false, merged, ct);
 
         if (_options.CollectSold)
         {
-            await CollectDirection(searchTerm, sold: true, results, ct);
+            await CollectDirection(searchTerm, sold: true, merged, ct);
         }
 
-        return results;
+        return merged.Values.ToList();
     }
 
     private async Task CollectDirection(
         string searchTerm,
         bool sold,
-        List<ListingSummary> results,
+        Dictionary<string, ListingSummary> merged,
         CancellationToken ct)
     {
         for (var page = 1; page <= _options.MaxPages; page++)
@@ -53,7 +54,10 @@ public sealed class SearchPageService : ISearchPageService
                 return;
             }
 
-            results.AddRange(pageResults);
+            foreach (var listing in pageResults)
+            {
+                merged[listing.ListingId] = listing;
+            }
         }
     }
 }
