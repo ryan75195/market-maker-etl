@@ -1,2 +1,18 @@
-﻿var builder = Host.CreateApplicationBuilder(args);
-await builder.Build().RunAsync();
+﻿using MarketMakerEtl.Core;
+using MarketMakerEtl.Core.Data;
+using MarketMakerEtl.Etl.Workers;
+using Microsoft.EntityFrameworkCore;
+
+var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddCoreServices();
+builder.Services.AddHostedService<ScrapeWorker>();
+var host = builder.Build();
+
+using (var scope = host.Services.CreateScope())
+{
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+    await using var db = await factory.CreateDbContextAsync();
+    await db.Database.EnsureCreatedAsync();
+}
+
+await host.RunAsync();
