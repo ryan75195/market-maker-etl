@@ -123,11 +123,40 @@ public sealed class ScrapeStore : IScrapeStore
             .ToList();
     }
 
-    public Task<IReadOnlyList<ListingRefreshTarget>> GetActiveListings(CancellationToken ct) =>
-        throw new NotImplementedException($"{ct}");
+    public async Task<IReadOnlyList<ListingRefreshTarget>> GetActiveListings(CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var listings = await db.Listings
+            .Where(l => l.ItemStatus == null || l.ItemStatus == "Active")
+            .OrderBy(l => l.Id)
+            .ToListAsync(ct);
 
-    public Task RecordStatusChange(int listingEntityId, string status, decimal? price, CancellationToken ct) =>
-        throw new NotImplementedException($"{listingEntityId}{status}{price}{ct}");
+        return listings
+            .Select(l => new ListingRefreshTarget(l.Id, l.ListingId, l.Url, l.ItemStatus))
+            .ToList();
+    }
+
+    public async Task RecordStatusChange(int listingEntityId, string status, decimal? price, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var listing = await db.Listings.FindAsync([listingEntityId], ct);
+
+        if (listing is null)
+        {
+            return;
+        }
+
+        listing.ItemStatus = status;
+        listing.Price = price ?? listing.Price;
+        listing.UpdatedUtc = DateTime.UtcNow;
+        db.ListingStatusChanges.Add(new ListingStatusChangeEntity
+        {
+            ListingEntityId = listingEntityId,
+            Status = status,
+            ChangedUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync(ct);
+    }
 
     private static void Apply(
         EtlDbContext db,
