@@ -83,11 +83,14 @@ public static class ServiceCollectionExtensions
             : configured;
     }
 
-    private static string ResolveDefaultDatabasePath() =>
-        Path.Combine(
+    private static string ResolveDefaultDatabasePath()
+    {
+        var directory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MarketMakerEtl",
-            DefaultDatabaseFileName);
+            "MarketMakerEtl");
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, DefaultDatabaseFileName);
+    }
 
     private static string ReadString(IConfiguration? configuration, string key, string fallback)
     {
