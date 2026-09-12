@@ -63,8 +63,20 @@ public static class DatabaseMigrationExtensions
         var history = db.GetService<IHistoryRepository>();
         await db.Database.ExecuteSqlRawAsync(history.GetCreateIfNotExistsScript(), cancellationToken);
 
+        var connection = db.Database.GetDbConnection();
+        await OpenAsync(connection, cancellationToken);
+        var assembly = db.GetService<IMigrationsAssembly>();
+
         foreach (var migration in migrations)
         {
+            if (!await MigrationSchemaInspector.IsReflectedInSchema(
+                    connection,
+                    assembly.Migrations[migration],
+                    cancellationToken))
+            {
+                continue;
+            }
+
             await db.Database.ExecuteSqlRawAsync(
                 history.GetInsertScript(new HistoryRow(migration, ProductInfo.GetVersion())),
                 cancellationToken);

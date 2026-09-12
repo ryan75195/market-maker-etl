@@ -1,0 +1,62 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "Applying migrations to a database that already has the application tables but no migration history leaves the later schema objects present, including a status-change table.",
+      "plannedImplementation": "Correct ApplyMigrations' bootstrap in DatabaseMigrationExtensions so it records into __EFMigrationsHistory only the migrations whose schema objects are already present in the database (introspecting sqlite_master and pragma_table_info), leaving genuinely pending migrations for MigrateAsync to apply. Migration files, entities and existing data are not changed.",
+      "plannedVerification": "LegacyDatabaseMigrationAddsStatusChangeTableTests.Should_add_the_later_schema_objects_to_a_legacy_database_without_migration_history builds a database at 20260911124753_InitialCreate with IMigrator, drops __EFMigrationsHistory to reproduce a pre-migration database, runs ApplyMigrations, then asserts via pragma_table_info that the ListingStatusChanges table exists with Status/ListingEntityId columns and that Listings gained ItemStatus/SoldPrice/SoldDate/Seller/Condition/PrimaryImageUrl/BuyingFormat, and that AddListingStatusAndSaleFields is in the applied set. At base ApplyBaselineAsync inserts all three migrations and MigrateAsync applies none, so the test fails on the missing table and columns.",
+      "materialConcerns": [
+        "persistence compatibility: the 116-row production database must be upgraded in place, never deleted or recreated",
+        "migration history backfill must not mark genuinely unapplied migrations as applied",
+        "no migration file, snapshot or entity may change"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    },
+    {
+      "id": "AC-2",
+      "criterion": "That application preserves the existing rows and their values.",
+      "plannedImplementation": "The corrected bootstrap only baselines migrations already reflected in the schema, so MigrateAsync runs the remaining additive migrations (ADD COLUMN, CREATE TABLE ListingStatusChanges) and leaves existing ScrapeJobs/ScrapeRuns/Listings rows and their values untouched.",
+      "plannedVerification": "LegacyDatabaseMigrationPreservesListingRowsAndValuesTests.Should_preserve_existing_listing_and_run_values_when_upgrading_a_legacy_database seeds one ScrapeJob, ScrapeRun and Listing in an InitialCreate-state database with no migration history, runs ApplyMigrations, then reads the rows back through the EF model and asserts the exact stored Title, Price, Currency, Url, IsSold and run Status while the newly added ItemStatus/SoldPrice/SoldDate are null. The pre-existing MigrationsPreserveExistingRowsTests also covers preservation for a full-schema EnsureCreated database and is included in the contract command.",
+      "materialConcerns": [
+        "data loss: existing rows must never be dropped, recreated or overwritten",
+        "SQLite ALTER TABLE limits mean the migrations must remain additive",
+        "the legacy fixture must be built at InitialCreate and have its history table removed, not merely be a fresh empty database"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "Before ApplyMigrations the legacy Listings row is observed with Title 'Legacy PS5', Price 199.99, Currency 'GBP', Url 'https://example.test/itm/legacy', IsSold true, and the ScrapeRun is observed with Status 'Queued'; after ApplyMigrations the same rows are observed with identical values.",
+        "whenHeldValueAbsent": "When the held value is absent - the legacy schema has no ItemStatus/SoldPrice/SoldDate columns and the optional later fields hold null - the upgraded row is observed with those later values still null rather than being populated, defaulted or discarded."
+      }
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A database already at the latest migration is left unchanged.",
+      "plannedImplementation": "RequiresBaselineAsync returns false when __EFMigrationsHistory already exists, so ApplyMigrations delegates to MigrateAsync, which performs no work when there are no pending migrations.",
+      "plannedVerification": "Reuses the existing MigrationsLeaveUpToDateDatabaseUnchangedTests.Should_start_against_an_up_to_date_database_without_changing_the_schema, which applies migrations twice and asserts the applied set is identical across runs and pending stays empty; that fixture is included in the contract testCommand rather than duplicated. The temporary local fix left it and every other pre-existing test green.",
+      "materialConcerns": [
+        "startup idempotence: repeated host starts must not re-run or re-baseline migrations",
+        "the no-op path must not expose the schema to any ALTER on an already-current database"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "After the first ApplyMigrations the database is observed reporting the complete applied-migration set (InitialCreate, AddListingFields, AddListingStatusAndSaleFields) and no pending migrations; after the second ApplyMigrations the same applied set and no pending migrations are observed.",
+        "whenHeldValueAbsent": "When the held applied set is absent (no __EFMigrationsHistory, the legacy case) the bootstrap branch runs instead of the up-to-date no-op branch; the unchanged assertion applies only once a held applied set exists."
+      }
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Creating a database from empty still produces the full schema.",
+      "plannedImplementation": "An empty database has none of the application tables, so RequiresBaselineAsync is false and MigrateAsync applies every migration from scratch, including the status-change table and the later Listings columns.",
+      "plannedVerification": "Reuses the existing MigratedListingSchemaIncludesStatusSaleFieldsAndHistoryTests.Should_include_status_sale_fields_and_history_storage_after_migrating_an_empty_database and MigrationsCreateMissingDatabaseTests.Should_create_a_missing_database_with_the_migrated_schema, which apply migrations to an empty database and assert the status/sale columns, the history table and a store round-trip; both are included in the contract testCommand rather than duplicated.",
+      "materialConcerns": [
+        "fresh-install path must remain unaffected by the bootstrap change",
+        "regression risk that the bootstrap now wrongly engages for a database with no application tables"
+      ],
+      "verificationStatus": "planned",
+      "comparison": false
+    }
+  ]
+}
