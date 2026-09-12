@@ -23,5 +23,5 @@ public interface IScrapeStore
 
     Task<IReadOnlyList<ListingRefreshTarget>> GetActiveListings(CancellationToken ct);
 
-    Task RecordStatusChange(int listingEntityId, string status, decimal? price, CancellationToken ct);
+    Task RecordStatusChange(int listingEntityId, ListingStatusObservation observation, CancellationToken ct);
 }

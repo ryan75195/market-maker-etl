@@ -1,0 +1,70 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "When a re-check observes that a listing has sold, its stored record holds the observed sold price and sold date.",
+      "plannedImplementation": "ListingRefreshService.RefreshListing already parses the fetched item page into ItemPageListing (Status, Price, SoldPrice, SoldDate, Seller). It must hand the observed sale details to storage alongside the status change, and ScrapeStore must persist ListingEntity.SoldPrice from the parsed sold price and ListingEntity.SoldDate from the parsed sold-date display text when the observation is Sold. The Listings.SoldPrice and Listings.SoldDate columns already exist from the issue #21 migration, so no schema or migration change is allowed or needed.",
+      "plannedVerification": "SoldListingRefreshStoresSoldPriceAndSoldDateTests.Should_store_the_observed_sold_price_and_sold_date_after_a_sold_recheck seeds an Active listing (Price 150, IsSold false), maps its URL to a sold page that shows a primary price of 150.00 and a distinct sold price of 212.75 plus 'This listing sold on Fri, 11 Sep at 6:09 PM.', runs RefreshActiveListings against the real ScrapeStore and a temp SQLite database, then asserts the reloaded listing has SoldPrice 212.75 and a SoldDate whose day is 11 and month is 9. At base the sold price and sold date columns stay null, so both assertions fail on the missing behaviour. The pre-existing SoldListingStoresStatusPriceAndDateTests only round-trips a hand-built entity and never exercises the refresh path.",
+      "materialConcerns": [
+        "the parser exposes the sold date as display text ('Fri, 11 Sep at 6:09 PM') while Listings.SoldDate is a DateTime? column, so the refresh-to-storage path must convert it; the ticket does not pin the year or time, so the test asserts the observed day and month rather than a full timestamp",
+        "the observed sold price must come from the sold-price element and must not be confused with the still-displayed primary price",
+        "persistence compatibility: the SoldPrice and SoldDate columns already exist, so the fix writes existing columns without a migration"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "before the re-check the stored listing is observed with SoldPrice null and SoldDate null; after the sold re-check the same row is observed with SoldPrice 212.75 and a SoldDate for day 11 of month 9.",
+        "whenHeldValueAbsent": "when the stored listing holds no sold price and no sold date (the nulls left by the capture path), a sold observation supplies the observed values instead of leaving the columns absent."
+      }
+    },
+    {
+      "id": "AC-2",
+      "criterion": "The stored sold flag reflects the sold observation.",
+      "plannedImplementation": "When the refresh observes a Sold page, storage must set ListingEntity.IsSold to true in addition to the status and sale fields, so a listing that was previously captured as not sold is marked sold once the item page reports the sale.",
+      "plannedVerification": "SoldListingRefreshSetsSoldFlagTests.Should_set_the_stored_sold_flag_after_a_sold_recheck seeds an Active listing with IsSold false, maps its URL to a SOLD item page, runs RefreshActiveListings against the real ScrapeStore and a temp SQLite database, and asserts the reloaded listing has IsSold true. At base IsSold stays false, so the assertion fails on the missing behaviour. The pre-existing ListingRefreshRecordsStatusChangeForNewlySoldListingTests asserts only the status text and history row, never the sold flag.",
+      "materialConcerns": [
+        "the sold flag is independent of the status text and must be set from the sold observation, not inferred from a price being present",
+        "a sold listing must be left out of later refreshes once its status becomes terminal, so the flag and status write must agree"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "before the re-check the stored listing is observed with IsSold false; after the sold re-check the same row is observed with IsSold true.",
+        "whenHeldValueAbsent": "when the stored listing holds no prior sold observation (IsSold false, the default the capture path leaves), a sold page still flips the flag to true rather than being suppressed for lack of a held sold value."
+      }
+    },
+    {
+      "id": "AC-3",
+      "criterion": "When a re-check observes a listing ended without a sale, the status is recorded and no sold price is invented.",
+      "plannedImplementation": "On an Ended observation the refresh must still record the status transition (ListingEntity.ItemStatus and the ListingStatusChanges history row) while leaving ListingEntity.SoldPrice null and ListingEntity.IsSold false, even when the ended page still displays a primary price. The ended page carries no sold-price element, so no sold price or sold date may be written.",
+      "plannedVerification": "EndedListingRefreshRecordsStatusWithoutInventingSoldPriceTests.Should_record_the_ended_status_without_a_sold_price_after_an_ended_recheck seeds an Active listing (Price 259, IsSold false), maps its URL to an ENDED page that still shows a primary price of 189.00, runs RefreshActiveListings against the real ScrapeStore and a temp SQLite database, then asserts ItemStatus is Ended, one ListingStatusChanges row exists with Status Ended, SoldPrice is null and IsSold is false. This is a regression guard that already passes at base (the existing store records the status but never writes a sold price); it protects the outcome the fix must not regress, because the displayed 189.00 would be caught if the implementation copied a displayed price into SoldPrice.",
+      "materialConcerns": [
+        "ended pages can still display a price, so the implementation must not translate any displayed amount into a sold price",
+        "the status change must still be recorded for the terminal Ended transition even though no sale occurred",
+        "no sold date may be invented either, since the ended page has no sale message"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "before the re-check the stored listing is observed with ItemStatus Active, SoldPrice null and IsSold false; after the ended re-check it is observed with ItemStatus Ended and a history row, while SoldPrice stays null and IsSold stays false.",
+        "whenHeldValueAbsent": "when the stored listing holds no sold price, an ended-without-sale observation leaves it absent rather than substituting the price still displayed on the ended page."
+      }
+    },
+    {
+      "id": "AC-4",
+      "criterion": "A still-active listing's stored values are unchanged.",
+      "plannedImplementation": "The refresh must write sale details only when the observed status is a transition. When the parsed status still matches the stored active state, no storage write may occur, so the existing Price, ItemStatus and the absent sale fields remain exactly as stored and the page's displayed price does not overwrite them.",
+      "plannedVerification": "ActiveListingRefreshLeavesStoredValuesUnchangedTests.Should_leave_a_still_active_listing_stored_values_unchanged_after_a_recheck seeds an Active listing (Price 349, IsSold false, no sale fields), maps its URL to a still-active page that displays a different price of 389.00, runs RefreshActiveListings against the real ScrapeStore and a temp SQLite database, then asserts ItemStatus is still Active, Price is still 349, IsSold is false and SoldPrice, SoldDate and Seller are all still null. This is a regression guard that already passes at base; it protects against a fix that blanket-writes sale fields on every re-check and corrupts unchanged active rows.",
+      "materialConcerns": [
+        "the capture path leaves ItemStatus null, so the active-equivalence rule must continue to treat a null stored status and a parsed Active status as the same state and write nothing",
+        "a write on an unchanged observation would overwrite the stored price with the page price and could clear genuine stored values"
+      ],
+      "verificationStatus": "planned",
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "before the re-check the still-active listing is observed with Price 349, ItemStatus Active, IsSold false and null sale fields; after the re-check the same row is observed with exactly those values.",
+        "whenHeldValueAbsent": "when the stored row holds no sale fields and no changed status, an unchanged active observation keeps those fields absent rather than fabricating a sale from the page."
+      }
+    }
+  ]
+}
