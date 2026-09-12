@@ -138,7 +138,7 @@ public sealed class ScrapeStore : IScrapeStore
             .ToList();
     }
 
-    public async Task RecordStatusChange(int listingEntityId, string status, decimal? price, CancellationToken ct)
+    public async Task RecordStatusChange(int listingEntityId, ListingStatusObservation observation, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var listing = await db.Listings.FindAsync([listingEntityId], ct);
@@ -150,18 +150,27 @@ public sealed class ScrapeStore : IScrapeStore
 
         var current = string.IsNullOrWhiteSpace(listing.ItemStatus) ? ActiveStatus : listing.ItemStatus;
 
-        if (string.Equals(current, status, StringComparison.Ordinal))
+        if (string.Equals(current, observation.Status, StringComparison.Ordinal))
         {
             return;
         }
 
-        listing.ItemStatus = status;
-        listing.Price = price ?? listing.Price;
+        listing.ItemStatus = observation.Status;
+        listing.Price = observation.Price ?? listing.Price;
         listing.UpdatedUtc = DateTime.UtcNow;
+
+        if (observation.IsSold)
+        {
+            listing.IsSold = true;
+            listing.SoldPrice = observation.SoldPrice ?? listing.SoldPrice;
+            listing.SoldDate = observation.SoldDate ?? listing.SoldDate;
+            listing.Seller = observation.Seller ?? listing.Seller;
+        }
+
         db.ListingStatusChanges.Add(new ListingStatusChangeEntity
         {
             ListingEntityId = listingEntityId,
-            Status = status,
+            Status = observation.Status,
             ChangedUtc = DateTime.UtcNow
         });
         await db.SaveChangesAsync(ct);

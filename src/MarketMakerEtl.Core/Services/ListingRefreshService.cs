@@ -6,6 +6,7 @@ namespace MarketMakerEtl.Core.Services;
 public sealed class ListingRefreshService : IListingRefreshService
 {
     private const string ActiveStatus = "Active";
+    private const string SoldStatus = "Sold";
 
     private readonly IScrapeClient _client;
     private readonly IScrapeStore _store;
@@ -50,9 +51,18 @@ public sealed class ListingRefreshService : IListingRefreshService
 
         if (HasStatusChanged(target.ItemStatus, status))
         {
-            await _store.RecordStatusChange(target.Id, status, page.Price, ct);
+            await _store.RecordStatusChange(target.Id, ToObservation(status, page), ct);
         }
     }
+
+    private static ListingStatusObservation ToObservation(string status, ItemPageListing page) =>
+        new(
+            status,
+            page.Price,
+            page.SoldPrice,
+            SoldDateParser.Parse(page.SoldDate),
+            page.Seller,
+            string.Equals(status, SoldStatus, StringComparison.Ordinal));
 
     private static bool HasStatusChanged(string? stored, string observed) =>
         !string.Equals(Normalise(stored), observed, StringComparison.Ordinal);
