@@ -198,7 +198,10 @@ public class ScrapeStoreTests
             listingId = listing.Id;
         }
 
-        await store.RecordStatusChange(listingId, "Sold", 275.50m, CancellationToken.None);
+        await store.RecordStatusChange(
+            listingId,
+            new ListingStatusObservation("Sold", 275.50m, null, null, null, false),
+            CancellationToken.None);
 
         await using (var db = await factory.CreateDbContextAsync())
         {
