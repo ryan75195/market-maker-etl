@@ -9,4 +9,5 @@ public sealed record ListingSummary(
     bool IsSold,
     string? Condition,
     string? PrimaryImageUrl,
-    string? BuyingFormat);
+    string? BuyingFormat,
+    string? Brand = null);

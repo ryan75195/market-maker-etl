@@ -1,0 +1,67 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A Mercari search request targets mercari.com's search page, carries the term, and restricts to sold items when sold listings are requested.",
+      "plannedImplementation": "Add MercariSearchUrlService implementing IEbaySearchUrlService with Marketplace => Marketplace.Mercari and SupportsPagination => false. Its BuildSearch(searchTerm, sold, page) builds https://www.mercari.com/us/search with keyword=<escaped term> and adds itemStatuses=2 only when sold is true.",
+      "plannedVerification": "MercariSearchUrlServiceTests.Should_target_the_mercari_search_page_with_the_search_term asserts the URL starts with https://www.mercari.com/us/search, contains keyword=playstation%205, and does not contain itemStatuses=2; Should_restrict_to_sold_items_when_sold_listings_are_requested asserts the same page plus itemStatuses=2. Observable outcome: the request URL is Mercari's search page and the sold filter appears only for sold.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A Mercari search request can be narrowed by brand, category, condition and price range.",
+      "plannedImplementation": "Add the MercariSearchRequest record (SearchTerm, Sold, BrandId, CategoryId, Condition, MinPrice, MaxPrice) and a BuildSearch(MercariSearchRequest) overload on MercariSearchUrlService that emits brandIds, categoryIds, itemConditions, minPrice and maxPrice for the supplied values, omitting absent filters.",
+      "plannedVerification": "MercariSearchUrlServiceTests.Should_narrow_the_search_by_brand_category_condition_and_price_range builds a request with BrandId 4242, CategoryId 9999, Condition used, MinPrice 100 and MaxPrice 500 and asserts each value appears under its Mercari query parameter (brandIds=4242, categoryIds=9999, itemConditions=used, minPrice=100, maxPrice=500). Observable outcome: every supplied narrowing filter is carried on the request.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "Parsing a captured Mercari results page yields one listing per result card, carrying id, title, price, currency, url, image, brand and a sold flag.",
+      "plannedImplementation": "Add MercariSearchParser implementing ISearchPageParser with Marketplace => Marketplace.Mercari. Parse selects div[data-testid=\"ItemContainer\"] and maps data-productid to ListingId, the card title to Title, data-itemprice minor units divided by 100 to Price, USD to Currency, the item link to Url, the card img src to PrimaryImageUrl, data-brand to Brand, and data-itemstatus trading to IsSold. Add an optional Brand member to ListingSummary so the parsed brand is carried; existing call sites keep compiling through the default null.",
+      "plannedVerification": "MercariSearchParserTests.Should_parse_one_listing_per_result_card parses a two-card page and asserts count two plus the first card's id, title, 19.00m price, USD currency, item url, image url, PlayStation brand and false sold flag; Should_mark_a_card_that_is_in_transaction_as_sold asserts the second card's true sold flag and Nintendo brand. Observable outcome: one populated listing per result card.",
+      "materialConcerns": [
+        "public-contract compatibility: ListingSummary gains an optional Brand member, defaulting to null so existing eBay and persistence construction is unaffected",
+        "persistence compatibility: Brand is parsed but not persisted; the ticket forbids a schema change, so a stored-then-read listing returns Brand null"
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-4",
+      "criterion": "A Mercari listing id is preserved in full, including its leading letter.",
+      "plannedImplementation": "MercariSearchParser reads data-productid verbatim as ListingId and does not apply eBay's id.Length >= 10 && id.All(char.IsDigit) guard, so the leading m survives.",
+      "plannedVerification": "MercariSearchParserTests.Should_preserve_the_full_listing_id_including_its_leading_letter asserts ListingId equals m92390261760 for the first card and m92390261761 for the second. Observable outcome: the full alphanumeric id, leading letter included, is returned.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-5",
+      "criterion": "A card with no price yields no price rather than a wrong number.",
+      "plannedImplementation": "MercariSearchParser returns a null Price when a card has no data-itemprice attribute and never derives a number from other text on the card.",
+      "plannedVerification": "MercariSearchParserTests.Should_leave_price_absent_when_a_card_has_no_price parses a card without data-itemprice and asserts the single listing's Price is null and its id is still m92390261762. Observable outcome: absence of price stays absent instead of becoming a fabricated number.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-6",
+      "criterion": "eBay search behaviour is unchanged.",
+      "plannedImplementation": "Leave EbaySearchUrlService and EbaySearchParser behaviour untouched. ListingSummary only gains an optional trailing Brand defaulting to null, so eBay parsing and every existing eBay construction keep their prior values.",
+      "plannedVerification": "Reuse existing EbaySearchUrlServiceTests (asserts _nkw=<term>, _pgn=<page>, LH_Sold=1 and LH_Complete=1) and EbaySearchParserTests (asserts eBay cards parse to the same ids, titles, prices, currency, urls and sold flags) by including both fixtures in the contract testCommand. Both were green at base and remain green after the shape change.",
+      "materialConcerns": [
+        "public-contract compatibility"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "For Marketplace.Ebay the built search URL carries _nkw, _pgn and the LH_Sold/LH_Complete filters and the eBay parser returns the same listing ids, titles, prices, currency, urls and sold flags as before the ticket.",
+        "whenHeldValueAbsent": "When the previously held eBay URL shape or parse result is absent, the reused EbaySearchUrlServiceTests and EbaySearchParserTests fail rather than silently accepting a changed eBay request or listing."
+      },
+      "verificationStatus": "planned"
+    }
+  ]
+}
