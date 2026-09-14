@@ -56,7 +56,7 @@ public class SoldListingRefreshSetsSoldFlagTests
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         var listingId = await SeedActiveListing(factory);
         var client = new StubScrapeClient(new Dictionary<string, string> { [SoldUrl] = SoldPage });
-        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()));
+        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()), new DelegatingItemPageParser());
 
         await service.RefreshActiveListings(CancellationToken.None);
 

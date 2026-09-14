@@ -10,11 +10,16 @@ public sealed class ListingRefreshService : IListingRefreshService
 
     private readonly IScrapeClient _client;
     private readonly IScrapeStore _store;
+    private readonly IItemPageParser _itemPageParser;
 
-    public ListingRefreshService(IScrapeClient client, IScrapeStore store)
+    public ListingRefreshService(
+        IScrapeClient client,
+        IScrapeStore store,
+        IItemPageParser itemPageParser)
     {
         _client = client;
         _store = store;
+        _itemPageParser = itemPageParser;
     }
 
     public async Task RefreshActiveListings(CancellationToken ct)
@@ -35,7 +40,7 @@ public sealed class ListingRefreshService : IListingRefreshService
         }
 
         var html = await _client.GetPageHtml(target.Url, ct);
-        var page = EbayItemPageParser.Parse(html);
+        var page = _itemPageParser.Parse(html);
 
         if (page is null)
         {

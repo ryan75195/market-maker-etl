@@ -18,7 +18,7 @@ public sealed class ScrapeRunService : IScrapeRunService
     {
         try
         {
-            var listings = await _search.Collect(work.SearchTerm, ct);
+            var listings = await _search.Collect(work.SearchTerm, work.Marketplace, ct);
             await _store.UpsertListings(work.JobId, listings, ct);
             await _store.CompleteRun(work.RunId, ct);
         }

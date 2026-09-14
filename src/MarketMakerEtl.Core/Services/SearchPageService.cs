@@ -1,5 +1,6 @@
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
+using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Scraper;
 
 namespace MarketMakerEtl.Core.Services;
@@ -7,51 +8,70 @@ namespace MarketMakerEtl.Core.Services;
 public sealed class SearchPageService : ISearchPageService
 {
     private readonly IScrapeClient _client;
-    private readonly IEbaySearchUrlService _urls;
-    private readonly ISearchPageParser _parser;
+    private readonly IEnumerable<IEbaySearchUrlService> _urlServices;
+    private readonly IEnumerable<ISearchPageParser> _parsers;
     private readonly ScrapeOptions _options;
 
     public SearchPageService(
         IScrapeClient client,
-        IEbaySearchUrlService urls,
-        ISearchPageParser parser,
+        IEnumerable<IEbaySearchUrlService> urlServices,
+        IEnumerable<ISearchPageParser> parsers,
         ScrapeOptions options)
     {
         _client = client;
-        _urls = urls;
-        _parser = parser;
+        _urlServices = urlServices;
+        _parsers = parsers;
         _options = options;
     }
 
-    public async Task<IReadOnlyList<ListingSummary>> Collect(string searchTerm, CancellationToken ct)
+    public async Task<IReadOnlyList<ListingSummary>> Collect(
+        string searchTerm,
+        Marketplace marketplace,
+        CancellationToken ct)
     {
         var merged = new Dictionary<string, ListingSummary>(StringComparer.Ordinal);
+        var urls = SelectUrlService(marketplace);
+        var parser = SelectParser(marketplace);
 
-        await CollectDirection(searchTerm, sold: false, merged, ct);
+        await CollectDirection(searchTerm, sold: false, urls, parser, merged, ct);
 
         if (_options.CollectSold)
         {
-            await CollectDirection(searchTerm, sold: true, merged, ct);
+            await CollectDirection(searchTerm, sold: true, urls, parser, merged, ct);
         }
 
         return merged.Values.ToList();
     }
 
+    private IEbaySearchUrlService SelectUrlService(Marketplace marketplace) =>
+        _urlServices.SingleOrDefault(service => service.Marketplace == marketplace)
+        ?? throw new InvalidOperationException(
+            $"No search URL implementation registered for marketplace {marketplace}.");
+
+    private ISearchPageParser SelectParser(Marketplace marketplace) =>
+        _parsers.SingleOrDefault(parser => parser.Marketplace == marketplace)
+        ?? throw new InvalidOperationException(
+            $"No search parser registered for marketplace {marketplace}.");
+
     private async Task CollectDirection(
         string searchTerm,
         bool sold,
+        IEbaySearchUrlService urls,
+        ISearchPageParser parser,
         Dictionary<string, ListingSummary> merged,
         CancellationToken ct)
     {
-        for (var page = 1; page <= _options.MaxPages; page++)
+        var pageLimit = urls.SupportsPagination ? _options.MaxPages : 1;
+
+        for (var page = 1; page <= pageLimit; page++)
         {
-            var url = _urls.BuildSearch(searchTerm, sold, page);
+            var url = urls.BuildSearch(searchTerm, sold, page);
             var html = await _client.GetPageHtml(url, ct);
-            var pageResults = _parser.Parse(html);
+            var pageResults = parser.Parse(html);
 
             if (pageResults.Count == 0)
             {
-                ThrowIfListingMarkupProducedNoResults(html);
+                ThrowIfListingMarkupProducedNoResults(parser, html);
                 return;
             }
 
@@ -62,9 +82,9 @@ public sealed class SearchPageService : ISearchPageService
         }
     }
 
-    private static void ThrowIfListingMarkupProducedNoResults(string html)
+    private static void ThrowIfListingMarkupProducedNoResults(ISearchPageParser parser, string html)
     {
-        if (!ContainsListingMarkup(html))
+        if (!parser.ContainsListingMarkup(html))
         {
             return;
         }
@@ -72,9 +92,4 @@ public sealed class SearchPageService : ISearchPageService
         throw new InvalidOperationException(
             "Search page contained listing markup but produced no parsed listings.");
     }
-
-    private static bool ContainsListingMarkup(string html) =>
-        html.Contains("s-card", StringComparison.Ordinal)
-        || html.Contains("s-item", StringComparison.Ordinal)
-        || html.Contains("/itm/", StringComparison.Ordinal);
 }

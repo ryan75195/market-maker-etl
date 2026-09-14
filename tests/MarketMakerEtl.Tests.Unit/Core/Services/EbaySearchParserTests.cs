@@ -65,4 +65,16 @@ public class EbaySearchParserTests
 
         Assert.That(summaries, Is.Empty);
     }
+
+    [Test]
+    public void Should_report_listing_markup_only_when_the_page_contains_result_cards()
+    {
+        var parser = new EbaySearchParser();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(parser.ContainsListingMarkup(TwoItemPage), Is.True);
+            Assert.That(parser.ContainsListingMarkup("<html><body>No exact matches found</body></html>"), Is.False);
+        });
+    }
 }

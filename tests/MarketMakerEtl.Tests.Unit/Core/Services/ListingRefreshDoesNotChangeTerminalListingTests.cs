@@ -60,7 +60,7 @@ public class ListingRefreshDoesNotChangeTerminalListingTests
             [SoldUrl] = ActiveLookingPage,
             [EndedUrl] = ActiveLookingPage
         });
-        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()));
+        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()), new DelegatingItemPageParser());
 
         await service.RefreshActiveListings(CancellationToken.None);
 

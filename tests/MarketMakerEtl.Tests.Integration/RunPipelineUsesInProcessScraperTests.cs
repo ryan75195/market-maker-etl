@@ -89,8 +89,8 @@ public class RunPipelineUsesInProcessScraperTests
         new(
             new SearchPageService(
                 client,
-                urls,
-                new EbaySearchParser(),
+                [urls],
+                [new EbaySearchParser()],
                 new ScrapeOptions(MaxPages: 1, CollectSold: false)),
             store);
 
