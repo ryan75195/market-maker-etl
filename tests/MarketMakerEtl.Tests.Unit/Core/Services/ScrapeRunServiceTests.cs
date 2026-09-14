@@ -1,5 +1,6 @@
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
+using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Services;
 using NSubstitute;
@@ -15,7 +16,7 @@ public class ScrapeRunServiceTests
     public async Task Should_persist_listings_and_complete_the_run()
     {
         var search = Substitute.For<ISearchPageService>();
-        search.Collect("ps5", Arg.Any<CancellationToken>())
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<CancellationToken>())
             .Returns([new ListingSummary("111111111111", "PS5", 1m, "GBP", "https://x/itm/1", false, null, null, null)]);
         var store = Substitute.For<IScrapeStore>();
         var service = new ScrapeRunService(search, store);
@@ -31,7 +32,7 @@ public class ScrapeRunServiceTests
     public async Task Should_fail_the_run_when_collection_throws()
     {
         var search = Substitute.For<ISearchPageService>();
-        search.Collect("ps5", Arg.Any<CancellationToken>())
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<CancellationToken>())
             .Returns<IReadOnlyList<ListingSummary>>(_ => throw new InvalidOperationException("scraper down"));
         var store = Substitute.For<IScrapeStore>();
         var service = new ScrapeRunService(search, store);

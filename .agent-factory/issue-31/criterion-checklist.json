@@ -1,0 +1,59 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A run for a marketplace uses that marketplace's search URL construction and search parsing.",
+      "plannedImplementation": "Give IEbaySearchUrlService and ISearchPageParser a Marketplace identity, add Marketplace to ISearchPageService.Collect, and have SearchPageService resolve the url service and parser whose Marketplace equals the work's marketplace (passed through by ScrapeRunService) instead of relying on registration order. Add the new IItemPageParser registration in AddCoreServices.",
+      "plannedVerification": "SearchUsesTheMarketplaceImplementationTests.Should_use_the_url_builder_and_parser_of_the_requested_marketplace registers an eBay implementation before a Mercari one in DI, runs a Mercari ScrapeRunWork, and asserts the Mercari search URL is requested and the Mercari parse result is persisted while the eBay builder and parser receive no calls. Observable outcome: the requested marketplace, not registration order, selects the implementation.",
+      "materialConcerns": [
+        "public-contract compatibility"
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A marketplace that does not paginate is fetched once per search term, whatever the configured page limit is.",
+      "plannedImplementation": "Add SupportsPagination to IEbaySearchUrlService, report true for eBay, and make SearchPageService cap the page loop at one page when the selected url service reports that it does not paginate, regardless of ScrapeOptions.MaxPages.",
+      "plannedVerification": "NonPaginatingMarketplaceSearchTests.Should_fetch_a_non_paginating_marketplace_once_whatever_the_page_limit_is uses MaxPages=5 and asserts exactly one fetch; Should_fetch_every_configured_page_for_a_paginating_marketplace uses MaxPages=3 and asserts three fetches. The pair pins both the refused case (extra pages) and the accepted case (pagination still works).",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "For each marketplace, a page that rendered result cards but produced no listings fails the run, and a genuinely empty search still succeeds.",
+      "plannedImplementation": "Move the listing-markup detection out of SearchPageService onto ISearchPageParser as ContainsListingMarkup, implemented by EbaySearchParser with the existing eBay markers. SearchPageService asks the selected parser whether the page carried markup; when the parser returns no listings from a page that carries markup it throws, which ScrapeRunService turns into a failed run, while a markup-free empty page returns an empty result and completes the run.",
+      "plannedVerification": "ResultCardsWithoutListingsFailRunPerMarketplaceTests runs the pipeline for Marketplace.Ebay and Marketplace.Mercari: a markup-bearing page that parses to zero listings records a Failed run, and a markup-free page records a Completed run with no listings. Existing BrokenSearchParseFailsTheRunTests and EmptySearchResultsCompleteTheRunTests exercise the same outcome through the real eBay parser.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-4",
+      "criterion": "eBay's URL shape and parse results are unchanged.",
+      "plannedImplementation": "Keep EbaySearchUrlService.BuildSearch and EbaySearchParser.Parse bodies unchanged, tag both Marketplace.Ebay, and add EbayItemPageParserService as a public IItemPageParser that delegates to the existing internal EbayItemPageParser so the item-page parse result is preserved.",
+      "plannedVerification": "EbaySearchParityThroughMarketplaceSelectionTests compares the URL requested and the listing fields returned through marketplace selection against new EbaySearchUrlService().BuildSearch and new EbaySearchParser().Parse for the same page. EbayItemPageParserServiceTests compares the public seam's result against the internal EbayItemPageParser for a real item page. Existing EbaySearchUrlServiceTests, EbaySearchParserTests and the item-page parse fixtures remain in the gate.",
+      "materialConcerns": [
+        "public-contract compatibility"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "For Marketplace.Ebay the selected path requests exactly the URL the eBay url service builds and returns exactly the listing fields the eBay parser produces.",
+        "whenHeldValueAbsent": "When no implementation tagged Marketplace.Ebay is available, selection finds no url service or parser and the run fails instead of silently substituting another marketplace's behaviour."
+      },
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-5",
+      "criterion": "The refresh path can be exercised with a substituted item-page parse, and it acts on the substituted result.",
+      "plannedImplementation": "Add IItemPageParser and implement it with EbayItemPageParserService; give ListingRefreshService a constructor dependency on IItemPageParser and parse each fetched page through it instead of calling the internal static parser directly.",
+      "plannedVerification": "RefreshActsOnSubstitutedItemPageParseTests substitutes IItemPageParser with a distinctive Sold observation and asserts the stored ItemStatus, Price, SoldPrice and Seller and the recorded status change all come from that substituted parse. The nine existing refresh fixtures are switched to the new constructor and continue to pass through the eBay item-page parser.",
+      "materialConcerns": [
+        "public-contract compatibility"
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    }
+  ]
+}

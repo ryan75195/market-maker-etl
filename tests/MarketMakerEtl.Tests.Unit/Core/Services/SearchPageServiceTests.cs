@@ -1,5 +1,6 @@
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
+using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using NSubstitute;
@@ -17,7 +18,7 @@ public class SearchPageServiceTests
     {
         var harness = Build(new ScrapeOptions(MaxPages: 1, CollectSold: false));
 
-        var listings = await harness.Service.Collect("ps5", CancellationToken.None);
+        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, CancellationToken.None);
 
         Assert.That(listings, Has.Count.EqualTo(1));
     }
@@ -27,7 +28,7 @@ public class SearchPageServiceTests
     {
         var harness = Build(new ScrapeOptions(MaxPages: 1, CollectSold: true));
 
-        await harness.Service.Collect("ps5", CancellationToken.None);
+        await harness.Service.Collect("ps5", Marketplace.Ebay, CancellationToken.None);
 
         await harness.Client.Received(2).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -37,7 +38,7 @@ public class SearchPageServiceTests
     {
         var harness = Build(new ScrapeOptions(MaxPages: 1, CollectSold: true));
 
-        var listings = await harness.Service.Collect("ps5", CancellationToken.None);
+        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, CancellationToken.None);
 
         Assert.That(listings, Has.Count.EqualTo(1));
     }
@@ -47,7 +48,7 @@ public class SearchPageServiceTests
     {
         var harness = Build(new ScrapeOptions(MaxPages: 3, CollectSold: false), empty: true);
 
-        var listings = await harness.Service.Collect("ps5", CancellationToken.None);
+        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, CancellationToken.None);
         await harness.Client.Received(1).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
 
         Assert.That(listings, Is.Empty);
@@ -59,12 +60,16 @@ public class SearchPageServiceTests
         client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("<html/>");
 
         var urls = Substitute.For<IEbaySearchUrlService>();
+        urls.Marketplace.Returns(Marketplace.Ebay);
+        urls.SupportsPagination.Returns(true);
         urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<int>()).Returns("https://search");
 
         var parser = Substitute.For<ISearchPageParser>();
+        parser.Marketplace.Returns(Marketplace.Ebay);
+        parser.ContainsListingMarkup(Arg.Any<string>()).Returns(!empty);
         parser.Parse(Arg.Any<string>()).Returns(empty ? [] : [Listing]);
 
-        return new Harness(new SearchPageService(client, urls, parser, options), client);
+        return new Harness(new SearchPageService(client, [urls], [parser], options), client);
     }
 
     private sealed record Harness(SearchPageService Service, IScrapeClient Client);

@@ -81,8 +81,8 @@ public class EmptySearchResultsCompleteTheRunTests
         new(
             new SearchPageService(
                 client,
-                new EbaySearchUrlService(),
-                new EbaySearchParser(),
+                [new EbaySearchUrlService()],
+                [new EbaySearchParser()],
                 new ScrapeOptions(MaxPages: 3, CollectSold: false)),
             store);
 

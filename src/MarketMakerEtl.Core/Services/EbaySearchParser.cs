@@ -3,6 +3,7 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
+using MarketMakerEtl.Core.Models.Marketplaces;
 
 namespace MarketMakerEtl.Core.Services;
 
@@ -11,6 +12,10 @@ public sealed class EbaySearchParser : ISearchPageParser
     private const string ItemMarker = "/itm/";
 
     private static readonly HtmlParser Parser = new();
+
+    public Marketplace Marketplace => Marketplace.Ebay;
+
+    public bool ContainsListingMarkup(string html) => throw new NotImplementedException(nameof(html));
 
     public IReadOnlyList<ListingSummary> Parse(string html)
     {

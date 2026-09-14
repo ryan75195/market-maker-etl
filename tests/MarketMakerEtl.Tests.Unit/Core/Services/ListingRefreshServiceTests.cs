@@ -60,7 +60,7 @@ public class ListingRefreshServiceTests
             [FirstUrl] = ActivePage,
             [SecondUrl] = ActivePage
         });
-        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()));
+        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()), new DelegatingItemPageParser());
 
         await service.RefreshActiveListings(CancellationToken.None);
 

@@ -1,0 +1,49 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~SearchUsesTheMarketplaceImplementationTests|FullyQualifiedName~NonPaginatingMarketplaceSearchTests|FullyQualifiedName~ResultCardsWithoutListingsFailRunPerMarketplaceTests|FullyQualifiedName~EbaySearchParityThroughMarketplaceSelectionTests|FullyQualifiedName~RefreshActsOnSubstitutedItemPageParseTests|FullyQualifiedName~EbayItemPageParserServiceTests|FullyQualifiedName~EbaySearchParserTests\"",
+  "rationale": "The five contract fixtures pin the five acceptance criteria. SearchUsesTheMarketplaceImplementationTests proves a run selects the url builder and parser for the marketplace the work carries, not the first registration. NonPaginatingMarketplaceSearchTests proves a non-paginating marketplace is fetched once whatever MaxPages says while a paginating one still walks every configured page. ResultCardsWithoutListingsFailRunPerMarketplaceTests proves, per marketplace, that a markup-bearing page parsing to zero listings fails the run and a genuinely empty page completes it. EbaySearchParityThroughMarketplaceSelectionTests and EbayItemPageParserServiceTests prove eBay's url shape and parse results survive the selection split. RefreshActsOnSubstitutedItemPageParseTests proves the refresh path uses an injected item-page parser and acts on its result. The shape files declare the marketplace identity on the search interfaces, the SupportsPagination capability, the parser-owned markup predicate, the IItemPageParser seam and the throwing stubs that make the command red until the implementer lands the behaviour; a scratch implementation of only those bodies turned the full Unit (103) and Architecture (25) suites green.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Interfaces/IEbaySearchUrlService.cs",
+    "src/MarketMakerEtl.Core/Interfaces/ISearchPageParser.cs",
+    "src/MarketMakerEtl.Core/Interfaces/IItemPageParser.cs",
+    "src/MarketMakerEtl.Core/Interfaces/ISearchPageService.cs",
+    "src/MarketMakerEtl.Core/Services/EbaySearchUrlService.cs",
+    "src/MarketMakerEtl.Core/Services/EbaySearchParser.cs",
+    "src/MarketMakerEtl.Core/Services/EbayItemPageParserService.cs",
+    "src/MarketMakerEtl.Core/Services/SearchPageService.cs",
+    "src/MarketMakerEtl.Core/Services/ListingRefreshService.cs",
+    "src/MarketMakerEtl.Core/Services/ScrapeRunService.cs",
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs"
+  ],
+  "implementationPaths": [],
+  "declaredRedTests": [
+    "Should_collect_listings_from_active_pages",
+    "Should_collect_sold_pages_when_enabled",
+    "Should_complete_the_run_with_zero_listings_for_a_genuinely_empty_result_page",
+    "Should_deduplicate_listings_seen_in_both_directions",
+    "Should_fetch_the_item_page_of_every_stored_active_listing",
+    "Should_leave_a_listing_that_is_still_active_without_a_status_change_record",
+    "Should_leave_a_still_active_listing_stored_values_unchanged_after_a_recheck",
+    "Should_leave_sold_and_ended_listings_unchanged_on_recheck",
+    "Should_persist_a_listing_marked_sold_after_a_sold_search_run",
+    "Should_record_no_status_change_when_the_item_page_is_an_anti_bot_page",
+    "Should_record_one_status_change_only_for_the_listing_whose_page_became_sold",
+    "Should_record_the_ended_status_without_a_sold_price_after_an_ended_recheck",
+    "Should_set_the_stored_sold_flag_after_a_sold_recheck",
+    "Should_stop_paging_when_a_page_has_no_results",
+    "Should_store_the_observed_sold_price_and_sold_date_after_a_sold_recheck"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Interfaces/IEbaySearchUrlService.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Interfaces/ISearchPageParser.cs": "AC-3",
+    "src/MarketMakerEtl.Core/Interfaces/IItemPageParser.cs": "AC-5",
+    "src/MarketMakerEtl.Core/Interfaces/ISearchPageService.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Services/EbaySearchUrlService.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Services/EbaySearchParser.cs": "AC-3",
+    "src/MarketMakerEtl.Core/Services/EbayItemPageParserService.cs": "AC-5",
+    "src/MarketMakerEtl.Core/Services/SearchPageService.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Services/ListingRefreshService.cs": "AC-5",
+    "src/MarketMakerEtl.Core/Services/ScrapeRunService.cs": "AC-1",
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs": "AC-1"
+  }
+}

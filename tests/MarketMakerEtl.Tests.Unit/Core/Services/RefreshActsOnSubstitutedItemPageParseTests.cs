@@ -1,29 +1,18 @@
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Data.Entities;
+using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
 [TestFixture]
-public class SoldListingRefreshStoresSoldPriceAndSoldDateTests
+public class RefreshActsOnSubstitutedItemPageParseTests
 {
-    private const string SoldUrl = "https://www.ebay.co.uk/itm/441111111111";
-
-    private const string SoldPage = """
-        <div class="x-item-title">
-          <h1 class="x-item-title__mainTitle">Sony WH-1000XM5 Headphones</h1>
-        </div>
-        <div class="x-price-primary">
-          <span class="x-price-primary__price">£150.00</span>
-        </div>
-        <div class="x-photos-cvip">
-          <span class="ux-textspans">SOLD</span>
-        </div>
-        <div class="x-item-condensed-card__sold-price">£212.75</div>
-        <div class="d-top-panel-message">This listing sold on Fri, 11 Sep at 6:09 PM.</div>
-        """;
+    private const string ListingUrl = "https://www.ebay.co.uk/itm/555555555555";
 
     private string _databasePath = null!;
     private ServiceProvider _provider = null!;
@@ -31,7 +20,7 @@ public class SoldListingRefreshStoresSoldPriceAndSoldDateTests
     [SetUp]
     public void SetUp()
     {
-        _databasePath = Path.Combine(Path.GetTempPath(), $"mm-etl-refresh-sold-details-{Guid.NewGuid():N}.db");
+        _databasePath = Path.Combine(Path.GetTempPath(), $"mm-etl-refresh-substituted-{Guid.NewGuid():N}.db");
         var services = new ServiceCollection();
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite($"Data Source={_databasePath}"));
@@ -54,23 +43,44 @@ public class SoldListingRefreshStoresSoldPriceAndSoldDateTests
     }
 
     [Test]
-    public async Task Should_store_the_observed_sold_price_and_sold_date_after_a_sold_recheck()
+    public async Task Should_record_the_status_observed_through_a_substituted_item_page_parse()
     {
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         var listingId = await SeedActiveListing(factory);
-        var client = new StubScrapeClient(new Dictionary<string, string> { [SoldUrl] = SoldPage });
-        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()), new DelegatingItemPageParser());
+        var client = new StubScrapeClient(new Dictionary<string, string> { [ListingUrl] = "<html/>" });
+        var parser = Substitute.For<IItemPageParser>();
+        parser.Parse(Arg.Any<string>()).Returns(new ItemPageListing(
+            "555555555555",
+            "Substituted Camera Body",
+            123.45m,
+            "GBP",
+            "Used",
+            "Buy It Now",
+            "Sold",
+            99.99m,
+            "Fri, 11 Sep",
+            "Substituted Seller",
+            "https://img.example/substituted.jpg"));
+        var service = new ListingRefreshService(
+            client,
+            new ScrapeStore(factory, new ScrapeRunStateService()),
+            parser);
 
         await service.RefreshActiveListings(CancellationToken.None);
 
         await using var verify = await factory.CreateDbContextAsync();
         var listing = await verify.Listings.SingleAsync(l => l.Id == listingId);
+        var changes = await verify.ListingStatusChanges
+            .Where(c => c.ListingEntityId == listingId)
+            .ToListAsync();
 
         Assert.Multiple(() =>
         {
-            Assert.That(listing.SoldPrice, Is.EqualTo(212.75m));
-            Assert.That(listing.SoldDate?.Day, Is.EqualTo(11));
-            Assert.That(listing.SoldDate?.Month, Is.EqualTo(9));
+            Assert.That(listing.ItemStatus, Is.EqualTo("Sold"));
+            Assert.That(listing.Price, Is.EqualTo(123.45m));
+            Assert.That(listing.SoldPrice, Is.EqualTo(99.99m));
+            Assert.That(listing.Seller, Is.EqualTo("Substituted Seller"));
+            Assert.That(changes.Select(c => c.Status), Is.EqualTo(new[] { "Sold" }));
         });
     }
 
@@ -79,11 +89,10 @@ public class SoldListingRefreshStoresSoldPriceAndSoldDateTests
         await using var db = await factory.CreateDbContextAsync();
         var listing = new ListingEntity
         {
-            ListingId = "sold-details-listing-441",
-            Url = SoldUrl,
+            ListingId = "substituted-listing-555",
+            Url = ListingUrl,
             ItemStatus = "Active",
-            Price = 150m,
-            IsSold = false,
+            Price = 1m,
             CreatedUtc = DateTime.UtcNow
         };
         db.Listings.Add(listing);

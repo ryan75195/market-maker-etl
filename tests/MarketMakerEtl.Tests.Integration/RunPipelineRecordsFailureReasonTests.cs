@@ -74,8 +74,8 @@ public class RunPipelineRecordsFailureReasonTests
         new(
             new SearchPageService(
                 client,
-                new EbaySearchUrlService(),
-                new EbaySearchParser(),
+                [new EbaySearchUrlService()],
+                [new EbaySearchParser()],
                 new ScrapeOptions(MaxPages: 1, CollectSold: false)),
             store);
 

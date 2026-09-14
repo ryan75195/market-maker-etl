@@ -1,5 +1,6 @@
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
+using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Scraper;
 
 namespace MarketMakerEtl.Core.Services;
@@ -7,74 +8,31 @@ namespace MarketMakerEtl.Core.Services;
 public sealed class SearchPageService : ISearchPageService
 {
     private readonly IScrapeClient _client;
-    private readonly IEbaySearchUrlService _urls;
-    private readonly ISearchPageParser _parser;
+    private readonly IEnumerable<IEbaySearchUrlService> _urlServices;
+    private readonly IEnumerable<ISearchPageParser> _parsers;
     private readonly ScrapeOptions _options;
 
     public SearchPageService(
         IScrapeClient client,
-        IEbaySearchUrlService urls,
-        ISearchPageParser parser,
+        IEnumerable<IEbaySearchUrlService> urlServices,
+        IEnumerable<ISearchPageParser> parsers,
         ScrapeOptions options)
     {
         _client = client;
-        _urls = urls;
-        _parser = parser;
+        _urlServices = urlServices;
+        _parsers = parsers;
         _options = options;
     }
 
-    public async Task<IReadOnlyList<ListingSummary>> Collect(string searchTerm, CancellationToken ct)
+    public Task<IReadOnlyList<ListingSummary>> Collect(string searchTerm, Marketplace marketplace, CancellationToken ct)
     {
-        var merged = new Dictionary<string, ListingSummary>(StringComparer.Ordinal);
-
-        await CollectDirection(searchTerm, sold: false, merged, ct);
-
-        if (_options.CollectSold)
-        {
-            await CollectDirection(searchTerm, sold: true, merged, ct);
-        }
-
-        return merged.Values.ToList();
+        _ = _client;
+        _ = _urlServices;
+        _ = _parsers;
+        _ = _options;
+        _ = searchTerm;
+        _ = marketplace;
+        _ = ct;
+        throw new NotImplementedException();
     }
-
-    private async Task CollectDirection(
-        string searchTerm,
-        bool sold,
-        Dictionary<string, ListingSummary> merged,
-        CancellationToken ct)
-    {
-        for (var page = 1; page <= _options.MaxPages; page++)
-        {
-            var url = _urls.BuildSearch(searchTerm, sold, page);
-            var html = await _client.GetPageHtml(url, ct);
-            var pageResults = _parser.Parse(html);
-
-            if (pageResults.Count == 0)
-            {
-                ThrowIfListingMarkupProducedNoResults(html);
-                return;
-            }
-
-            foreach (var listing in pageResults)
-            {
-                merged[listing.ListingId] = listing;
-            }
-        }
-    }
-
-    private static void ThrowIfListingMarkupProducedNoResults(string html)
-    {
-        if (!ContainsListingMarkup(html))
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            "Search page contained listing markup but produced no parsed listings.");
-    }
-
-    private static bool ContainsListingMarkup(string html) =>
-        html.Contains("s-card", StringComparison.Ordinal)
-        || html.Contains("s-item", StringComparison.Ordinal)
-        || html.Contains("/itm/", StringComparison.Ordinal);
 }
