@@ -15,7 +15,10 @@ public sealed class EbaySearchParser : ISearchPageParser
 
     public Marketplace Marketplace => Marketplace.Ebay;
 
-    public bool ContainsListingMarkup(string html) => throw new NotImplementedException(nameof(html));
+    public bool ContainsListingMarkup(string html) =>
+        html.Contains("s-card", StringComparison.Ordinal)
+        || html.Contains("s-item", StringComparison.Ordinal)
+        || html.Contains(ItemMarker, StringComparison.Ordinal);
 
     public IReadOnlyList<ListingSummary> Parse(string html)
     {

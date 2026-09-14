@@ -5,5 +5,5 @@ namespace MarketMakerEtl.Core.Services;
 
 public sealed class EbayItemPageParserService : IItemPageParser
 {
-    public ItemPageListing? Parse(string html) => throw new NotImplementedException(nameof(html));
+    public ItemPageListing? Parse(string html) => EbayItemPageParser.Parse(html);
 }
