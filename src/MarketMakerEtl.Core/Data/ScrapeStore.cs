@@ -1,6 +1,7 @@
 using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
+using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Runs;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,8 +20,13 @@ public sealed class ScrapeStore : IScrapeStore
         _states = states;
     }
 
-    public async Task<int> EnsureJob(string searchTerm, CancellationToken ct)
+    public async Task<int> EnsureJob(string searchTerm, CancellationToken ct, Marketplace marketplace = Marketplace.Ebay)
     {
+        if (marketplace != Marketplace.Ebay)
+        {
+            throw new NotImplementedException();
+        }
+
         await using var db = await _factory.CreateDbContextAsync(ct);
         var job = await db.ScrapeJobs.FirstOrDefaultAsync(j => j.SearchTerm == searchTerm, ct);
 

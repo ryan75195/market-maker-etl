@@ -1,0 +1,39 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~ScrapeJobRecordsTargetMarketplaceTests|FullyQualifiedName~ScrapeRunCarriesItsJobMarketplaceTests|FullyQualifiedName~ListingRecordsItsSourceMarketplaceTests|FullyQualifiedName~ListingRefreshTargetCarriesItsMarketplaceTests|FullyQualifiedName~MarketplaceMigrationAttributesLegacyRowsToEbayTests\"",
+  "rationale": "The ticket adds a marketplace dimension that no entity, record or API field carries today. The five contract fixtures each pin one acceptance criterion: ScrapeJobRecordsTargetMarketplaceTests records the targeted marketplace and defaults an omitted one to Ebay, ScrapeRunCarriesItsJobMarketplaceTests proves a run and its claimed work inherit the job's marketplace, ListingRecordsItsSourceMarketplaceTests round-trips the source marketplace onto a persisted listing, ListingRefreshTargetCarriesItsMarketplaceTests proves refresh targets expose their listing's marketplace, and MarketplaceMigrationAttributesLegacyRowsToEbayTests upgrades a pre-change database with a legacy-state fixture and asserts the surviving rows are attributed to Ebay. The shape (Marketplace enum, entity columns, record members, store signature and API request field) is declared with no behaviour, so the command fails at base for missing marketplace persistence and for the absent migration, and passes only once the implementer lands the persistence and the migration.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Models/Marketplaces/Marketplace.cs",
+    "src/MarketMakerEtl.Core/Data/Entities/ScrapeJobEntity.cs",
+    "src/MarketMakerEtl.Core/Data/Entities/ScrapeRunEntity.cs",
+    "src/MarketMakerEtl.Core/Data/Entities/ListingEntity.cs",
+    "src/MarketMakerEtl.Core/Models/Runs/ScrapeRunWork.cs",
+    "src/MarketMakerEtl.Core/Models/Ebay/ListingRefreshTarget.cs",
+    "src/MarketMakerEtl.Core/Interfaces/IScrapeStore.cs",
+    "src/MarketMakerEtl.Core/Data/ScrapeStore.cs",
+    "src/MarketMakerEtl.Api/Program.cs"
+  ],
+  "implementationPaths": [],
+  "declaredRedTests": [
+    "Should_add_the_later_schema_objects_to_a_legacy_database_without_migration_history",
+    "Should_create_a_missing_database_with_the_migrated_schema",
+    "Should_include_status_sale_fields_and_history_storage_after_migrating_an_empty_database",
+    "Should_preserve_existing_listing_and_run_values_when_upgrading_a_legacy_database",
+    "Should_preserve_existing_listing_rows_and_values_when_applying_the_new_migration",
+    "Should_preserve_rows_created_before_migrations_were_adopted",
+    "Should_start_against_an_up_to_date_database_without_changing_the_schema",
+    "Should_store_and_read_back_a_sold_listing_with_its_status_price_and_date",
+    "Should_store_and_read_back_a_status_change_record_against_a_listing"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Models/Marketplaces/Marketplace.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Data/Entities/ScrapeJobEntity.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Data/Entities/ScrapeRunEntity.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Data/Entities/ListingEntity.cs": "AC-3",
+    "src/MarketMakerEtl.Core/Models/Runs/ScrapeRunWork.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Models/Ebay/ListingRefreshTarget.cs": "AC-4",
+    "src/MarketMakerEtl.Core/Interfaces/IScrapeStore.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Data/ScrapeStore.cs": "AC-1",
+    "src/MarketMakerEtl.Api/Program.cs": "AC-1"
+  }
+}

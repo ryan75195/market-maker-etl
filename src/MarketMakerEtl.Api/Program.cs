@@ -2,6 +2,7 @@
 using MarketMakerEtl.Core;
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Marketplaces;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,7 +22,7 @@ app.MapPost("/api/scrape/jobs", async (
     IScrapeStore store,
     CancellationToken ct) =>
 {
-    var jobId = await store.EnsureJob(request.SearchTerm, ct);
+    var jobId = await store.EnsureJob(request.SearchTerm, ct, request.Marketplace);
     var runId = await store.EnqueueRun(jobId, request.SearchTerm, ct);
     return Results.Accepted($"/api/scrape/runs/{runId}", new EnqueueRunResponse(runId));
 });
@@ -41,7 +42,7 @@ await app.RunAsync();
 
 namespace MarketMakerEtl.Api
 {
-    public sealed record CreateScrapeJobRequest(string SearchTerm);
+    public sealed record CreateScrapeJobRequest(string SearchTerm, Marketplace Marketplace = Marketplace.Ebay);
 
     public sealed record EnqueueRunResponse(int RunId);
 
