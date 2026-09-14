@@ -50,7 +50,9 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IScrapeClient, HttpScrapeClient>();
         services.AddSingleton<IScrapeContentStore, BlobScrapeContentStore>();
         services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
+        services.AddSingleton<IEbaySearchUrlService, MercariSearchUrlService>();
         services.AddSingleton<ISearchPageParser, EbaySearchParser>();
+        services.AddSingleton<ISearchPageParser, MercariSearchParser>();
         services.AddSingleton<IItemPageParser, EbayItemPageParserService>();
         services.AddSingleton<IScrapeRunStateService, ScrapeRunStateService>();
         services.AddSingleton<IScrapeStore, ScrapeStore>();
