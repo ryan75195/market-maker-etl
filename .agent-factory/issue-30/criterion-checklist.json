@@ -1,0 +1,79 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A scrape job records which marketplace it targets, and a request that omits it is treated as eBay.",
+      "plannedImplementation": "Add the Marketplace enum under Core.Models.Marketplaces and a Marketplace column on ScrapeJobEntity. Change IScrapeStore.EnsureJob to accept an optional Marketplace (default Ebay); ScrapeStore persists the supplied value. The API CreateScrapeJobRequest gains an optional Marketplace defaulting to Ebay and forwards it to EnsureJob. Existing call sites stay source-compatible because the new parameter is optional.",
+      "plannedVerification": "ScrapeJobRecordsTargetMarketplaceTests: EnsureJob(\"mercari-target\", ct, Marketplace.Mercari) then read the persisted ScrapeJobEntity and assert Marketplace == Mercari; EnsureJob(\"ebay-target\", ct) with no marketplace then assert the persisted value is Ebay. The second case is the omission default; the first is the new persistence.",
+      "materialConcerns": [
+        "persistence compatibility",
+        "public-contract compatibility"
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A scrape run carries the marketplace of its job.",
+      "plannedImplementation": "Add a Marketplace column on ScrapeRunEntity. ScrapeStore.EnqueueRun copies the owning job's Marketplace onto the new run, and ClaimNextQueuedRun projects the run's Marketplace into ScrapeRunWork.",
+      "plannedVerification": "ScrapeRunCarriesItsJobMarketplaceTests: seed a ScrapeJobEntity with Marketplace.Mercari directly, EnqueueRun for that job, then assert both the persisted ScrapeRunEntity.Marketplace and the claimed ScrapeRunWork.Marketplace are Mercari. This crosses the persistence boundary rather than mocking it.",
+      "materialConcerns": [
+        "persistence compatibility"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "The job is held with Marketplace=Mercari; the first run created for it and the first claimed work both report Mercari.",
+        "whenHeldValueAbsent": "When the job has no recorded marketplace, the run and claimed work fall back to the Ebay default."
+      },
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A listing records the marketplace it was collected from.",
+      "plannedImplementation": "Add a Marketplace column on ListingEntity. ScrapeStore.UpsertListings stamps the owning job's Marketplace onto listings it inserts (and keeps it on updates).",
+      "plannedVerification": "ListingRecordsItsSourceMarketplaceTests: seed a ScrapeJobEntity with Marketplace.Mercari, UpsertListings a ListingSummary, then read the persisted ListingEntity back and assert Marketplace == Mercari and the title round-tripped. This is the required listing marketplace round-trip through persistence.",
+      "materialConcerns": [
+        "persistence compatibility"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "The job is held with Marketplace=Mercari; the first listing written by UpsertListings records Mercari.",
+        "whenHeldValueAbsent": "A listing whose owning job has no recorded marketplace is attributed to the Ebay default."
+      },
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Refresh work carries the marketplace of the listing it refers to.",
+      "plannedImplementation": "Add Marketplace to ListingRefreshTarget. ScrapeStore.GetActiveListings projects ListingEntity.Marketplace into each returned target so the refresh service can select marketplace-specific behaviour later.",
+      "plannedVerification": "ListingRefreshTargetCarriesItsMarketplaceTests: seed active ListingEntity rows with Marketplace.Mercari and Marketplace.Ebay, call GetActiveListings, and assert each target's Marketplace equals its listing's. Reading through the store proves the projection, not just the record default.",
+      "materialConcerns": [
+        "persistence compatibility",
+        "public-contract compatibility"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "Active listings seeded with their own marketplace are returned as targets carrying those same marketplace values.",
+        "whenHeldValueAbsent": "A listing with no recorded marketplace yields a refresh target defaulted to Ebay."
+      },
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Migrating a database created before this change preserves its existing rows and attributes them to eBay.",
+      "plannedImplementation": "Add an EF migration after 20260911221032_AddListingStatusAndSaleFields that adds the Marketplace columns to ScrapeJobs, ScrapeRuns and Listings with default Ebay, and update EtlDbContextModelSnapshot accordingly. This is the only production change that resolves the model/migration mismatch the entity columns introduce.",
+      "plannedVerification": "MarketplaceMigrationAttributesLegacyRowsToEbayTests uses a legacy-state fixture: it migrates a database only up to 20260911221032_AddListingStatusAndSaleFields, inserts legacy ScrapeJobs, ScrapeRuns and Listings rows via raw SQL while the marketplace columns are absent, applies the migrations, then reads the surviving rows and asserts values are preserved and every Marketplace is Ebay. A fresh empty database is not sufficient and is not used as the evidence.",
+      "materialConcerns": [
+        "persistence compatibility",
+        "schema migration",
+        "data loss"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "Legacy rows created before the marketplace column exists carry no marketplace; the first observation after migrating attributes all of them to Ebay.",
+        "whenHeldValueAbsent": "A pre-change database with no stored marketplace value still gains the column defaulted to Ebay without losing its rows."
+      },
+      "verificationStatus": "planned"
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+using MarketMakerEtl.Core.Models.Marketplaces;
+
 namespace MarketMakerEtl.Core.Data.Entities;
 
 public sealed class ScrapeRunEntity
@@ -5,6 +7,8 @@ public sealed class ScrapeRunEntity
     public int Id { get; set; }
 
     public int JobId { get; set; }
+
+    public Marketplace Marketplace { get; set; } = Marketplace.Ebay;
 
     public string SearchTerm { get; set; } = string.Empty;
 

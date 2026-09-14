@@ -1,6 +1,7 @@
 using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
+using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Runs;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,14 +20,19 @@ public sealed class ScrapeStore : IScrapeStore
         _states = states;
     }
 
-    public async Task<int> EnsureJob(string searchTerm, CancellationToken ct)
+    public async Task<int> EnsureJob(string searchTerm, CancellationToken ct, Marketplace marketplace = Marketplace.Ebay)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var job = await db.ScrapeJobs.FirstOrDefaultAsync(j => j.SearchTerm == searchTerm, ct);
 
         if (job is null)
         {
-            job = new ScrapeJobEntity { SearchTerm = searchTerm, CreatedUtc = DateTime.UtcNow };
+            job = new ScrapeJobEntity
+            {
+                SearchTerm = searchTerm,
+                Marketplace = marketplace,
+                CreatedUtc = DateTime.UtcNow
+            };
             db.ScrapeJobs.Add(job);
             await db.SaveChangesAsync(ct);
         }
@@ -37,10 +43,12 @@ public sealed class ScrapeStore : IScrapeStore
     public async Task<int> EnqueueRun(int jobId, string searchTerm, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
+        var job = await db.ScrapeJobs.FindAsync([jobId], ct);
         var run = new ScrapeRunEntity
         {
             JobId = jobId,
             SearchTerm = searchTerm,
+            Marketplace = job?.Marketplace ?? Marketplace.Ebay,
             Status = nameof(ScrapeRunStatus.Queued),
             StartedUtc = DateTime.UtcNow
         };
@@ -65,7 +73,7 @@ public sealed class ScrapeStore : IScrapeStore
         _states.EnsureCanTransition(ScrapeRunStatus.Queued, ScrapeRunStatus.Running);
         run.Status = nameof(ScrapeRunStatus.Running);
         await db.SaveChangesAsync(ct);
-        return new ScrapeRunWork(run.Id, run.JobId, run.SearchTerm);
+        return new ScrapeRunWork(run.Id, run.JobId, run.SearchTerm, run.Marketplace);
     }
 
     public Task CompleteRun(int runId, CancellationToken ct) =>
@@ -77,12 +85,14 @@ public sealed class ScrapeStore : IScrapeStore
     public async Task UpsertListings(int jobId, IReadOnlyList<ListingSummary> listings, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
+        var job = await db.ScrapeJobs.FindAsync([jobId], ct);
+        var marketplace = job?.Marketplace ?? Marketplace.Ebay;
 
         foreach (var listing in listings.GroupBy(l => l.ListingId).Select(g => g.Last()))
         {
             var existing = await db.Listings
                 .FirstOrDefaultAsync(l => l.ListingId == listing.ListingId, ct);
-            Apply(db, jobId, listing, existing);
+            ListingUpserter.Apply(db, jobId, marketplace, listing, existing);
         }
 
         await db.SaveChangesAsync(ct);
@@ -134,7 +144,7 @@ public sealed class ScrapeStore : IScrapeStore
             .ToListAsync(ct);
 
         return listings
-            .Select(l => new ListingRefreshTarget(l.Id, l.ListingId, l.Url, l.ItemStatus))
+            .Select(l => new ListingRefreshTarget(l.Id, l.ListingId, l.Url, l.ItemStatus, l.Marketplace))
             .ToList();
     }
 
@@ -174,42 +184,6 @@ public sealed class ScrapeStore : IScrapeStore
             ChangedUtc = DateTime.UtcNow
         });
         await db.SaveChangesAsync(ct);
-    }
-
-    private static void Apply(
-        EtlDbContext db,
-        int jobId,
-        ListingSummary listing,
-        ListingEntity? existing)
-    {
-        if (existing is null)
-        {
-            db.Listings.Add(new ListingEntity
-            {
-                ListingId = listing.ListingId,
-                ScrapeJobId = jobId,
-                Title = listing.Title,
-                Price = listing.Price,
-                Currency = listing.Currency,
-                Url = listing.Url,
-                IsSold = listing.IsSold,
-                Condition = listing.Condition,
-                PrimaryImageUrl = listing.PrimaryImageUrl,
-                BuyingFormat = listing.BuyingFormat,
-                CreatedUtc = DateTime.UtcNow
-            });
-            return;
-        }
-
-        existing.Title = listing.Title;
-        existing.Price = listing.Price;
-        existing.Currency = listing.Currency;
-        existing.Url = listing.Url;
-        existing.IsSold = listing.IsSold;
-        existing.Condition = listing.Condition;
-        existing.PrimaryImageUrl = listing.PrimaryImageUrl;
-        existing.BuyingFormat = listing.BuyingFormat;
-        existing.UpdatedUtc = DateTime.UtcNow;
     }
 
     private async Task UpdateStatus(

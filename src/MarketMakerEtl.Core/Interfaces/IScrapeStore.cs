@@ -1,11 +1,12 @@
 using MarketMakerEtl.Core.Models.Ebay;
+using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Runs;
 
 namespace MarketMakerEtl.Core.Interfaces;
 
 public interface IScrapeStore
 {
-    Task<int> EnsureJob(string searchTerm, CancellationToken ct);
+    Task<int> EnsureJob(string searchTerm, CancellationToken ct, Marketplace marketplace = Marketplace.Ebay);
 
     Task<int> EnqueueRun(int jobId, string searchTerm, CancellationToken ct);
 
