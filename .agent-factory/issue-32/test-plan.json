@@ -1,0 +1,19 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~MercariSearchUrlServiceTests|FullyQualifiedName~MercariSearchParserTests|FullyQualifiedName~EbaySearchUrlServiceTests|FullyQualifiedName~EbaySearchParserTests\"",
+  "rationale": "The contract pins the six Mercari search acceptance criteria through two behaviour-named class fixtures plus the existing eBay regression fixtures. MercariSearchUrlServiceTests covers AC-1 (the built URL targets https://www.mercari.com/us/search, carries keyword=<term>, and adds itemStatuses=2 only when sold is requested) and AC-2 (the MercariSearchRequest filters brandIds, categoryIds, itemConditions, minPrice and maxPrice all appear in the built URL). MercariSearchParserTests covers AC-3 (one ListingSummary per data-testid=ItemContainer card carrying id, title, price, currency, url, image, brand and sold flag), AC-4 (the leading m is preserved because the parser reads data-productid verbatim instead of reusing eBay's numeric-only id guard), and AC-5 (a card with no data-itemprice yields a null Price). AC-6 is the regression guard and reuses the existing EbaySearchUrlServiceTests and EbaySearchParserTests, which assert the eBay _nkw/_pgn/LH_Sold URL shape and eBay card parsing and stay green. The shape files declare MercariSearchUrlService and MercariSearchParser as NotImplementedException stubs, the MercariSearchRequest filter carrier, and the optional Brand member on ListingSummary; at base the command is red with exactly eight NotImplementedException failures (the five Mercari URL/parser tests plus the three sold/markup/extraction variants) and no other unit or architecture failure, and the eBay regression fixtures pass, so the red is the missing behaviour and nothing else. No production body does the work; the implementer fills the stubs. No pre-existing test is turned red by the shape, so declaredRedTests is empty.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Services/MercariSearchUrlService.cs",
+    "src/MarketMakerEtl.Core/Models/Marketplaces/MercariSearchRequest.cs",
+    "src/MarketMakerEtl.Core/Services/MercariSearchParser.cs",
+    "src/MarketMakerEtl.Core/Models/Ebay/ListingSummary.cs"
+  ],
+  "implementationPaths": [],
+  "declaredRedTests": [],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Services/MercariSearchUrlService.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Models/Marketplaces/MercariSearchRequest.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Services/MercariSearchParser.cs": "AC-3",
+    "src/MarketMakerEtl.Core/Models/Ebay/ListingSummary.cs": "AC-3"
+  }
+}
