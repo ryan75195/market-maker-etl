@@ -22,17 +22,17 @@ public sealed class ScrapeStore : IScrapeStore
 
     public async Task<int> EnsureJob(string searchTerm, CancellationToken ct, Marketplace marketplace = Marketplace.Ebay)
     {
-        if (marketplace != Marketplace.Ebay)
-        {
-            throw new NotImplementedException();
-        }
-
         await using var db = await _factory.CreateDbContextAsync(ct);
         var job = await db.ScrapeJobs.FirstOrDefaultAsync(j => j.SearchTerm == searchTerm, ct);
 
         if (job is null)
         {
-            job = new ScrapeJobEntity { SearchTerm = searchTerm, CreatedUtc = DateTime.UtcNow };
+            job = new ScrapeJobEntity
+            {
+                SearchTerm = searchTerm,
+                Marketplace = marketplace,
+                CreatedUtc = DateTime.UtcNow
+            };
             db.ScrapeJobs.Add(job);
             await db.SaveChangesAsync(ct);
         }
@@ -43,10 +43,12 @@ public sealed class ScrapeStore : IScrapeStore
     public async Task<int> EnqueueRun(int jobId, string searchTerm, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
+        var job = await db.ScrapeJobs.FindAsync([jobId], ct);
         var run = new ScrapeRunEntity
         {
             JobId = jobId,
             SearchTerm = searchTerm,
+            Marketplace = job?.Marketplace ?? Marketplace.Ebay,
             Status = nameof(ScrapeRunStatus.Queued),
             StartedUtc = DateTime.UtcNow
         };
@@ -71,7 +73,7 @@ public sealed class ScrapeStore : IScrapeStore
         _states.EnsureCanTransition(ScrapeRunStatus.Queued, ScrapeRunStatus.Running);
         run.Status = nameof(ScrapeRunStatus.Running);
         await db.SaveChangesAsync(ct);
-        return new ScrapeRunWork(run.Id, run.JobId, run.SearchTerm);
+        return new ScrapeRunWork(run.Id, run.JobId, run.SearchTerm, run.Marketplace);
     }
 
     public Task CompleteRun(int runId, CancellationToken ct) =>
@@ -83,12 +85,14 @@ public sealed class ScrapeStore : IScrapeStore
     public async Task UpsertListings(int jobId, IReadOnlyList<ListingSummary> listings, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
+        var job = await db.ScrapeJobs.FindAsync([jobId], ct);
+        var marketplace = job?.Marketplace ?? Marketplace.Ebay;
 
         foreach (var listing in listings.GroupBy(l => l.ListingId).Select(g => g.Last()))
         {
             var existing = await db.Listings
                 .FirstOrDefaultAsync(l => l.ListingId == listing.ListingId, ct);
-            Apply(db, jobId, listing, existing);
+            Apply(db, jobId, marketplace, listing, existing);
         }
 
         await db.SaveChangesAsync(ct);
@@ -140,7 +144,7 @@ public sealed class ScrapeStore : IScrapeStore
             .ToListAsync(ct);
 
         return listings
-            .Select(l => new ListingRefreshTarget(l.Id, l.ListingId, l.Url, l.ItemStatus))
+            .Select(l => new ListingRefreshTarget(l.Id, l.ListingId, l.Url, l.ItemStatus, l.Marketplace))
             .ToList();
     }
 
@@ -185,6 +189,7 @@ public sealed class ScrapeStore : IScrapeStore
     private static void Apply(
         EtlDbContext db,
         int jobId,
+        Marketplace marketplace,
         ListingSummary listing,
         ListingEntity? existing)
     {
@@ -194,6 +199,7 @@ public sealed class ScrapeStore : IScrapeStore
             {
                 ListingId = listing.ListingId,
                 ScrapeJobId = jobId,
+                Marketplace = marketplace,
                 Title = listing.Title,
                 Price = listing.Price,
                 Currency = listing.Currency,
