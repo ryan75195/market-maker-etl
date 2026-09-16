@@ -1,0 +1,66 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "Parsing captured active Mercari item markup yields title, price, condition, brand, seller and image.",
+      "plannedImplementation": "Add an optional Brand member to ItemPageListing and add a public sealed MercariItemPageParser implementing IItemPageParser with Marketplace => Marketplace.Mercari. Parse reads the captured active item page selectors for the name, price, condition, brand, seller and primary image and returns them on the listing.",
+      "plannedVerification": "MercariItemPageParsesActiveItemDetailsTests.Should_parse_title_price_condition_brand_seller_and_image_from_active_item_markup parses the captured active markup and asserts Title equals Nintendo Switch OLED Console, Price equals 289.00m, Condition equals Used - Good, Brand equals Nintendo, Seller equals Retro Games Shop and PrimaryImageUrl equals the gallery image. Observable outcome: every active detail the work item names is extracted.",
+      "materialConcerns": [
+        "public-contract compatibility: ItemPageListing gains a trailing optional Brand member, defaulting to null so existing eBay named-argument constructions are unaffected"
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-2",
+      "criterion": "Parsing captured sold Mercari item markup reports the item as sold.",
+      "plannedImplementation": "MercariItemPageParser.Parse inspects the captured sold item page markers (the Item sold banner and the SOLD badge) and returns Status Sold while leaving the relative badge text out of SoldDate.",
+      "plannedVerification": "MercariItemPageReportsSoldItemTests.Should_report_a_sold_item_from_sold_item_markup parses the captured sold markup and asserts Status equals Sold and Title equals Sony PlayStation 5 Console. Observable outcome: a sold page is reported as sold rather than active.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A refresh of a Mercari listing uses Mercari's item parse and a refresh of an eBay listing still uses eBay's.",
+      "plannedImplementation": "Add a Marketplace member to IItemPageParser, expose Marketplace.Ebay on EbayItemPageParserService, and change ListingRefreshService to inject IEnumerable<IItemPageParser> and select the parser whose Marketplace matches the refresh target's marketplace. Register MercariItemPageParser alongside the eBay parser in AddCoreServices.",
+      "plannedVerification": "RefreshSelectsTheItemParserForTheListingsMarketplaceTests.Should_parse_each_listing_with_the_parser_for_its_marketplace seeds an eBay and a Mercari active listing, supplies two recording parsers with distinct marketplace identities, and asserts each parser received only its own listing's page html and that the stored status became the value that parser returned (Ended for eBay, Sold for Mercari). Should_register_item_page_parsers_for_both_marketplaces resolves IEnumerable<IItemPageParser> from AddCoreServices and asserts both Marketplace.Ebay and Marketplace.Mercari are present. Observable outcome: the parser for the target's marketplace handles the refresh.",
+      "materialConcerns": [
+        "public-contract compatibility: IItemPageParser gains a Marketplace member, so every implementer must supply it; both in-repo implementations and the unit-test double were updated"
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-4",
+      "criterion": "A persisted listing carries the brand, and a listing with no brand keeps it unset.",
+      "plannedImplementation": "Add a Brand column to ListingEntity, map Brand in ListingUpserter and ScrapeStore.GetListings, and add an EF Core migration plus model snapshot update for the Brand column so existing databases gain it without losing rows.",
+      "plannedVerification": "ListingBrandRoundTripsThroughTheStoreTests.Should_round_trip_a_listing_brand_through_the_store upserts one branded and one brandless listing through ScrapeStore and asserts the branded listing reads back Brand Nintendo while the brandless one stays null. Should_add_the_brand_column_when_upgrading_a_database_created_before_the_brand_migration seeds a database at the pre-brand migration 20260914000000_AddMarketplace with a raw listing row, applies migrations, and asserts the Listings table now contains the Brand column while the legacy row's Title and Price survive. Observable outcome: brand persists when present, stays unset when absent, and legacy data survives the upgrade.",
+      "materialConcerns": [
+        "persistence compatibility: the Listings table gains a Brand column, so a migration and model snapshot update are required; the upgrade test starts from a real pre-brand database rather than a new empty one",
+        "data loss: the upgrade test asserts the pre-existing row's values survive the migration"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A listing parsed with Brand Nintendo is upserted and read back from the store as Brand Nintendo, while a listing parsed without a brand reads back with Brand null.",
+        "whenHeldValueAbsent": "A database created before the brand migration has no Brand column and its legacy rows have no brand; after the migration the column exists and those rows read back with Brand null instead of inheriting another listing's brand."
+      },
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Buying format and sold date remain available for eBay listings, and are not fabricated for Mercari.",
+      "plannedImplementation": "Leave the eBay item parser's BuyingFormat and SoldDate extraction untouched so no eBay field is removed or renamed, and have MercariItemPageParser return null for both because the Mercari page exposes neither.",
+      "plannedVerification": "Reuse the existing AuctionPageExposesAuctionBuyingFormatTests (asserts an eBay auction page yields BuyingFormat Auction) and SoldPageExposesSoldStatusPriceAndDateTests (asserts an eBay sold page yields Status Sold, SoldPrice 180.50m and SoldDate from the sold message); both are green at base and stay green after the shape change. MercariItemPageLeavesBuyingFormatAndSoldDateUnsetTests.Should_leave_buying_format_and_sold_date_unset_for_a_mercari_item parses a Mercari sold page and asserts BuyingFormat and SoldDate are both null. Observable outcome: eBay keeps its buying format and sold date and Mercari fabricates neither.",
+      "materialConcerns": [
+        "public-contract compatibility: no eBay field is removed or renamed"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "An eBay item page still yields its BuyingFormat (Auction) and its SoldDate from the sold message exactly as before the change.",
+        "whenHeldValueAbsent": "If the eBay buying format or sold date is no longer extracted, the reused eBay regression tests fail instead of silently accepting the loss; a Mercari page reports both as null rather than inventing a value."
+      },
+      "verificationStatus": "planned"
+    }
+  ]
+}

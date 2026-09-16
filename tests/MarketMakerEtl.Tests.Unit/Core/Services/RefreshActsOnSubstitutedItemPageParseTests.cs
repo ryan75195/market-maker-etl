@@ -64,7 +64,7 @@ public class RefreshActsOnSubstitutedItemPageParseTests
         var service = new ListingRefreshService(
             client,
             new ScrapeStore(factory, new ScrapeRunStateService()),
-            parser);
+            [parser]);
 
         await service.RefreshActiveListings(CancellationToken.None);
 

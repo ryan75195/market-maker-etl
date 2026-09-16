@@ -57,7 +57,7 @@ public class EndedListingRefreshRecordsStatusWithoutInventingSoldPriceTests
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         var listingId = await SeedActiveListing(factory);
         var client = new StubScrapeClient(new Dictionary<string, string> { [EndedUrl] = EndedPage });
-        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()), new DelegatingItemPageParser());
+        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()), [new DelegatingItemPageParser()]);
 
         await service.RefreshActiveListings(CancellationToken.None);
 

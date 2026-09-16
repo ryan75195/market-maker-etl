@@ -54,6 +54,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISearchPageParser, EbaySearchParser>();
         services.AddSingleton<ISearchPageParser, MercariSearchParser>();
         services.AddSingleton<IItemPageParser, EbayItemPageParserService>();
+        services.AddSingleton<IItemPageParser, MercariItemPageParser>();
         services.AddSingleton<IScrapeRunStateService, ScrapeRunStateService>();
         services.AddSingleton<IScrapeStore, ScrapeStore>();
         services.AddSingleton<ISearchPageService, SearchPageService>();
