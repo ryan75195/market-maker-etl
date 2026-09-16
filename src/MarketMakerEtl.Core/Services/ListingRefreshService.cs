@@ -1,5 +1,6 @@
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
+using MarketMakerEtl.Core.Models.Marketplaces;
 
 namespace MarketMakerEtl.Core.Services;
 
@@ -10,16 +11,16 @@ public sealed class ListingRefreshService : IListingRefreshService
 
     private readonly IScrapeClient _client;
     private readonly IScrapeStore _store;
-    private readonly IItemPageParser _itemPageParser;
+    private readonly IEnumerable<IItemPageParser> _itemPageParsers;
 
     public ListingRefreshService(
         IScrapeClient client,
         IScrapeStore store,
-        IItemPageParser itemPageParser)
+        IEnumerable<IItemPageParser> itemPageParsers)
     {
         _client = client;
         _store = store;
-        _itemPageParser = itemPageParser;
+        _itemPageParsers = itemPageParsers;
     }
 
     public async Task RefreshActiveListings(CancellationToken ct)
@@ -39,25 +40,37 @@ public sealed class ListingRefreshService : IListingRefreshService
             return;
         }
 
+        var parser = FindParser(target.Marketplace);
+        if (parser is null)
+        {
+            return;
+        }
+
         var html = await _client.GetPageHtml(target.Url, ct);
-        var page = _itemPageParser.Parse(html);
+        var page = parser.Parse(html);
 
-        if (page is null)
+        if (page is null || page.Status is null || string.IsNullOrWhiteSpace(page.Title))
         {
             return;
         }
 
-        var status = page.Status;
-
-        if (status is null || string.IsNullOrWhiteSpace(page.Title))
+        if (HasStatusChanged(target.ItemStatus, page.Status))
         {
-            return;
+            await _store.RecordStatusChange(target.Id, ToObservation(page.Status, page), ct);
+        }
+    }
+
+    private IItemPageParser? FindParser(Marketplace marketplace)
+    {
+        foreach (var parser in _itemPageParsers)
+        {
+            if (parser.Marketplace == marketplace)
+            {
+                return parser;
+            }
         }
 
-        if (HasStatusChanged(target.ItemStatus, status))
-        {
-            await _store.RecordStatusChange(target.Id, ToObservation(status, page), ct);
-        }
+        return null;
     }
 
     private static ListingStatusObservation ToObservation(string status, ItemPageListing page) =>

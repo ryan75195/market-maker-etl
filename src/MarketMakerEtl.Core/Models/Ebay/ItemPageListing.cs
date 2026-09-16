@@ -11,4 +11,5 @@ public sealed record ItemPageListing(
     decimal? SoldPrice,
     string? SoldDate,
     string? Seller,
-    string? PrimaryImageUrl);
+    string? PrimaryImageUrl,
+    string? Brand = null);

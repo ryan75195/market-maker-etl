@@ -54,7 +54,7 @@ public class ListingRefreshLeavesStillActiveListingUnchangedTests
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         var listingId = await SeedListing(factory);
         var client = new StubScrapeClient(new Dictionary<string, string> { [ActiveUrl] = ActivePage });
-        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()), new DelegatingItemPageParser());
+        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()), [new DelegatingItemPageParser()]);
 
         await service.RefreshActiveListings(CancellationToken.None);
 

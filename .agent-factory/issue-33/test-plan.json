@@ -1,0 +1,34 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~MercariItemPageParserTests|FullyQualifiedName~RefreshSelectsTheItemParserForTheListingsMarketplaceTests|FullyQualifiedName~ListingBrandRoundTripsThroughTheStoreTests|FullyQualifiedName~AuctionPageExposesAuctionBuyingFormatTests|FullyQualifiedName~SoldPageExposesSoldStatusPriceAndDateTests\"",
+  "rationale": "The contract pins the five acceptance criteria. AC-1, AC-2 and the Mercari half of AC-5 live in the MercariItemPageParserTests partial fixture, one behaviour-named file per criterion: MercariItemPageParsesActiveItemDetailsTests parses captured active markup into title, price, condition, brand, seller and image; MercariItemPageReportsSoldItemTests parses sold markup to Status Sold; MercariItemPageLeavesBuyingFormatAndSoldDateUnsetTests asserts BuyingFormat and SoldDate stay null so the SOLD 4m ago badge is never turned into a date. AC-3 is RefreshSelectsTheItemParserForTheListingsMarketplaceTests: two recording parsers with distinct marketplace identities prove each listing is handed to the parser for its own marketplace, and a DI check proves both marketplaces are registered. AC-4 is ListingBrandRoundTripsThroughTheStoreTests: a brand written through the store reads back, a brandless listing stays unset, and a database created before the brand migration is upgraded so the Brand column appears while a legacy row survives. AC-5's eBay half reuses the existing AuctionPageExposesAuctionBuyingFormatTests and SoldPageExposesSoldStatusPriceAndDateTests rather than copying them, and both are green at base. The shape declares ItemPageListing.Brand, the Marketplace member on IItemPageParser, the Mercari parser stub, the per-marketplace ListingRefreshService selection and the DI registration; the parser and refresh bodies throw NotImplementedException and no production body does the work. At base the command is red with exactly six NotImplementedException or missing-column failures (three Mercari parser tests, the selection test, the round-trip and the legacy upgrade) while the registration and eBay regression checks pass. The shape change also turns ten pre-existing refresh tests red because ListingRefreshService is a declared throwing stub; they are listed in declaredRedTests. No test reads git or working-tree state.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Models/Ebay/ItemPageListing.cs",
+    "src/MarketMakerEtl.Core/Interfaces/IItemPageParser.cs",
+    "src/MarketMakerEtl.Core/Services/EbayItemPageParserService.cs",
+    "src/MarketMakerEtl.Core/Services/MercariItemPageParser.cs",
+    "src/MarketMakerEtl.Core/Services/ListingRefreshService.cs",
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs"
+  ],
+  "implementationPaths": [],
+  "declaredRedTests": [
+    "Should_fetch_the_item_page_of_every_stored_active_listing",
+    "Should_leave_a_listing_that_is_still_active_without_a_status_change_record",
+    "Should_leave_a_still_active_listing_stored_values_unchanged_after_a_recheck",
+    "Should_leave_sold_and_ended_listings_unchanged_on_recheck",
+    "Should_record_no_status_change_when_the_item_page_is_an_anti_bot_page",
+    "Should_record_one_status_change_only_for_the_listing_whose_page_became_sold",
+    "Should_record_the_ended_status_without_a_sold_price_after_an_ended_recheck",
+    "Should_record_the_status_observed_through_a_substituted_item_page_parse",
+    "Should_set_the_stored_sold_flag_after_a_sold_recheck",
+    "Should_store_the_observed_sold_price_and_sold_date_after_a_sold_recheck"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Models/Ebay/ItemPageListing.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Interfaces/IItemPageParser.cs": "AC-3",
+    "src/MarketMakerEtl.Core/Services/EbayItemPageParserService.cs": "AC-3",
+    "src/MarketMakerEtl.Core/Services/MercariItemPageParser.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Services/ListingRefreshService.cs": "AC-3",
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs": "AC-3"
+  }
+}

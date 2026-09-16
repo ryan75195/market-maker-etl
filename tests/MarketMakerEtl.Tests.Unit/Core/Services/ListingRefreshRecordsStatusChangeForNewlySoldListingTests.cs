@@ -70,7 +70,7 @@ public class ListingRefreshRecordsStatusChangeForNewlySoldListingTests
             [StillActiveUrl] = StillActivePage,
             [BecameSoldUrl] = BecameSoldPage
         });
-        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()), new DelegatingItemPageParser());
+        var service = new ListingRefreshService(client, new ScrapeStore(factory, new ScrapeRunStateService()), [new DelegatingItemPageParser()]);
 
         await service.RefreshActiveListings(CancellationToken.None);
 
