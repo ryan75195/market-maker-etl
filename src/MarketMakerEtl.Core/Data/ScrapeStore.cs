@@ -131,7 +131,8 @@ public sealed class ScrapeStore : IScrapeStore
                 l.IsSold,
                 l.Condition,
                 l.PrimaryImageUrl,
-                l.BuyingFormat))
+                l.BuyingFormat,
+                l.Brand))
             .ToList();
     }
 

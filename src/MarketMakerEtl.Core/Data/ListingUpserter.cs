@@ -28,6 +28,7 @@ internal static class ListingUpserter
                 Condition = listing.Condition,
                 PrimaryImageUrl = listing.PrimaryImageUrl,
                 BuyingFormat = listing.BuyingFormat,
+                Brand = listing.Brand,
                 CreatedUtc = DateTime.UtcNow
             });
             return;
@@ -41,6 +42,7 @@ internal static class ListingUpserter
         existing.Condition = listing.Condition;
         existing.PrimaryImageUrl = listing.PrimaryImageUrl;
         existing.BuyingFormat = listing.BuyingFormat;
+        existing.Brand = listing.Brand;
         existing.UpdatedUtc = DateTime.UtcNow;
     }
 }

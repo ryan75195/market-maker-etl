@@ -28,6 +28,8 @@ public sealed class ListingEntity
 
     public string? BuyingFormat { get; set; }
 
+    public string? Brand { get; set; }
+
     public string? ItemStatus { get; set; }
 
     public decimal? SoldPrice { get; set; }
