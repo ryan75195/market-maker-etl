@@ -24,6 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\MarketMakerEtl.Core\MarketMakerEtl.Core.csproj" />
     <ProjectReference Include="..\..\src\MarketMakerEtl.Etl\MarketMakerEtl.Etl.csproj" />
     <ProjectReference Include="..\..\src\MarketMakerEtl.Api\MarketMakerEtl.Api.csproj" />

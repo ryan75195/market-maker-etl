@@ -10,6 +10,7 @@ namespace MarketMakerEtl.Core.Services;
 public sealed class MercariSearchParser : ISearchPageParser
 {
     private const string CardSelector = "div[data-testid=\"ItemContainer\"]";
+    private const string TileSelector = "[data-itemstatus], [data-itemprice]";
     private const string TitleSelector = "[data-testid=\"ItemName\"]";
     private const string SoldStatus = "trading";
     private const string CurrencyCode = "USD";
@@ -19,9 +20,16 @@ public sealed class MercariSearchParser : ISearchPageParser
     public Marketplace Marketplace => Marketplace.Mercari;
 
     public bool ContainsListingMarkup(string html) =>
-        html.Contains("ItemContainer", StringComparison.Ordinal);
+        MercariSearchPayloadParser.IsPayload(html)
+            ? !MercariSearchPayloadParser.IsEmptyResultSet(html)
+            : html.Contains("ItemContainer", StringComparison.Ordinal);
 
-    public IReadOnlyList<ListingSummary> Parse(string html)
+    public IReadOnlyList<ListingSummary> Parse(string html) =>
+        MercariSearchPayloadParser.IsPayload(html)
+            ? MercariSearchPayloadParser.Parse(html)
+            : ParseRenderedCards(html);
+
+    private static List<ListingSummary> ParseRenderedCards(string html)
     {
         var document = Parser.ParseDocument(html);
         var cards = document.QuerySelectorAll(CardSelector);
@@ -29,24 +37,28 @@ public sealed class MercariSearchParser : ISearchPageParser
 
         foreach (var card in cards)
         {
-            summaries.Add(BuildSummary(card));
+            summaries.Add(BuildSummary(card, card.Closest(TileSelector) ?? card));
         }
 
         return summaries;
     }
 
-    private static ListingSummary BuildSummary(IElement card) =>
-        new(
-            ListingId: card.GetAttribute("data-productid") ?? string.Empty,
+    private static ListingSummary BuildSummary(IElement card, IElement tile)
+    {
+        var listingId = card.GetAttribute("data-productid") ?? string.Empty;
+
+        return new(
+            ListingId: listingId,
             Title: ExtractTitle(card),
-            Price: ExtractPrice(card),
+            Price: ExtractPrice(tile),
             Currency: CurrencyCode,
-            Url: card.QuerySelector("a[href]")?.GetAttribute("href"),
-            IsSold: IsSold(card),
+            Url: listingId.Length == 0 ? null : MercariItemUrl.Build(listingId),
+            IsSold: IsSold(tile),
             Condition: null,
             PrimaryImageUrl: card.QuerySelector("img")?.GetAttribute("src"),
             BuyingFormat: null,
             Brand: card.GetAttribute("data-brand"));
+    }
 
     private static string? ExtractTitle(IElement card)
     {
@@ -54,14 +66,14 @@ public sealed class MercariSearchParser : ISearchPageParser
         return string.IsNullOrEmpty(title) ? null : title;
     }
 
-    private static decimal? ExtractPrice(IElement card)
+    private static decimal? ExtractPrice(IElement tile)
     {
-        var raw = card.GetAttribute("data-itemprice");
+        var raw = tile.GetAttribute("data-itemprice");
         return decimal.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var minorUnits)
             ? minorUnits / 100m
             : null;
     }
 
-    private static bool IsSold(IElement card) =>
-        string.Equals(card.GetAttribute("data-itemstatus"), SoldStatus, StringComparison.OrdinalIgnoreCase);
+    private static bool IsSold(IElement tile) =>
+        string.Equals(tile.GetAttribute("data-itemstatus"), SoldStatus, StringComparison.OrdinalIgnoreCase);
 }

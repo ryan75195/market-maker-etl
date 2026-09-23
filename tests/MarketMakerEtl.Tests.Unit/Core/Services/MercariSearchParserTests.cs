@@ -29,6 +29,29 @@ public class MercariSearchParserTests
         </div>
         """;
 
+    private static readonly string CapturedRenderedCards = File.ReadAllText(
+        Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Mercari", "search-rendered-cards.html"));
+
+    [Test]
+    public void Should_read_price_and_sold_state_from_the_tile_wrapping_a_captured_card()
+    {
+        var summaries = new MercariSearchParser().Parse(CapturedRenderedCards);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summaries, Has.Count.EqualTo(2));
+            Assert.That(summaries[0].ListingId, Is.EqualTo("m71344610988"));
+            Assert.That(summaries[0].Title, Is.EqualTo("Sony PlayStation 5 PS5 Digital Console with Controller and Power Cable"));
+            Assert.That(summaries[0].Price, Is.EqualTo(389.00m));
+            Assert.That(summaries[0].Url, Is.EqualTo("https://www.mercari.com/us/item/m71344610988/"));
+            Assert.That(summaries[0].Brand, Is.EqualTo("PlayStation"));
+            Assert.That(summaries[0].IsSold, Is.False);
+            Assert.That(summaries[1].ListingId, Is.EqualTo("m44688360101"));
+            Assert.That(summaries[1].Price, Is.EqualTo(140.25m));
+            Assert.That(summaries[1].IsSold, Is.True);
+        });
+    }
+
     [Test]
     public void Should_parse_one_listing_per_result_card()
     {

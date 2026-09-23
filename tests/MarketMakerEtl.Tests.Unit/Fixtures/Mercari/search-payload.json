@@ -1,0 +1,322 @@
+{
+  "data": {
+    "search": {
+      "pageTitle": null,
+      "localeTitle": null,
+      "page": {
+        "offset": 47,
+        "soldItemsOffset": 6,
+        "promotedItemsOffset": 47,
+        "__typename": "SearchPage"
+      },
+      "count": 20783,
+      "nextKey": "rw1:eyJiYWNrZW5kX3N0YXJ0X2tleSI6IiIsIm9mZnNldF9pbl93aW5kb3ciOjEwMCwic2VhcmNoX3BhZ2VfbnVtIjoyfQ==",
+      "facetsList": [],
+      "searchId": "5d3229d9-30e9-4094-88c7-9556b5e773d6",
+      "parsedQuery": "",
+      "metadata": null,
+      "initRequestTime": 1790202338,
+      "itemsList": [
+        {
+          "id": "m71344610988",
+          "name": "Sony PlayStation 5 PS5 Digital Console with Controller and Power Cable",
+          "status": "on_sale",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m71344610988_1.jpg?1790200178",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m71344610988_1.jpg?1790200178&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 865070813,
+            "sellerId": 865070813,
+            "__typename": "PublicUser"
+          },
+          "price": 38900,
+          "originalPrice": 39900,
+          "itemDecorationCircle": null,
+          "itemDecorationRectangle": null,
+          "promoteType": 0,
+          "promoteExpireTime": 0,
+          "authenticItemStatus": null,
+          "countrySource": 1,
+          "brand": {
+            "id": 5058,
+            "name": "PlayStation",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": null,
+          "__typename": "Item",
+          "me": {
+            "isItemLiked": null,
+            "userId": null,
+            "__typename": "ItemMe"
+          },
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 7,
+              "level": 0,
+              "name": "Electronics",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 84,
+              "level": 1,
+              "name": "Video games & consoles",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 797,
+              "level": 2,
+              "name": "Consoles",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 3,
+            "name": "Good",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 797,
+            "name": "Consoles",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "Consoles",
+          "categoryId": 797,
+          "searchFinalScore": 150.10227966308594
+        },
+        {
+          "id": "m89945662386",
+          "name": "Sony PlayStation PS5 Disc Drive for Digital Consoles",
+          "status": "on_sale",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m89945662386_1.jpg?1790026185",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m89945662386_1.jpg?1790026185&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 149209354,
+            "sellerId": 149209354,
+            "__typename": "PublicUser"
+          },
+          "price": 16500,
+          "originalPrice": 16500,
+          "itemDecorationCircle": null,
+          "itemDecorationRectangle": null,
+          "promoteType": 0,
+          "promoteExpireTime": 0,
+          "authenticItemStatus": null,
+          "countrySource": 1,
+          "brand": {
+            "id": 5937,
+            "name": "Sony",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": null,
+          "__typename": "Item",
+          "me": {
+            "isItemLiked": null,
+            "userId": null,
+            "__typename": "ItemMe"
+          },
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 7,
+              "level": 0,
+              "name": "Electronics",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 84,
+              "level": 1,
+              "name": "Video games & consoles",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 798,
+              "level": 2,
+              "name": "Accessories",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 2,
+            "name": "Like new",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 798,
+            "name": "Accessories",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "Accessories",
+          "categoryId": 798,
+          "searchFinalScore": 184.25331115722656
+        },
+        {
+          "id": "m44688360101",
+          "name": "PlayStation 5 DualSense Wireless Controller 30th Anniversary",
+          "status": "trading",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m44688360101_1.jpg?1789417744",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m44688360101_1.jpg?1789417744&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 993368787,
+            "sellerId": 993368787,
+            "__typename": "PublicUser"
+          },
+          "price": 14025,
+          "originalPrice": 16500,
+          "itemDecorationCircle": null,
+          "itemDecorationRectangle": {
+            "textColor": "WHITE",
+            "backgroundColor": "DARK_GRAY",
+            "icon": null,
+            "text": "SOLD",
+            "__typename": "ItemDecorationRectangle"
+          },
+          "promoteType": 6,
+          "promoteExpireTime": 1790461103,
+          "authenticItemStatus": null,
+          "countrySource": 1,
+          "brand": {
+            "id": 5058,
+            "name": "PlayStation",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": null,
+          "__typename": "Item",
+          "me": {
+            "isItemLiked": null,
+            "userId": null,
+            "__typename": "ItemMe"
+          },
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 7,
+              "level": 0,
+              "name": "Electronics",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 84,
+              "level": 1,
+              "name": "Video games & consoles",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 798,
+              "level": 2,
+              "name": "Accessories",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 798,
+            "name": "Accessories",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "Accessories",
+          "categoryId": 798,
+          "searchFinalScore": 0
+        }
+      ],
+      "criteria": {
+        "query": "ps5",
+        "sortBy": 0,
+        "categoryIds": [],
+        "brandIds": [],
+        "itemStatuses": [],
+        "itemConditions": [],
+        "shippingPayerIds": [],
+        "sizeGroupIds": [],
+        "sizeIds": [],
+        "maxPrice": 0,
+        "minPrice": 0,
+        "authenticities": [],
+        "customFacets": [],
+        "deliveryType": null,
+        "withCouponOnly": null,
+        "excludeShippingTypes": [],
+        "countrySources": [
+          1
+        ],
+        "withDealsOnly": false,
+        "boosts": {
+          "categoryIds": [],
+          "brandIds": [],
+          "__typename": "Boosts"
+        },
+        "boostsWithScore": {
+          "categories": [
+            {
+              "id": 797,
+              "score": 2,
+              "__typename": "SearchBoostsWithScoreItem"
+            }
+          ],
+          "brands": [
+            {
+              "id": 5937,
+              "score": 2,
+              "__typename": "SearchBoostsWithScoreItem"
+            },
+            {
+              "id": 5058,
+              "score": 2,
+              "__typename": "SearchBoostsWithScoreItem"
+            }
+          ],
+          "__typename": "SearchBoostsWithScore"
+        },
+        "__typename": "SearchCriteria"
+      },
+      "facetGroupsList": [],
+      "__typename": "SearchResponse",
+      "featuredFilterGroupsList": []
+    }
+  }
+}
