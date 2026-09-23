@@ -102,7 +102,15 @@ public class ScrapeStoreTests
         await store.CompleteRun(runId, CancellationToken.None);
 
         var run = await store.GetRun(runId, CancellationToken.None);
-        Assert.That(run!.Status, Is.EqualTo(ScrapeRunStatus.Completed));
+        var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        var job = await db.ScrapeJobs.SingleAsync(j => j.Id == jobId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(run!.Status, Is.EqualTo(ScrapeRunStatus.Completed));
+            Assert.That(job.LastRunUtc, Is.Not.Null);
+        });
     }
 
     [Test]
