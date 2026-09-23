@@ -1,0 +1,93 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A job can be created, listed, read, updated, disabled, re-enabled and deleted through the API, and the response returns every stored field.",
+      "plannedImplementation": "Add IJobStore/JobStore (Core.Data) backed by a new JobView/JobDetails pair (Core.Models.Jobs) and wire GET/POST /api/jobs, GET/PUT/DELETE /api/jobs/{id} and POST /api/jobs/{id}/enable|disable in Program.cs. JobView carries every ScrapeJobEntity field plus its Categories.",
+      "plannedVerification": "JobCrudEndpointsTests drives a WebApplicationFactory<Program> over a temp SQLite file: POST creates a job and asserts the 201 body has every field (SearchTerm, Marketplace, FilterInstructions, IntervalHours, IsEnabled, CreatedUtc, LastQueuedUtc null, LastRunUtc null, Categories); GET lists it; GET /{id} reads it back; PUT changes SearchTerm/FilterInstructions/IntervalHours and the GET after reflects the change; POST /{id}/disable then /{id}/enable toggle IsEnabled in the returned body; DELETE removes it and a following GET /{id} 404s. Observable outcome: every documented operation round-trips through real HTTP and SQLite.",
+      "materialConcerns": [
+        "public-contract compatibility: existing POST /api/scrape/jobs and its EnsureJob/EnqueueRun path on IScrapeStore are untouched — the new CRUD lives entirely behind IJobStore"
+      ],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Integration/Jobs/JobCrudEndpointsTests.cs passes (dotnet test tests/MarketMakerEtl.Tests.Integration/MarketMakerEtl.Tests.Integration.csproj: 10/10 passed, includes this fixture's create/list/read/update/enable/disable/delete cases)."
+    },
+    {
+      "id": "AC-2",
+      "criterion": "Creating a job does not queue a run. POST /api/jobs/{id}/run does.",
+      "plannedImplementation": "POST /api/jobs never touches ScrapeRuns. POST /api/jobs/{id}/run calls IScrapeStore.EnqueueRun for the job's search term and then IJobStore.MarkQueued to stamp LastQueuedUtc, returning 202 with the run id.",
+      "plannedVerification": "JobRunEndpointQueuesOnlyOnRequestTests creates a job via POST /api/jobs and asserts GET /api/scrape/runs/{any} is never reachable because no run exists yet (the created job's LastQueuedUtc is null); it then calls POST /api/jobs/{id}/run and asserts the response is 202 with a run id, GET /api/scrape/runs/{runId} returns that run Queued, and GET /api/jobs/{id} now shows a non-null LastQueuedUtc. Observable outcome: run creation is a distinct, explicit action from job creation.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "After POST /api/jobs, the job exists but no run does and LastQueuedUtc is null.",
+        "whenHeldValueAbsent": "If POST /api/jobs implicitly queued a run (the old /api/scrape/jobs behaviour), a run would already exist and LastQueuedUtc would be non-null before /run is ever called; the test fails on that first assertion instead of only checking the /run path in isolation."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Integration/Jobs/JobRunEndpointQueuesOnlyOnRequestTests.cs passes as part of the 10/10 Integration run."
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A job created without a marketplace is a Mercari job.",
+      "plannedImplementation": "CreateJobRequest.Marketplace defaults to Marketplace.Mercari in Program.cs, independent of CreateScrapeJobRequest.Marketplace which keeps defaulting to Marketplace.Ebay for the untouched /api/scrape/jobs endpoint.",
+      "plannedVerification": "JobWithoutMarketplaceDefaultsToMercariTests posts { searchTerm } with no marketplace field to /api/jobs and asserts the returned job's Marketplace is Mercari; a second assertion posts the same payload shape to the pre-existing /api/scrape/jobs and asserts its queued run's Marketplace is still Ebay, proving the two defaults are independent. Observable outcome: the new endpoint's default differs from the legacy endpoint's, as the maintainer decided.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "POST /api/jobs with no marketplace yields a Mercari job.",
+        "whenHeldValueAbsent": "POST /api/scrape/jobs with no marketplace still yields an Ebay-marketplace run, exactly as before this change, proving existing callers are unaffected."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Integration/Jobs/JobWithoutMarketplaceDefaultsToMercariTests.cs (two test cases) passes as part of the 10/10 Integration run."
+    },
+    {
+      "id": "AC-4",
+      "criterion": "The effectively-enabled query excludes disabled jobs, and jobs whose categories are all disabled.",
+      "plannedImplementation": "ScrapeJobQueryExtensions.WhereEffectivelyEnabled filters IsEnabled jobs that either have no categories or have at least one enabled category; IJobStore.GetEffectivelyEnabledJobs applies it with the categories included.",
+      "plannedVerification": "EffectivelyEnabledJobsQueryTests seeds four jobs directly against SQLite: one disabled with no categories, one enabled with only disabled categories, one enabled with one enabled and one disabled category, and one enabled with no categories at all. It asserts GetEffectivelyEnabledJobs returns exactly the third and fourth jobs. Observable outcome: the rule from the ticket (enabled AND (no categories OR any enabled category)) holds exactly, not an approximation of it.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A job with one enabled and one disabled category is returned because at least one category is enabled.",
+        "whenHeldValueAbsent": "A job whose only categories are disabled is excluded even though the job itself is enabled — the category state, not just the job flag, gates the result."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Data/EffectivelyEnabledJobsQueryTests.cs::Should_exclude_disabled_jobs_and_jobs_whose_categories_are_all_disabled passes (dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj: 143/143 passed)."
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Migrating a database created before this change keeps its jobs, runs and listings. Existing jobs get IntervalHours = 24.",
+      "plannedImplementation": "The AddJobSchedulingAndCategories migration adds FilterInstructions, IntervalHours (default 24), LastQueuedUtc and LastRunUtc to ScrapeJobs, and creates the Categories and JobCategories tables, without touching ScrapeRuns or Listings.",
+      "plannedVerification": "JobSchedulingMigrationPreservesExistingDataTests seeds a database at migration 20260915000000_AddListingBrand with one raw ScrapeJobs row, one ScrapeRuns row referencing it and one Listings row, applies migrations, and asserts all three rows still read back with their original values and the legacy job's IntervalHours is 24. Observable outcome: an upgrade adds capability without losing or corrupting existing data.",
+      "materialConcerns": [
+        "data loss: the test starts from a real pre-migration database file rather than a fresh one and asserts the pre-existing rows survive verbatim"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A legacy ScrapeJobs row with no IntervalHours column, after migration, reads IntervalHours = 24.",
+        "whenHeldValueAbsent": "If the column were added without a default, SQLite's NOT NULL + ADD COLUMN would either fail the migration or leave the legacy row unreadable; the test would fail at the migration step or the column-read step instead of silently passing."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Data/JobSchedulingMigrationPreservesExistingDataTests.cs::Should_preserve_existing_jobs_runs_and_listings_and_default_interval_hours_to_24 passes as part of the 143/143 Unit run. Required manually correcting the EF-generated migration's IntervalHours defaultValue from 0 to 24, since dotnet ef migrations add does not translate a C# property initializer into a SQL column default."
+    },
+    {
+      "id": "AC-6",
+      "criterion": "Endpoint behaviour is covered by integration tests through the real HTTP pipeline and SQLite.",
+      "plannedImplementation": "Add a WebApplicationFactory<Program>-based fixture base in Tests.Integration (Microsoft.AspNetCore.Mvc.Testing) that points Database:ConnectionString at a temp SQLite file per test and lets Program.cs's own startup migration run. All job and category endpoints are exercised this way rather than by calling IJobStore/ICategoryStore directly.",
+      "plannedVerification": "JobCrudEndpointsTests, JobRunEndpointQueuesOnlyOnRequestTests, JobWithoutMarketplaceDefaultsToMercariTests, CategoryCrudEndpointsTests and JobCategoryAssignmentEndpointTests all issue real HttpClient requests against a TestServer-hosted instance of the actual Program, backed by a real SQLite file that goes through the app's own ApplyMigrations startup path. Observable outcome: routing, model binding, JSON wire format and persistence are all exercised together, not mocked.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "All five Integration fixtures (JobCrudEndpointsTests, JobRunEndpointQueuesOnlyOnRequestTests, JobWithoutMarketplaceDefaultsToMercariTests, CategoryCrudEndpointsTests, JobCategoryAssignmentEndpointTests) run via WebApplicationFactory<Program> + Microsoft.AspNetCore.Mvc.Testing against a real temp-file SQLite database; dotnet test tests/MarketMakerEtl.Tests.Integration/MarketMakerEtl.Tests.Integration.csproj reports 10/10 passed."
+    },
+    {
+      "id": "AC-7",
+      "criterion": "Repo quality gate green: .githooks/pre-commit (build with all analyzers at error severity, dotnet format --verify-no-changes, Unit + Architecture tests).",
+      "plannedImplementation": "No special implementation; keep every new type within the analyzer limits observed in the codebase (CI0004 max 10 public methods, CI0005 max 5 constructor params, CI0007 max 40 lines/method, CI0014 max 200 lines/class, no comments, no tuple returns) and run dotnet format before committing.",
+      "plannedVerification": "The pre-commit hook itself: dotnet build --no-incremental, dotnet format --verify-no-changes, and dotnet test for Unit + Architecture all pass at commit time. Observable outcome: the commit succeeds without --no-verify.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    }
+  ]
+}

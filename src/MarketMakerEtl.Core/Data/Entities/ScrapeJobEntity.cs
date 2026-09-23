@@ -10,7 +10,17 @@ public sealed class ScrapeJobEntity
 
     public Marketplace Marketplace { get; set; } = Marketplace.Ebay;
 
+    public string? FilterInstructions { get; set; }
+
+    public int IntervalHours { get; set; } = 24;
+
     public bool IsEnabled { get; set; } = true;
 
+    public DateTime? LastQueuedUtc { get; set; }
+
+    public DateTime? LastRunUtc { get; set; }
+
     public DateTime CreatedUtc { get; set; }
+
+    public ICollection<JobCategoryEntity> JobCategories { get; } = new List<JobCategoryEntity>();
 }
