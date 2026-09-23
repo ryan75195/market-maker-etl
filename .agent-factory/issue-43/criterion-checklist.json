@@ -73,7 +73,7 @@
       "plannedVerification": "The pre-commit hook output captured at commit time: dotnet build --no-incremental, dotnet format --verify-no-changes and dotnet test (Unit + Architecture) all succeeding.",
       "materialConcerns": [],
       "comparison": false,
-      "verificationStatus": "planned"
+      "verificationStatus": "verified: .githooks/pre-commit reported Build: ok, Lint: clean, Tests: 159 passed on commit 7eb34e4"
     }
   ]
 }
