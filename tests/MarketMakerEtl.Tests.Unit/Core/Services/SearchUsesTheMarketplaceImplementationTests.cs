@@ -27,6 +27,7 @@ public class SearchUsesTheMarketplaceImplementationTests
         var mercariParser = BuildParser(Marketplace.Mercari, "Mercari listing");
         var search = BuildService(client, [ebayUrls, mercariUrls], [ebayParser, mercariParser]);
         var store = Substitute.For<IScrapeStore>();
+        store.GetListings(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new List<ListingSummary>());
         var runs = new ScrapeRunService(search, store);
         var work = new ScrapeRunWork(RunId: 1, JobId: 2, SearchTerm: SearchTerm, Marketplace.Mercari);
 
@@ -53,6 +54,7 @@ public class SearchUsesTheMarketplaceImplementationTests
         IReadOnlyList<ISearchPageParser> parsers)
     {
         var services = new ServiceCollection();
+        services.AddLogging();
         services.AddSingleton(client);
 
         foreach (var urlService in urlServices)
@@ -85,7 +87,9 @@ public class SearchUsesTheMarketplaceImplementationTests
         parser.Marketplace.Returns(marketplace);
         parser.ContainsListingMarkup(Arg.Any<string>()).Returns(true);
         parser.Parse(Arg.Any<string>()).Returns(
-            [new ListingSummary("123456789012", title, 10m, "GBP", "https://x/itm/1", false, null, null, null)]);
+            new SearchPageResult(
+                [new ListingSummary("123456789012", title, 10m, "GBP", "https://x/itm/1", false, null, null, null)],
+                null));
         return parser;
     }
 }

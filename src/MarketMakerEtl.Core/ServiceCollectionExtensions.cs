@@ -17,6 +17,7 @@ public static class ServiceCollectionExtensions
     private const string DefaultContainerName = "html";
     private const int DefaultMaxPages = 2;
     private const bool DefaultCollectSold = true;
+    private const int DefaultMaxBandsPerDirection = 200;
     private const string DefaultDatabaseFileName = "marketmakeretl.db";
 
     private static readonly TimeSpan DefaultFetchTimeout = TimeSpan.FromMinutes(5);
@@ -51,6 +52,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IScrapeContentStore, BlobScrapeContentStore>();
         services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
         services.AddSingleton<IEbaySearchUrlService, MercariSearchUrlService>();
+        services.AddSingleton<IPriceBandSearchUrlService, MercariSearchUrlService>();
         services.AddSingleton<ISearchPageParser, EbaySearchParser>();
         services.AddSingleton<ISearchPageParser, MercariSearchParser>();
         services.AddSingleton<IItemPageParser, EbayItemPageParserService>();
@@ -79,7 +81,8 @@ public static class ServiceCollectionExtensions
     private static ScrapeOptions BuildScrapeOptions(IConfiguration? configuration) =>
         new(
             ReadInt(configuration, "Scrape:MaxPages", DefaultMaxPages),
-            ReadBool(configuration, "Scrape:CollectSold", DefaultCollectSold));
+            ReadBool(configuration, "Scrape:CollectSold", DefaultCollectSold),
+            ReadInt(configuration, "Scrape:MaxBandsPerDirection", DefaultMaxBandsPerDirection));
 
     private static string BuildDatabaseConnectionString(IConfiguration? configuration)
     {

@@ -31,7 +31,7 @@ public class RealCardMarkupExtractsAllListingAttributesTests
     [Test]
     public void Should_extract_condition_image_and_buying_format_from_a_real_card()
     {
-        var summary = new EbaySearchParser().Parse(FullRealEbayCard).Single();
+        var summary = new EbaySearchParser().Parse(FullRealEbayCard).Listings.Single();
 
         Assert.Multiple(() =>
         {

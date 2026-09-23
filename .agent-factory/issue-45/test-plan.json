@@ -1,0 +1,49 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~MercariSearchUrlServiceTests|FullyQualifiedName~MercariPriceBandCollectorTests|FullyQualifiedName~SearchPageServiceTests|FullyQualifiedName~ScrapeRunServiceTests\"",
+  "rationale": "The contract pins the four gateable acceptance criteria (the live-run and repo-gate criteria are verified outside NUnit). AC-1 is MercariSearchUrlServiceTests.Should_send_price_filters_in_cents, which pins MinPrice 100m producing minPrice=10000 (and MaxPrice 500m producing maxPrice=50000) instead of today's dollar-valued minPrice=100 bug, plus Should_build_a_banded_search_url_with_cents_price_filters pinning the new IPriceBandSearchUrlService.BuildSearch(term, sold, minPrice, maxPrice) overload used by band splitting. AC-2 and AC-3 live in a new MercariPriceBandCollectorTests fixture against the internal MercariPriceBandCollector that SearchPageService delegates to for any IEbaySearchUrlService that also implements IPriceBandSearchUrlService: Should_collect_every_listing_across_leaves_exactly_once_when_splitting_price_bands scripts a stub parser returning count 250 for the unfiltered root band, 120 and 130 for its two halves, and four sub-100 leaf responses with disjoint listing ids, and asserts every leaf's ids appear exactly once in the merged dictionary with no band re-fetched; Should_stop_splitting_once_a_band_reaches_the_one_cent_floor scripts a band whose width is exactly one cent still reporting count >= 100 and asserts no further split is attempted. AC-3 is Should_stop_fetching_bands_once_the_configured_cap_is_reached (a maxBandsPerDirection of 2 with a script that would otherwise keep splitting forever stops after exactly 2 fetches and reports CapHit true) and Should_log_a_warning_when_the_band_cap_is_hit (asserts the injected ILogger substitute received a Warning-level Log call). AC-4 is Should_stop_collecting_sold_bands_once_a_band_yields_only_known_listings (a non-empty knownListingIds set and a sold direction stop after a band whose ids are all already known, leaving later scripted bands unfetched), Should_not_stop_early_for_active_bands_even_when_listings_are_already_known (the same all-known first band but sold: false continues to the scripted split), and Should_collect_every_sold_band_on_a_first_run_with_no_known_listings (empty knownListingIds set, sold: true, does not stop even though every returned id would otherwise trigger the guard) which together pin the 'only after the first run, only for sold' scope from the ticket. SearchPageServiceTests and the marketplace-selection/parity/non-paginating fixtures are updated for the ISearchPageParser.Parse -> SearchPageResult shape change and the ISearchPageService.Collect knownListingIds parameter; these are regression fixtures, not new criteria, and stay green throughout except where the shape/signature change makes them red at base. ScrapeRunServiceTests pins that ScrapeRunService now reads existing job listings before collecting, passing their ids through as knownListingIds (regression proving the incremental-collection wiring reaches SearchPageService). The shape change (ISearchPageParser.Parse returning SearchPageResult, MercariSearchPayloadParser exposing data.search.count, the IPriceBandSearchUrlService interface, ScrapeOptions.MaxBandsPerDirection, and the SearchPageService/ScrapeRunService signature changes) is committed first with implementation bodies that satisfy only the already-green paths; MercariPriceBandCollector.Collect starts as a stub returning an empty PriceBandCollectionSummary, and the cents fix is not yet applied, so at base the full contract command is red on exactly: MercariSearchUrlServiceTests.Should_send_price_filters_in_cents, Should_build_a_banded_search_url_with_cents_price_filters, and every test in MercariPriceBandCollectorTests, while SearchPageServiceTests and ScrapeRunServiceTests are already green from the shape-only change. No test reads git or working-tree state; MercariPriceBandCollectorTests exercises the collector directly (constructible via InternalsVisibleTo) with scripted IPriceBandSearchUrlService/ISearchPageParser/IScrapeClient doubles rather than real HTTP.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Models/Ebay/SearchPageResult.cs",
+    "src/MarketMakerEtl.Core/Interfaces/ISearchPageParser.cs",
+    "src/MarketMakerEtl.Core/Interfaces/IPriceBandSearchUrlService.cs",
+    "src/MarketMakerEtl.Core/Interfaces/ISearchPageService.cs",
+    "src/MarketMakerEtl.Core/Models/Scraper/ScrapeOptions.cs",
+    "src/MarketMakerEtl.Core/Services/EbaySearchParser.cs",
+    "src/MarketMakerEtl.Core/Services/MercariSearchParser.cs",
+    "src/MarketMakerEtl.Core/Services/MercariSearchPayloadParser.cs",
+    "src/MarketMakerEtl.Core/Services/MercariSearchUrlService.cs",
+    "src/MarketMakerEtl.Core/Services/PriceBand.cs",
+    "src/MarketMakerEtl.Core/Services/MercariPriceBandCollector.cs",
+    "src/MarketMakerEtl.Core/Services/SearchPageService.cs",
+    "src/MarketMakerEtl.Core/Services/ScrapeRunService.cs",
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs"
+  ],
+  "implementationPaths": [],
+  "declaredRedTests": [
+    "Should_send_price_filters_in_cents",
+    "Should_build_a_banded_search_url_with_cents_price_filters",
+    "Should_collect_every_listing_across_leaves_exactly_once_when_splitting_price_bands",
+    "Should_stop_splitting_once_a_band_reaches_the_one_cent_floor",
+    "Should_stop_fetching_bands_once_the_configured_cap_is_reached",
+    "Should_log_a_warning_when_the_band_cap_is_hit",
+    "Should_stop_collecting_sold_bands_once_a_band_yields_only_known_listings",
+    "Should_not_stop_early_for_active_bands_even_when_listings_are_already_known",
+    "Should_collect_every_sold_band_on_a_first_run_with_no_known_listings"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Models/Ebay/SearchPageResult.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Interfaces/ISearchPageParser.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Interfaces/IPriceBandSearchUrlService.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Interfaces/ISearchPageService.cs": "AC-4",
+    "src/MarketMakerEtl.Core/Models/Scraper/ScrapeOptions.cs": "AC-3",
+    "src/MarketMakerEtl.Core/Services/EbaySearchParser.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Services/MercariSearchParser.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Services/MercariSearchPayloadParser.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Services/MercariSearchUrlService.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Services/PriceBand.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Services/MercariPriceBandCollector.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Services/SearchPageService.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Services/ScrapeRunService.cs": "AC-4",
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs": "AC-3"
+  }
+}

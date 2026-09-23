@@ -23,7 +23,7 @@ public class PrimaryImageReadFromCardImageContainerTests
     [Test]
     public void Should_read_primary_image_url_from_the_card_image_container()
     {
-        var summaries = new EbaySearchParser().Parse(CardWithImageContainer);
+        var summaries = new EbaySearchParser().Parse(CardWithImageContainer).Listings;
 
         Assert.That(
             summaries.Single().PrimaryImageUrl,

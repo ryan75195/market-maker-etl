@@ -24,10 +24,10 @@ public sealed class MercariSearchParser : ISearchPageParser
             ? !MercariSearchPayloadParser.IsEmptyResultSet(html)
             : html.Contains("ItemContainer", StringComparison.Ordinal);
 
-    public IReadOnlyList<ListingSummary> Parse(string html) =>
+    public SearchPageResult Parse(string html) =>
         MercariSearchPayloadParser.IsPayload(html)
             ? MercariSearchPayloadParser.Parse(html)
-            : ParseRenderedCards(html);
+            : new SearchPageResult(ParseRenderedCards(html), TotalCount: null);
 
     private static List<ListingSummary> ParseRenderedCards(string html)
     {

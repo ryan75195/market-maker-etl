@@ -1,3 +1,4 @@
+using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Services;
 
@@ -54,8 +55,43 @@ public class MercariSearchUrlServiceTests
             Assert.That(url, Does.Contain("brandIds=4242"));
             Assert.That(url, Does.Contain("categoryIds=9999"));
             Assert.That(url, Does.Contain("itemConditions=used"));
+            Assert.That(url, Does.Contain("minPrice=10000"));
+            Assert.That(url, Does.Contain("maxPrice=50000"));
+        });
+    }
+
+    [Test]
+    public void Should_send_price_filters_in_cents()
+    {
+        var request = new MercariSearchRequest(
+            SearchTerm: "playstation 5",
+            Sold: false,
+            MinPrice: 1.00m,
+            MaxPrice: 2.00m);
+
+        var url = Service.BuildSearch(request);
+
+        Assert.Multiple(() =>
+        {
             Assert.That(url, Does.Contain("minPrice=100"));
-            Assert.That(url, Does.Contain("maxPrice=500"));
+            Assert.That(url, Does.Contain("maxPrice=200"));
+        });
+    }
+
+    [Test]
+    public void Should_build_a_banded_search_url_with_cents_price_filters()
+    {
+        IPriceBandSearchUrlService bandService = Service;
+
+        var url = bandService.BuildSearch("playstation 5", sold: true, minPrice: 1.00m, maxPrice: 2.00m);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(url, Does.StartWith("https://www.mercari.com/search/?"));
+            Assert.That(url, Does.Contain("keyword=playstation%205"));
+            Assert.That(url, Does.Contain("itemStatuses=2"));
+            Assert.That(url, Does.Contain("minPrice=100"));
+            Assert.That(url, Does.Contain("maxPrice=200"));
         });
     }
 }

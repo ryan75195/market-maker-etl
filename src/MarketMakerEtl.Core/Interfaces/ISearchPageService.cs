@@ -5,5 +5,9 @@ namespace MarketMakerEtl.Core.Interfaces;
 
 public interface ISearchPageService
 {
-    Task<IReadOnlyList<ListingSummary>> Collect(string searchTerm, Marketplace marketplace, CancellationToken ct);
+    Task<IReadOnlyList<ListingSummary>> Collect(
+        string searchTerm,
+        Marketplace marketplace,
+        IReadOnlySet<string> knownListingIds,
+        CancellationToken ct);
 }

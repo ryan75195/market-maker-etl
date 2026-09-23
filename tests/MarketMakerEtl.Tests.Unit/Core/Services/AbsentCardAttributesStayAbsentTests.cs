@@ -51,7 +51,7 @@ public class AbsentCardAttributesStayAbsentTests
     [Test]
     public async Task Should_leave_missing_card_attributes_absent()
     {
-        var parsed = new EbaySearchParser().Parse(CardWithoutOptionalAttributes).Single();
+        var parsed = new EbaySearchParser().Parse(CardWithoutOptionalAttributes).Listings.Single();
 
         var store = CreateStore();
         var jobId = await store.EnsureJob("switch", CancellationToken.None);

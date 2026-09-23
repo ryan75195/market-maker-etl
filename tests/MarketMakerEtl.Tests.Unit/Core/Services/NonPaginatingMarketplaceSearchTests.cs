@@ -3,6 +3,7 @@ using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -23,9 +24,10 @@ public class NonPaginatingMarketplaceSearchTests
             client,
             [urls],
             [parser],
-            new ScrapeOptions(MaxPages: 5, CollectSold: false));
+            new ScrapeOptions(MaxPages: 5, CollectSold: false),
+            NullLogger<SearchPageService>.Instance);
 
-        var listings = await service.Collect(SearchTerm, Marketplace.Mercari, CancellationToken.None);
+        var listings = await service.Collect(SearchTerm, Marketplace.Mercari, new HashSet<string>(), CancellationToken.None);
 
         await client.Received(1).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
         urls.Received(1).BuildSearch(SearchTerm, false, 1);
@@ -44,9 +46,10 @@ public class NonPaginatingMarketplaceSearchTests
             client,
             [urls],
             [parser],
-            new ScrapeOptions(MaxPages: 3, CollectSold: false));
+            new ScrapeOptions(MaxPages: 3, CollectSold: false),
+            NullLogger<SearchPageService>.Instance);
 
-        await service.Collect(SearchTerm, Marketplace.Ebay, CancellationToken.None);
+        await service.Collect(SearchTerm, Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
 
         await client.Received(3).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -66,7 +69,9 @@ public class NonPaginatingMarketplaceSearchTests
         parser.Marketplace.Returns(marketplace);
         parser.ContainsListingMarkup(Arg.Any<string>()).Returns(true);
         parser.Parse(Arg.Any<string>()).Returns(
-            [new ListingSummary("111111111111", "PS5", 10m, "GBP", "https://x/itm/1", false, null, null, null)]);
+            new SearchPageResult(
+                [new ListingSummary("111111111111", "PS5", 10m, "GBP", "https://x/itm/1", false, null, null, null)],
+                null));
         return parser;
     }
 }

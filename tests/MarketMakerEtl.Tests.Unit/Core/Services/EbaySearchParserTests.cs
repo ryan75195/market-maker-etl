@@ -26,7 +26,7 @@ public class EbaySearchParserTests
     {
         var parser = new EbaySearchParser();
 
-        var summaries = parser.Parse(TwoItemPage);
+        var summaries = parser.Parse(TwoItemPage).Listings;
 
         Assert.Multiple(() =>
         {
@@ -45,7 +45,7 @@ public class EbaySearchParserTests
     {
         var parser = new EbaySearchParser();
 
-        var summaries = parser.Parse(TwoItemPage);
+        var summaries = parser.Parse(TwoItemPage).Listings;
 
         Assert.That(summaries[1].IsSold, Is.True);
     }
@@ -61,7 +61,7 @@ public class EbaySearchParserTests
             </ul>
             """;
 
-        var summaries = new EbaySearchParser().Parse(page);
+        var summaries = new EbaySearchParser().Parse(page).Listings;
 
         Assert.That(summaries, Is.Empty);
     }

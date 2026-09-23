@@ -20,7 +20,7 @@ public sealed class EbaySearchParser : ISearchPageParser
         || html.Contains("s-item", StringComparison.Ordinal)
         || html.Contains(ItemMarker, StringComparison.Ordinal);
 
-    public IReadOnlyList<ListingSummary> Parse(string html)
+    public SearchPageResult Parse(string html)
     {
         var document = Parser.ParseDocument(html);
         var items = SelectItems(document);
@@ -35,7 +35,7 @@ public sealed class EbaySearchParser : ISearchPageParser
             }
         }
 
-        return summaries;
+        return new SearchPageResult(summaries, TotalCount: null);
     }
 
     private static IHtmlCollection<IElement> SelectItems(IDocument document)

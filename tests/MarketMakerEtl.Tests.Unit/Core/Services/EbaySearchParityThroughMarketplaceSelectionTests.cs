@@ -2,6 +2,7 @@ using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
@@ -24,15 +25,16 @@ public class EbaySearchParityThroughMarketplaceSelectionTests
     public async Task Should_request_the_same_ebay_url_and_parse_the_same_listings_as_the_ebay_implementation()
     {
         var expectedUrl = new EbaySearchUrlService().BuildSearch(SearchTerm, sold: false, page: 1);
-        var expected = new EbaySearchParser().Parse(KnownEbayPage);
+        var expected = new EbaySearchParser().Parse(KnownEbayPage).Listings;
         var client = new CapturingScrapeClient(KnownEbayPage);
         var service = new SearchPageService(
             client,
             [new EbaySearchUrlService()],
             [new EbaySearchParser()],
-            new ScrapeOptions(MaxPages: 1, CollectSold: false));
+            new ScrapeOptions(MaxPages: 1, CollectSold: false),
+            NullLogger<SearchPageService>.Instance);
 
-        var listings = await service.Collect(SearchTerm, Marketplace.Ebay, CancellationToken.None);
+        var listings = await service.Collect(SearchTerm, Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {

@@ -3,6 +3,7 @@ using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -18,7 +19,7 @@ public class SearchPageServiceTests
     {
         var harness = Build(new ScrapeOptions(MaxPages: 1, CollectSold: false));
 
-        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, CancellationToken.None);
+        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
 
         Assert.That(listings, Has.Count.EqualTo(1));
     }
@@ -28,7 +29,7 @@ public class SearchPageServiceTests
     {
         var harness = Build(new ScrapeOptions(MaxPages: 1, CollectSold: true));
 
-        await harness.Service.Collect("ps5", Marketplace.Ebay, CancellationToken.None);
+        await harness.Service.Collect("ps5", Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
 
         await harness.Client.Received(2).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -38,7 +39,7 @@ public class SearchPageServiceTests
     {
         var harness = Build(new ScrapeOptions(MaxPages: 1, CollectSold: true));
 
-        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, CancellationToken.None);
+        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
 
         Assert.That(listings, Has.Count.EqualTo(1));
     }
@@ -48,7 +49,7 @@ public class SearchPageServiceTests
     {
         var harness = Build(new ScrapeOptions(MaxPages: 3, CollectSold: false), empty: true);
 
-        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, CancellationToken.None);
+        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
         await harness.Client.Received(1).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
 
         Assert.That(listings, Is.Empty);
@@ -67,9 +68,12 @@ public class SearchPageServiceTests
         var parser = Substitute.For<ISearchPageParser>();
         parser.Marketplace.Returns(Marketplace.Ebay);
         parser.ContainsListingMarkup(Arg.Any<string>()).Returns(!empty);
-        parser.Parse(Arg.Any<string>()).Returns(empty ? [] : [Listing]);
+        parser.Parse(Arg.Any<string>()).Returns(
+            empty ? new SearchPageResult([], null) : new SearchPageResult([Listing], null));
 
-        return new Harness(new SearchPageService(client, [urls], [parser], options), client);
+        return new Harness(
+            new SearchPageService(client, [urls], [parser], options, NullLogger<SearchPageService>.Instance),
+            client);
     }
 
     private sealed record Harness(SearchPageService Service, IScrapeClient Client);
