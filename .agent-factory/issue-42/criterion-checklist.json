@@ -8,7 +8,7 @@
       "materialConcerns": [],
       "comparison": false,
       "verificationStatus": "verified",
-      "actualEvidence": "MercariItemPageReportsSoldItemTests.Should_report_the_sold_price_and_sold_date_from_the_sold_item_record passes: dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~MercariItemPageParserTests -> 4 passed. Confirmed red-before/green-after: failed at base with SoldPrice/SoldDate/Status all wrong before MercariItemDetailJsonParser existed."
+      "actualEvidence": "MercariItemPageReportsSoldItemTests.Should_report_the_sold_price_and_sold_date_from_the_sold_item_record passes: dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~MercariItemPageParserTests -> 4 passed. Confirmed red-before/green-after: failed at base with SoldPrice/SoldDate/Status all wrong before MercariItemDetailJsonParser existed. Review fix: the parser-level SoldDate string was correct, but ListingRefreshService re-parses it through SoldDateParser to store a DateTime, and SoldDateParser only knew eBay's text formats, so a real refresh silently stored SoldDate = null. Fixed by teaching SoldDateParser the ISO-8601 UTC form; see AC-7."
     },
     {
       "id": "AC-2",
@@ -64,7 +64,27 @@
       "materialConcerns": [],
       "comparison": false,
       "verificationStatus": "verified",
-      "actualEvidence": "git commit output: Build: ok / Lint: clean / Tests: 152 passed / All checks passed (commit 7b22b1e on feat/42-mercari-item-page-next-data)."
+      "actualEvidence": "git commit output: Build: ok / Lint: clean / Tests: 152 passed / All checks passed (commit 7b22b1e on feat/42-mercari-item-page-next-data). Re-verified after the review-fix commit: dotnet build --no-incremental clean (0 warnings/errors), dotnet format --verify-no-changes clean, dotnet test tests/MarketMakerEtl.Tests.Unit -> 141 passed, dotnet test tests/MarketMakerEtl.Tests.Architecture -> 25 passed."
+    },
+    {
+      "id": "AC-7",
+      "criterion": "Review fix: a refresh of a real sold Mercari item stores the UTC sale time, not null. SoldDateParser must learn the ISO-8601 UTC form emitted by MercariItemDetailJsonParser without changing the eBay formats.",
+      "plannedImplementation": "SoldDateParser.Parse first tries DateTime.TryParseExact against the literal ISO-8601 UTC format \"yyyy-MM-dd'T'HH:mm:ss'Z'\" with DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, falling back to the existing eBay-only formats (renamed EbayFormats) unchanged.",
+      "plannedVerification": "SoldDateParserTests exercises the ISO-8601 form directly (asserting DateTime and Kind.Utc) and each existing eBay format (weekday-short, weekday-zero-padded, long month, short month) plus an unrecognised-format-returns-null case. MercariSoldRefreshStoresUtcSoldDateTests.Should_store_the_utc_sale_time_after_a_mercari_sold_recheck goes through ListingRefreshService end to end with the real sold fixture and asserts the persisted ListingEntity.SoldDate is 2026-09-23 22:21:59 UTC (year/month/day/hour/minute/second).",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "actualEvidence": "Confirmed red-before/green-after by reverting only the SoldDateParser.cs and MercariItemDetailJsonParser.cs edits and re-running: Should_parse_an_iso8601_utc_timestamp_as_utc and Should_store_the_utc_sale_time_after_a_mercari_sold_recheck both failed (parsed date null / stored SoldDate null). After reapplying the fix: dotnet test tests/MarketMakerEtl.Tests.Unit --filter \"FullyQualifiedName~SoldDateParserTests|FullyQualifiedName~MercariSoldRefreshStoresUtcSoldDateTests|FullyQualifiedName~SoldListingRefreshStoresSoldPriceAndSoldDateTests\" -> all passed, including the pre-existing eBay sold-date test unchanged."
+    },
+    {
+      "id": "AC-8",
+      "criterion": "Review fix: on_sale maps to Active; trading and sold_out map to Sold; any other non-empty status maps to Ended (matching eBay's existing terminal non-sale state); a missing/empty status maps to null so ListingRefreshService ignores the page.",
+      "plannedImplementation": "MercariItemDetailJsonParser.MapStatus switches on the raw item.status string: null passes through as null, on_sale maps to Active, trading/sold_out map to Sold, anything else non-empty maps to Ended. BuildListing derives isSold from the mapped status (status == Sold) rather than status != on_sale, so SoldPrice/SoldDate are only populated for the Sold outcome. ListingRefreshService already ignores pages with a null Status, so no change was needed there.",
+      "plannedVerification": "MercariItemPageMapsStatusTests derives payload variants from the real active fixture by string-replacing its \"status\": \"on_sale\", line: on_sale->Active, trading->Sold, sold_out->Sold, cancelled->Ended, expired->Ended (TestCase-driven), plus a dedicated test asserting SoldPrice/SoldDate stay null for an Ended listing, and a dedicated test removing the status property entirely and asserting Status/SoldPrice/SoldDate are all null.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "actualEvidence": "Confirmed red-before/green-after by reverting only the src fix: Should_map_the_item_detail_state_to_a_listing_status(cancelled,Ended) and (expired,Ended) failed with Status=Sold instead of Ended, and Should_leave_the_listing_status_null_when_the_item_record_has_no_status failed with Status=Sold and SoldPrice=389 instead of null. After reapplying the fix, dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~MercariItemPageParserTests -> all passed (12 tests), and the full Unit suite (141) plus Architecture suite (25) stayed green."
     }
   ]
 }

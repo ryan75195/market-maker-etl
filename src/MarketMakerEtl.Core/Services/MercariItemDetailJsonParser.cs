@@ -8,8 +8,11 @@ internal static class MercariItemDetailJsonParser
 {
     private const string CurrencyCode = "USD";
     private const string ActiveState = "on_sale";
+    private const string TradingState = "trading";
+    private const string SoldOutState = "sold_out";
     private const string ActiveStatus = "Active";
     private const string SoldStatus = "Sold";
+    private const string EndedStatus = "Ended";
     private const string SellerPayerCode = "seller";
     private const string ItemDetailTypeName = "ItemDetail";
     private const string SoldDateFormat = "yyyy-MM-ddTHH:mm:ssZ";
@@ -64,7 +67,8 @@ internal static class MercariItemDetailJsonParser
 
     private static ItemPageListing BuildListing(JsonElement serverState, JsonElement item)
     {
-        var isSold = ReadString(item, "status") != ActiveState;
+        var status = MapStatus(ReadString(item, "status"));
+        var isSold = status == SoldStatus;
         var price = ReadCents(item, "price");
         var imageUrls = ReadImageUrls(item);
 
@@ -75,7 +79,7 @@ internal static class MercariItemDetailJsonParser
             Currency: CurrencyCode,
             Condition: ReadRefName(serverState, item, "itemCondition"),
             BuyingFormat: null,
-            Status: isSold ? SoldStatus : ActiveStatus,
+            Status: status,
             SoldPrice: isSold ? price : null,
             SoldDate: isSold ? ReadDateText(item, "lastSoldAt") : null,
             Seller: ReadRefName(serverState, item, "seller"),
@@ -88,6 +92,15 @@ internal static class MercariItemDetailJsonParser
             PostedUtc: ReadDateTimeOffset(item, "created"),
             Likes: ReadInt(item, "numLikes"));
     }
+
+    private static string? MapStatus(string? state) =>
+        state switch
+        {
+            null => null,
+            ActiveState => ActiveStatus,
+            TradingState or SoldOutState => SoldStatus,
+            _ => EndedStatus,
+        };
 
     private static decimal? ReadShippingCost(JsonElement serverState, JsonElement item)
     {
