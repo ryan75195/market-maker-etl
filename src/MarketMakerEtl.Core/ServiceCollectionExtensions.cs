@@ -59,6 +59,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IItemPageParser, MercariItemPageParser>();
         services.AddSingleton<IScrapeRunStateService, ScrapeRunStateService>();
         services.AddSingleton<IScrapeStore, ScrapeStore>();
+        services.AddSingleton<IJobStore, JobStore>();
+        services.AddSingleton<ICategoryStore, CategoryStore>();
         services.AddSingleton<ISearchPageService, SearchPageService>();
         services.AddSingleton<IScrapeRunService, ScrapeRunService>();
         services.AddSingleton<IListingRefreshService, ListingRefreshService>();

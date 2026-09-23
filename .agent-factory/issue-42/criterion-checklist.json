@@ -1,0 +1,90 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A captured sold item page parses to Sold with the sold price and the sold date from lastSoldAt.",
+      "plannedImplementation": "MercariItemDetailJsonParser reads the __NEXT_DATA__ item record's status field; any value other than on_sale maps to Sold. When Sold, SoldPrice is set from the item's price field and SoldDate is formatted from lastSoldAt (unix seconds) as an ISO-8601 UTC string.",
+      "plannedVerification": "MercariItemPageReportsSoldItemTests.Should_report_the_sold_price_and_sold_date_from_the_sold_item_record parses the trimmed fixture built from the real sold capture (item m44688360101, status trading, lastSoldAt 1790202119) and asserts Status equals Sold, SoldPrice equals 140.25m, and SoldDate equals 2026-09-23T22:21:59Z.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "actualEvidence": "MercariItemPageReportsSoldItemTests.Should_report_the_sold_price_and_sold_date_from_the_sold_item_record passes: dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~MercariItemPageParserTests -> 4 passed. Confirmed red-before/green-after: failed at base with SoldPrice/SoldDate/Status all wrong before MercariItemDetailJsonParser existed. Review fix: the parser-level SoldDate string was correct, but ListingRefreshService re-parses it through SoldDateParser to store a DateTime, and SoldDateParser only knew eBay's text formats, so a real refresh silently stored SoldDate = null. Fixed by teaching SoldDateParser the ISO-8601 UTC form; see AC-7."
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A captured active item parses to Active with price, condition, brand, seller, description, every photo URL, shipping cost and posted date.",
+      "plannedImplementation": "MercariItemDetailJsonParser resolves the item's itemCondition, brand and seller refs through serverState for Condition/Brand/Seller, reads description and photos directly, and reads created (unix seconds) as PostedUtc. ShippingCost is derived from shippingPayer/shippingClass (see AC-3).",
+      "plannedVerification": "MercariItemPageParsesActiveItemDetailsTests.Should_parse_price_condition_brand_seller_description_photos_shipping_and_posted_date_from_the_active_item_record parses the trimmed fixture built from the real active capture (item m71344610988) and asserts Status Active, Price 389.00m, Condition Good, Brand PlayStation, Seller Nerd Mom Electronics, the full description text, all 8 photo URLs in ImageUrls (and the first as PrimaryImageUrl), ShippingCost 0m, OriginalPrice 399.00m, PostedUtc 2026-09-22T19:24:20Z, and Likes 32.",
+      "materialConcerns": [
+        "public-contract compatibility: ItemPageListing gains six trailing optional members (Description, ImageUrls, ShippingCost, OriginalPrice, PostedUtc, Likes) defaulting to null so existing positional eBay constructions keep compiling"
+      ],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "actualEvidence": "MercariItemPageParsesActiveItemDetailsTests.Should_parse_price_condition_brand_seller_description_photos_shipping_and_posted_date_from_the_active_item_record passes, pinning every field named in the criterion against the trimmed real-capture fixture."
+    },
+    {
+      "id": "AC-3",
+      "criterion": "Seller-paid shipping parses as 0. Buyer-paid shipping parses as the class fee (e.g. 797 -> 7.97).",
+      "plannedImplementation": "MercariItemDetailJsonParser resolves shippingPayer.code; when it equals 'seller', ShippingCost is 0, otherwise ShippingCost is shippingClass.fee / 100.",
+      "plannedVerification": "MercariItemPageParsesActiveItemDetailsTests asserts ShippingCost 0m for the active item, whose real shippingPayer.code is 'seller'. MercariItemPageReportsSoldItemTests asserts ShippingCost 7.97m for the sold item, whose real shippingPayer.code is 'buyer' and shippingClass.fee is 797.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "The active item's real shippingPayer is seller and its ShippingCost reads back as 0 even though its shippingClass.fee is also 0 in that capture.",
+        "whenHeldValueAbsent": "The sold item's real shippingPayer is buyer with a non-zero shippingClass.fee of 797; ShippingCost reads back as 7.97 rather than 0, proving the payer code — not just the fee being non-zero — drives the result."
+      },
+      "verificationStatus": "verified",
+      "actualEvidence": "MercariItemPageParsesActiveItemDetailsTests asserts ShippingCost 0m and MercariItemPageReportsSoldItemTests asserts ShippingCost 7.97m; both pass against the two real captures, whose real shippingPayer.code values differ (seller vs buyer)."
+    },
+    {
+      "id": "AC-4",
+      "criterion": "A page with no item record and no hooks returns null, as today.",
+      "plannedImplementation": "MercariItemPageParser.Parse returns null when neither the __NEXT_DATA__ item record nor any real data-testid hook (ItemName/ItemPrice) can be found, unchanged from the existing null-return contract.",
+      "plannedVerification": "MercariItemPageReturnsNullWithoutItemDataTests.Should_return_null_for_a_page_with_no_item_record_and_no_hooks parses a synthetic anti-bot-style page with neither a __NEXT_DATA__ script nor any Mercari data-testid hook and asserts the result is null.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "actualEvidence": "MercariItemPageReturnsNullWithoutItemDataTests.Should_return_null_for_a_page_with_no_item_record_and_no_hooks passes. A companion bonus test, MercariItemPageFallsBackToRealHooksTests.Should_fall_back_to_the_real_data_testid_hooks_when_no_item_record_is_present, also passes and pins the scope item 1 fallback path (no real capture without __NEXT_DATA__ exists to trim a fixture from, so this one is hand-built using the real hook names)."
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Fixtures come from real captures made by running the scraper's fetch path. The PR states the capture date and item ids.",
+      "plannedImplementation": "tests/MarketMakerEtl.Tests.Unit/Fixtures/Mercari/item-active-m71344610988.html and item-sold-m44688360101.html are trimmed directly from the real captures at C:\\Users\\RyanK\\AppData\\Local\\Temp\\claude\\...\\scratchpad\\captures (captured 2026-09-23 via AIOWebScraper's BrowserContentFetcher), keeping the real __NEXT_DATA__ item record verbatim (trimming only the unrelated req/experiment block and unused UI-only nested objects) and the real data-testid hook markup, dropping the surrounding page chrome.",
+      "plannedVerification": "Not unit-testable; verified by the PR body stating the capture date (2026-09-23) and item ids (m71344610988 active, m44688360101 sold) alongside the fixture diff.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "actualEvidence": "PR body states capture date 2026-09-23 and item ids m71344610988 (active) / m44688360101 (sold); the fixture files retain the real __NEXT_DATA__ item record and real data-testid markup verbatim, trimmed only of the unrelated req/experiment block and unused UI-only nested objects."
+    },
+    {
+      "id": "AC-6",
+      "criterion": "Repo quality gate green: .githooks/pre-commit (build with all analyzers at error severity, dotnet format --verify-no-changes, Unit + Architecture tests).",
+      "plannedImplementation": "No gate changes; the existing pre-commit hook runs unmodified against the new code.",
+      "plannedVerification": "The pre-commit hook's own output at commit time, pasted into the final report.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "actualEvidence": "git commit output: Build: ok / Lint: clean / Tests: 152 passed / All checks passed (commit 7b22b1e on feat/42-mercari-item-page-next-data). Re-verified after the review-fix commit: dotnet build --no-incremental clean (0 warnings/errors), dotnet format --verify-no-changes clean, dotnet test tests/MarketMakerEtl.Tests.Unit -> 141 passed, dotnet test tests/MarketMakerEtl.Tests.Architecture -> 25 passed."
+    },
+    {
+      "id": "AC-7",
+      "criterion": "Review fix: a refresh of a real sold Mercari item stores the UTC sale time, not null. SoldDateParser must learn the ISO-8601 UTC form emitted by MercariItemDetailJsonParser without changing the eBay formats.",
+      "plannedImplementation": "SoldDateParser.Parse first tries DateTime.TryParseExact against the literal ISO-8601 UTC format \"yyyy-MM-dd'T'HH:mm:ss'Z'\" with DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, falling back to the existing eBay-only formats (renamed EbayFormats) unchanged.",
+      "plannedVerification": "SoldDateParserTests exercises the ISO-8601 form directly (asserting DateTime and Kind.Utc) and each existing eBay format (weekday-short, weekday-zero-padded, long month, short month) plus an unrecognised-format-returns-null case. MercariSoldRefreshStoresUtcSoldDateTests.Should_store_the_utc_sale_time_after_a_mercari_sold_recheck goes through ListingRefreshService end to end with the real sold fixture and asserts the persisted ListingEntity.SoldDate is 2026-09-23 22:21:59 UTC (year/month/day/hour/minute/second).",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "actualEvidence": "Confirmed red-before/green-after by reverting only the SoldDateParser.cs and MercariItemDetailJsonParser.cs edits and re-running: Should_parse_an_iso8601_utc_timestamp_as_utc and Should_store_the_utc_sale_time_after_a_mercari_sold_recheck both failed (parsed date null / stored SoldDate null). After reapplying the fix: dotnet test tests/MarketMakerEtl.Tests.Unit --filter \"FullyQualifiedName~SoldDateParserTests|FullyQualifiedName~MercariSoldRefreshStoresUtcSoldDateTests|FullyQualifiedName~SoldListingRefreshStoresSoldPriceAndSoldDateTests\" -> all passed, including the pre-existing eBay sold-date test unchanged."
+    },
+    {
+      "id": "AC-8",
+      "criterion": "Review fix: on_sale maps to Active; trading and sold_out map to Sold; any other non-empty status maps to Ended (matching eBay's existing terminal non-sale state); a missing/empty status maps to null so ListingRefreshService ignores the page.",
+      "plannedImplementation": "MercariItemDetailJsonParser.MapStatus switches on the raw item.status string: null passes through as null, on_sale maps to Active, trading/sold_out map to Sold, anything else non-empty maps to Ended. BuildListing derives isSold from the mapped status (status == Sold) rather than status != on_sale, so SoldPrice/SoldDate are only populated for the Sold outcome. ListingRefreshService already ignores pages with a null Status, so no change was needed there.",
+      "plannedVerification": "MercariItemPageMapsStatusTests derives payload variants from the real active fixture by string-replacing its \"status\": \"on_sale\", line: on_sale->Active, trading->Sold, sold_out->Sold, cancelled->Ended, expired->Ended (TestCase-driven), plus a dedicated test asserting SoldPrice/SoldDate stay null for an Ended listing, and a dedicated test removing the status property entirely and asserting Status/SoldPrice/SoldDate are all null.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "actualEvidence": "Confirmed red-before/green-after by reverting only the src fix: Should_map_the_item_detail_state_to_a_listing_status(cancelled,Ended) and (expired,Ended) failed with Status=Sold instead of Ended, and Should_leave_the_listing_status_null_when_the_item_record_has_no_status failed with Status=Sold and SoldPrice=389 instead of null. After reapplying the fix, dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~MercariItemPageParserTests -> all passed (12 tests), and the full Unit suite (141) plus Architecture suite (25) stayed green."
+    }
+  ]
+}

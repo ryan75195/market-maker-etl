@@ -1,0 +1,21 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~MercariItemPageParserTests\"",
+  "rationale": "The contract pins the four testable acceptance criteria on the real captures. AC-1 (sold item -> Sold with sold price and sold date from lastSoldAt) and AC-3's buyer-paid half live in MercariItemPageReportsSoldItemTests, which parses the trimmed fixture built from the real sold capture (item m44688360101, captured 2026-09-23) and asserts Status, SoldPrice, SoldDate, and ShippingCost 7.97 from the buyer-paid shippingClass fee of 797 cents. AC-2 and AC-3's seller-paid half live in MercariItemPageParsesActiveItemDetailsTests, which parses the trimmed fixture built from the real active capture (item m71344610988, captured 2026-09-23) and asserts Status Active, Price, Condition, Brand, Seller, Description, every one of the 8 photo URLs, ShippingCost 0 (seller-paid), OriginalPrice, PostedUtc, and Likes. AC-4 lives in MercariItemPageReturnsNullWithoutItemDataTests, which parses a synthetic page carrying neither a __NEXT_DATA__ item record nor any of the real data-testid hooks and asserts the parser returns null, exactly as it does today. A bonus test, MercariItemPageFallsBackToRealHooksTests, pins the scope item 1 fallback path (parsing the real ItemDetailsCondition/ItemDetailsBrand/ItemDetailsSellerName/ItemDetailsShipping/ItemDetailsDescription/ItemDetailsPosted/SoldListing hooks when no __NEXT_DATA__ item record is present) against a hand-built fixture using those real hook names, since no real capture without __NEXT_DATA__ exists to trim from. AC-5 (fixtures from real captures, PR states capture date and item ids) and AC-6 (repo quality gate green) are not unit-testable; they are verified by the fixture provenance stated in the PR body and by the pre-commit gate output respectively. At base, before implementation, the fixture-driven tests fail because the current selector-based MercariItemPageParser cannot read the __NEXT_DATA__ item record at all (it returns Active/null for every field the new tests pin), and the null-return and fallback tests already pass incidentally at base and are not declared red. Existing eBay item-page tests (AuctionPageExposesAuctionBuyingFormatTests, SoldPageExposesSoldStatusPriceAndDateTests, and all EbayItemPageParser tests) are untouched and stay green throughout, proving eBay parsing is unaffected.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Models/Ebay/ItemPageListing.cs",
+    "src/MarketMakerEtl.Core/Services/MercariItemPageParser.cs"
+  ],
+  "implementationPaths": [
+    "src/MarketMakerEtl.Core/Services/MercariItemDetailJsonParser.cs",
+    "src/MarketMakerEtl.Core/Services/MercariItemPageFallbackParser.cs"
+  ],
+  "declaredRedTests": [
+    "Should_parse_price_condition_brand_seller_description_photos_shipping_and_posted_date_from_the_active_item_record",
+    "Should_report_the_sold_price_and_sold_date_from_the_sold_item_record"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Models/Ebay/ItemPageListing.cs": "AC-2",
+    "src/MarketMakerEtl.Core/Services/MercariItemPageParser.cs": "AC-1"
+  }
+}

@@ -76,8 +76,14 @@ public sealed class ScrapeStore : IScrapeStore
         return new ScrapeRunWork(run.Id, run.JobId, run.SearchTerm, run.Marketplace);
     }
 
-    public Task CompleteRun(int runId, CancellationToken ct) =>
-        UpdateStatus(runId, ScrapeRunStatus.Completed, null, ct);
+    public async Task CompleteRun(int runId, CancellationToken ct)
+    {
+        var jobId = await UpdateStatus(runId, ScrapeRunStatus.Completed, null, ct);
+        if (jobId is not null)
+        {
+            await StampJobLastRun(jobId.Value, ct);
+        }
+    }
 
     public Task FailRun(int runId, string error, CancellationToken ct) =>
         UpdateStatus(runId, ScrapeRunStatus.Failed, error, ct);
@@ -187,7 +193,7 @@ public sealed class ScrapeStore : IScrapeStore
         await db.SaveChangesAsync(ct);
     }
 
-    private async Task UpdateStatus(
+    private async Task<int?> UpdateStatus(
         int runId,
         ScrapeRunStatus status,
         string? error,
@@ -198,13 +204,27 @@ public sealed class ScrapeStore : IScrapeStore
 
         if (run is null)
         {
-            return;
+            return null;
         }
 
         _states.EnsureCanTransition(Enum.Parse<ScrapeRunStatus>(run.Status), status);
         run.Status = status.ToString();
         run.ErrorMessage = error;
         run.CompletedUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return run.JobId;
+    }
+
+    private async Task StampJobLastRun(int jobId, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var job = await db.ScrapeJobs.FindAsync([jobId], ct);
+        if (job is null)
+        {
+            return;
+        }
+
+        job.LastRunUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
     }
 }
