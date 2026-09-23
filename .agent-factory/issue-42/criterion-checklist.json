@@ -1,0 +1,64 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A captured sold item page parses to Sold with the sold price and the sold date from lastSoldAt.",
+      "plannedImplementation": "MercariItemDetailJsonParser reads the __NEXT_DATA__ item record's status field; any value other than on_sale maps to Sold. When Sold, SoldPrice is set from the item's price field and SoldDate is formatted from lastSoldAt (unix seconds) as an ISO-8601 UTC string.",
+      "plannedVerification": "MercariItemPageReportsSoldItemTests.Should_report_the_sold_price_and_sold_date_from_the_sold_item_record parses the trimmed fixture built from the real sold capture (item m44688360101, status trading, lastSoldAt 1790202119) and asserts Status equals Sold, SoldPrice equals 140.25m, and SoldDate equals 2026-09-23T22:21:59Z.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A captured active item parses to Active with price, condition, brand, seller, description, every photo URL, shipping cost and posted date.",
+      "plannedImplementation": "MercariItemDetailJsonParser resolves the item's itemCondition, brand and seller refs through serverState for Condition/Brand/Seller, reads description and photos directly, and reads created (unix seconds) as PostedUtc. ShippingCost is derived from shippingPayer/shippingClass (see AC-3).",
+      "plannedVerification": "MercariItemPageParsesActiveItemDetailsTests.Should_parse_price_condition_brand_seller_description_photos_shipping_and_posted_date_from_the_active_item_record parses the trimmed fixture built from the real active capture (item m71344610988) and asserts Status Active, Price 389.00m, Condition Good, Brand PlayStation, Seller Nerd Mom Electronics, the full description text, all 8 photo URLs in ImageUrls (and the first as PrimaryImageUrl), ShippingCost 0m, OriginalPrice 399.00m, PostedUtc 2026-09-22T19:24:20Z, and Likes 32.",
+      "materialConcerns": [
+        "public-contract compatibility: ItemPageListing gains six trailing optional members (Description, ImageUrls, ShippingCost, OriginalPrice, PostedUtc, Likes) defaulting to null so existing positional eBay constructions keep compiling"
+      ],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "Seller-paid shipping parses as 0. Buyer-paid shipping parses as the class fee (e.g. 797 -> 7.97).",
+      "plannedImplementation": "MercariItemDetailJsonParser resolves shippingPayer.code; when it equals 'seller', ShippingCost is 0, otherwise ShippingCost is shippingClass.fee / 100.",
+      "plannedVerification": "MercariItemPageParsesActiveItemDetailsTests asserts ShippingCost 0m for the active item, whose real shippingPayer.code is 'seller'. MercariItemPageReportsSoldItemTests asserts ShippingCost 7.97m for the sold item, whose real shippingPayer.code is 'buyer' and shippingClass.fee is 797.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "The active item's real shippingPayer is seller and its ShippingCost reads back as 0 even though its shippingClass.fee is also 0 in that capture.",
+        "whenHeldValueAbsent": "The sold item's real shippingPayer is buyer with a non-zero shippingClass.fee of 797; ShippingCost reads back as 7.97 rather than 0, proving the payer code — not just the fee being non-zero — drives the result."
+      },
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-4",
+      "criterion": "A page with no item record and no hooks returns null, as today.",
+      "plannedImplementation": "MercariItemPageParser.Parse returns null when neither the __NEXT_DATA__ item record nor any real data-testid hook (ItemName/ItemPrice) can be found, unchanged from the existing null-return contract.",
+      "plannedVerification": "MercariItemPageReturnsNullWithoutItemDataTests.Should_return_null_for_a_page_with_no_item_record_and_no_hooks parses a synthetic anti-bot-style page with neither a __NEXT_DATA__ script nor any Mercari data-testid hook and asserts the result is null.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Fixtures come from real captures made by running the scraper's fetch path. The PR states the capture date and item ids.",
+      "plannedImplementation": "tests/MarketMakerEtl.Tests.Unit/Fixtures/Mercari/item-active-m71344610988.html and item-sold-m44688360101.html are trimmed directly from the real captures at C:\\Users\\RyanK\\AppData\\Local\\Temp\\claude\\...\\scratchpad\\captures (captured 2026-09-23 via AIOWebScraper's BrowserContentFetcher), keeping the real __NEXT_DATA__ item record verbatim (trimming only the unrelated req/experiment block and unused UI-only nested objects) and the real data-testid hook markup, dropping the surrounding page chrome.",
+      "plannedVerification": "Not unit-testable; verified by the PR body stating the capture date (2026-09-23) and item ids (m71344610988 active, m44688360101 sold) alongside the fixture diff.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    },
+    {
+      "id": "AC-6",
+      "criterion": "Repo quality gate green: .githooks/pre-commit (build with all analyzers at error severity, dotnet format --verify-no-changes, Unit + Architecture tests).",
+      "plannedImplementation": "No gate changes; the existing pre-commit hook runs unmodified against the new code.",
+      "plannedVerification": "The pre-commit hook's own output at commit time, pasted into the final report.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    }
+  ]
+}

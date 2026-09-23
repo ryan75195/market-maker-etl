@@ -12,4 +12,10 @@ public sealed record ItemPageListing(
     string? SoldDate,
     string? Seller,
     string? PrimaryImageUrl,
-    string? Brand = null);
+    string? Brand = null,
+    string? Description = null,
+    IReadOnlyList<string>? ImageUrls = null,
+    decimal? ShippingCost = null,
+    decimal? OriginalPrice = null,
+    DateTimeOffset? PostedUtc = null,
+    int? Likes = null);
