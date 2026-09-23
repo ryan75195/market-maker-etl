@@ -15,7 +15,7 @@ public class MercariSearchUrlServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(url, Does.StartWith("https://www.mercari.com/us/search"));
+            Assert.That(url, Does.StartWith("https://www.mercari.com/search/?"));
             Assert.That(url, Does.Contain("keyword=playstation%205"));
             Assert.That(url, Does.Not.Contain("itemStatuses=2"));
         });
@@ -28,7 +28,7 @@ public class MercariSearchUrlServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(url, Does.StartWith("https://www.mercari.com/us/search"));
+            Assert.That(url, Does.StartWith("https://www.mercari.com/search/?"));
             Assert.That(url, Does.Contain("keyword=playstation%205"));
             Assert.That(url, Does.Contain("itemStatuses=2"));
         });

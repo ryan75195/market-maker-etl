@@ -6,7 +6,7 @@ namespace MarketMakerEtl.Core.Services;
 
 public sealed class MercariSearchUrlService : IEbaySearchUrlService
 {
-    private readonly string _searchBase = "https://www.mercari.com/us/search";
+    private readonly string _searchBase = "https://www.mercari.com/search/";
 
     public Marketplace Marketplace => Marketplace.Mercari;
 
