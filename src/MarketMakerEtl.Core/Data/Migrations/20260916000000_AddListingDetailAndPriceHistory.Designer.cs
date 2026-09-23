@@ -3,6 +3,7 @@ using System;
 using MarketMakerEtl.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,56 +11,14 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace MarketMakerEtl.Core.Data.Migrations
 {
     [DbContext(typeof(EtlDbContext))]
-    partial class EtlDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916000000_AddListingDetailAndPriceHistory")]
+    partial class AddListingDetailAndPriceHistory
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.5");
-
-            modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.CategoryEntity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Categories", (string)null);
-                });
-
-            modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.JobCategoryEntity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("CategoryId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("ScrapeJobId")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CategoryId");
-
-                    b.HasIndex("ScrapeJobId", "CategoryId")
-                        .IsUnique();
-
-                    b.ToTable("JobCategories", (string)null);
-                });
 
             modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.ListingEntity", b =>
                 {
@@ -202,20 +161,8 @@ namespace MarketMakerEtl.Core.Data.Migrations
                     b.Property<DateTime>("CreatedUtc")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("FilterInstructions")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("IntervalHours")
-                        .HasColumnType("INTEGER");
-
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("LastQueuedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("LastRunUtc")
-                        .HasColumnType("TEXT");
 
                     b.Property<int>("Marketplace")
                         .HasColumnType("INTEGER");
@@ -270,25 +217,6 @@ namespace MarketMakerEtl.Core.Data.Migrations
                     b.ToTable("ScrapeRuns", (string)null);
                 });
 
-            modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.JobCategoryEntity", b =>
-                {
-                    b.HasOne("MarketMakerEtl.Core.Data.Entities.CategoryEntity", "Category")
-                        .WithMany()
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("MarketMakerEtl.Core.Data.Entities.ScrapeJobEntity", "ScrapeJob")
-                        .WithMany("JobCategories")
-                        .HasForeignKey("ScrapeJobId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Category");
-
-                    b.Navigation("ScrapeJob");
-                });
-
             modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.ListingStatusChangeEntity", b =>
                 {
                     b.HasOne("MarketMakerEtl.Core.Data.Entities.ListingEntity", "Listing")
@@ -298,11 +226,6 @@ namespace MarketMakerEtl.Core.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Listing");
-                });
-
-            modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.ScrapeJobEntity", b =>
-                {
-                    b.Navigation("JobCategories");
                 });
 #pragma warning restore 612, 618
         }

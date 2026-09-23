@@ -1,0 +1,29 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~NewListingRecordsAnInitialScrapeHistoryRowTests|FullyQualifiedName~RescrapingAtANewPriceRecordsAPriceUpdateTests|FullyQualifiedName~RefreshObservingASaleRecordsAStatusUpdateWithPriceAndSoldDateTests|FullyQualifiedName~MercariSearchPayloadCarriesImagesOriginalPriceAndCategoryTests|FullyQualifiedName~ListingDetailFieldsRoundTripThroughTheStoreTests|FullyQualifiedName~MigratingAPreChangeDatabasePreservesListingsAndHistoryTests\"",
+  "rationale": "The contract pins the five ticket acceptance criteria plus the cross-cutting SQLite-persistence requirement, one behaviour-named fixture per criterion. AC-1 (NewListingRecordsAnInitialScrapeHistoryRowTests) upserts a brand-new listing through ScrapeStore and asserts exactly one ListingStatusChanges row exists for it with Source InitialScrape and Price equal to the listing's price. AC-2 (RescrapingAtANewPriceRecordsAPriceUpdateTests) upserts the same listing twice at different prices and asserts the stored Price updates and exactly one PriceUpdate row is added, then upserts a third time at the same price and asserts no further row is added. AC-3 (RefreshObservingASaleRecordsAStatusUpdateWithPriceAndSoldDateTests) calls ScrapeStore.RecordStatusChange with a sold observation and asserts the resulting history row carries Source StatusUpdate, the sold price and the sold date. AC-4 has two fixtures: MercariSearchPayloadCarriesImagesOriginalPriceAndCategoryTests is a pure parser test against the real captured fixture (search-payload.json) asserting ImageUrls, OriginalPrice and Category are read from the payload's photos[].imageUrl, originalPrice and itemCategory.name fields, and also pins that Likes stays null because numLikes was verified absent from three real captured Mercari search payloads (100+ items each) — it exists only on the item-detail page, not the search API response the ticket names; ListingDetailFieldsRoundTripThroughTheStoreTests then round-trips a listing built from that same captured item through ScrapeStore and asserts the fields survive persistence. AC-5 (MigratingAPreChangeDatabasePreservesListingsAndHistoryTests) seeds a database at the pre-change migration 20260915000000_AddListingBrand with a raw listing row and a raw history row, applies migrations, and asserts both rows survive with their original values while the new columns (Category on Listings, Source on ListingStatusChanges) appear and legacy history rows backfill Source as StatusUpdate. AC-6 (tested against SQLite, not mocks) is satisfied structurally: every fixture above uses IDbContextFactory<EtlDbContext> with Microsoft.Data.Sqlite against a real temp-file database, following the existing ScrapeStoreTests/ListingBrandRoundTripsThroughTheStoreTests pattern — no persistence path is exercised through a mock. At base (before implementation) the command fails to compile: ListingSummary has no OriginalPrice/Category/Likes/ImageUrls members, ListingEntity has no ShippingCost/Description/DescriptionStatus/ImageUrls/OriginalPrice/Category/Likes/PostedUtc/DetailFetchedUtc members, ListingStatusChangeEntity has no Price/SoldDateUtc/Source members, and migration 20260916000000_AddListingDetailAndPriceHistory does not exist. No test reads git or working-tree state.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Models/Ebay/ListingSummary.cs",
+    "src/MarketMakerEtl.Core/Data/Entities/ListingEntity.cs",
+    "src/MarketMakerEtl.Core/Data/Entities/ListingStatusChangeEntity.cs",
+    "src/MarketMakerEtl.Core/Data/ListingUpserter.cs",
+    "src/MarketMakerEtl.Core/Data/ListingHistorySource.cs",
+    "src/MarketMakerEtl.Core/Data/ListingImageUrlsJson.cs",
+    "src/MarketMakerEtl.Core/Data/ScrapeStore.cs",
+    "src/MarketMakerEtl.Core/Services/MercariSearchPayloadParser.cs",
+    "src/MarketMakerEtl.Core/Data/Migrations/20260916000000_AddListingDetailAndPriceHistory.cs"
+  ],
+  "implementationPaths": [],
+  "declaredRedTests": [],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Models/Ebay/ListingSummary.cs": "AC-4",
+    "src/MarketMakerEtl.Core/Data/Entities/ListingEntity.cs": "AC-4",
+    "src/MarketMakerEtl.Core/Data/Entities/ListingStatusChangeEntity.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Data/ListingUpserter.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Data/ListingHistorySource.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Data/ListingImageUrlsJson.cs": "AC-4",
+    "src/MarketMakerEtl.Core/Data/ScrapeStore.cs": "AC-3",
+    "src/MarketMakerEtl.Core/Services/MercariSearchPayloadParser.cs": "AC-4",
+    "src/MarketMakerEtl.Core/Data/Migrations/20260916000000_AddListingDetailAndPriceHistory.cs": "AC-5"
+  }
+}

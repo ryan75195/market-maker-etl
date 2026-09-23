@@ -138,7 +138,11 @@ public sealed class ScrapeStore : IScrapeStore
                 l.Condition,
                 l.PrimaryImageUrl,
                 l.BuyingFormat,
-                l.Brand))
+                l.Brand,
+                l.OriginalPrice,
+                l.Category,
+                l.Likes,
+                ListingImageUrlsJson.Deserialize(l.ImageUrls)))
             .ToList();
     }
 
@@ -188,6 +192,9 @@ public sealed class ScrapeStore : IScrapeStore
         {
             ListingEntityId = listingEntityId,
             Status = observation.Status,
+            Price = observation.SoldPrice ?? observation.Price ?? listing.Price,
+            SoldDateUtc = listing.SoldDate,
+            Source = ListingHistorySource.StatusUpdate,
             ChangedUtc = DateTime.UtcNow
         });
         await db.SaveChangesAsync(ct);

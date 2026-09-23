@@ -10,4 +10,8 @@ public sealed record ListingSummary(
     string? Condition,
     string? PrimaryImageUrl,
     string? BuyingFormat,
-    string? Brand = null);
+    string? Brand = null,
+    decimal? OriginalPrice = null,
+    string? Category = null,
+    int? Likes = null,
+    IReadOnlyList<string>? ImageUrls = null);

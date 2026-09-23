@@ -1,0 +1,79 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A listing seen for the first time has one InitialScrape history row with its price.",
+      "plannedImplementation": "ListingUpserter.Apply adds a ListingStatusChangeEntity linked (via navigation, since the new listing has no Id yet) to every newly-inserted ListingEntity, with Source ListingHistorySource.InitialScrape, Status Active or Sold depending on listing.IsSold, and Price set to the listing's price.",
+      "plannedVerification": "NewListingRecordsAnInitialScrapeHistoryRowTests.Should_record_exactly_one_initial_scrape_history_row_with_the_listings_price_for_a_new_listing upserts a brand-new listing through ScrapeStore against a real SQLite database and asserts exactly one ListingStatusChanges row exists for it, with Source InitialScrape and Price equal to the listing's price. Observable outcome: first-time scrape produces exactly one history row carrying the price.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: NewListingRecordsAnInitialScrapeHistoryRowTests.Should_record_exactly_one_initial_scrape_history_row_with_the_listings_price_for_a_new_listing passed against real SQLite"
+    },
+    {
+      "id": "AC-2",
+      "criterion": "Re-scraping at a different price updates Price and adds exactly one PriceUpdate row; re-scraping at the same price adds none.",
+      "plannedImplementation": "ListingUpserter.Apply compares existing.Price to the incoming listing.Price before overwriting it; when they differ it adds a ListingStatusChangeEntity with Source ListingHistorySource.PriceUpdate and the new price, and adds nothing when they are equal.",
+      "plannedVerification": "RescrapingAtANewPriceRecordsAPriceUpdateTests.Should_update_the_stored_price_and_add_exactly_one_price_update_row_when_rescraped_at_a_different_price upserts a listing twice at different prices and asserts the stored Price is the new value and exactly one PriceUpdate row exists. Should_add_no_additional_history_row_when_rescraped_at_the_same_price then upserts a third time at the same price and asserts the history row count is unchanged. Observable outcome: price history grows only when the price actually changes.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "Upserting the same listing at a new price adds one PriceUpdate row and updates the stored Price.",
+        "whenHeldValueAbsent": "Upserting the same listing again at the same price (the price delta absent) adds no further history row."
+      },
+      "verificationStatus": "verified: RescrapingAtANewPriceRecordsAPriceUpdateTests.Should_update_the_stored_price_and_add_exactly_one_price_update_row_when_rescraped_at_a_different_price and Should_add_no_additional_history_row_when_rescraped_at_the_same_price both passed against real SQLite"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A refresh that observes a sale writes a StatusUpdate row with sold price and sold date.",
+      "plannedImplementation": "ScrapeStore.RecordStatusChange adds a ListingStatusChangeEntity with Source ListingHistorySource.StatusUpdate whenever it records a status transition, carrying Price (preferring the observation's SoldPrice, then its Price, then the previously stored price) and SoldDateUtc from the merged listing.SoldDate.",
+      "plannedVerification": "RefreshObservingASaleRecordsAStatusUpdateWithPriceAndSoldDateTests.Should_record_a_status_update_row_with_the_sold_price_and_sold_date_when_a_refresh_observes_a_sale seeds an active listing, calls RecordStatusChange with a sold observation carrying a sold price and sold date, and asserts the new history row has Source StatusUpdate, Price equal to the observed sold price and SoldDateUtc equal to the observed sold date. Observable outcome: a refresh that finds a sale leaves a history row a caller can use to reconstruct when and for how much the item sold.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: RefreshObservingASaleRecordsAStatusUpdateWithPriceAndSoldDateTests.Should_record_a_status_update_row_with_the_sold_price_and_sold_date_when_a_refresh_observes_a_sale passed against real SQLite"
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Images, original price and category from a captured search payload are persisted; likes stays honestly unset because the real Mercari search payload never reports a like count.",
+      "plannedImplementation": "MercariSearchPayloadParser.BuildSummary reads every photos[].imageUrl into ListingSummary.ImageUrls (and keeps the first as PrimaryImageUrl), originalPrice into OriginalPrice with the same cents-to-decimal conversion as price, and itemCategory.name into Category. Likes is passed through as null because grepping three real captured Mercari search payloads (search-active-ps5.json, search-sold-ps5.json, search-sold-ps5-100to200cents.json, 100+ items each) found zero occurrences of numLikes anywhere in the search API response — it is only present in the item-detail page's embedded Apollo cache, confirmed by finding \"numLikes\":32 in the captured item-active-m71344610988.html. ListingEntity gains a Likes column and ListingUpserter maps it so a future item-page detail fetch can populate it, but this ticket does not fabricate a value from search parsing. ListingUpserter serialises ImageUrls to JSON via ListingImageUrlsJson and ScrapeStore.GetListings deserialises it back.",
+      "plannedVerification": "MercariSearchPayloadCarriesImagesOriginalPriceAndCategoryTests.Should_read_the_photo_url_original_price_and_category_from_a_captured_search_payload_item parses tests/MarketMakerEtl.Tests.Unit/Fixtures/Mercari/search-payload.json and asserts the first summary's ImageUrls equals [\"https://u-mercari-images.mercdn.net/photos/m71344610988_1.jpg?1790200178\"], OriginalPrice equals 399.00m and Category equals \"Consoles\". Should_leave_likes_unset_because_the_search_payload_never_reports_a_like_count asserts Likes is null for every parsed summary. ListingDetailFieldsRoundTripThroughTheStoreTests.Should_persist_image_urls_original_price_and_category_from_a_captured_search_payload_listing upserts that same parsed listing through ScrapeStore against real SQLite and asserts ImageUrls, OriginalPrice and Category read back unchanged. Observable outcome: every field the real payload actually carries survives persistence, and no field the payload lacks is invented.",
+      "materialConcerns": [
+        "ticket-vs-reality gap: the ticket text says numLikes is already in the Mercari search payload but dropped; the real captures show it is not present in the search payload at all, only on the item-detail page. Documented as a gap rather than silently fabricating a Likes value from search data."
+      ],
+      "comparison": false,
+      "verificationStatus": "verified: MercariSearchPayloadCarriesImagesOriginalPriceAndCategoryTests.Should_read_the_photo_url_original_price_and_category_from_a_captured_search_payload_item and Should_leave_likes_unset_because_the_search_payload_never_reports_a_like_count passed; ListingDetailFieldsRoundTripThroughTheStoreTests.Should_persist_image_urls_original_price_and_category_from_a_captured_search_payload_listing passed against real SQLite"
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Migrating a pre-change database keeps every listing and history row.",
+      "plannedImplementation": "Migration 20260916000000_AddListingDetailAndPriceHistory only adds nullable columns to Listings (ShippingCost, Description, DescriptionStatus, ImageUrls, OriginalPrice, Category, Likes, PostedUtc, DetailFetchedUtc) and to ListingStatusChanges (Price, SoldDateUtc), plus a non-nullable Source column on ListingStatusChanges with a SQL-level default of 'StatusUpdate' so every pre-existing history row backfills as StatusUpdate without a data migration step; no column is dropped or renamed and no existing row is rewritten.",
+      "plannedVerification": "MigratingAPreChangeDatabasePreservesListingsAndHistoryTests.Should_preserve_every_listing_and_history_row_when_migrating_a_pre_change_database seeds a database at the pre-change migration 20260915000000_AddListingBrand with a raw Listings row and a raw ListingStatusChanges row, applies migrations, and asserts: the Listings table now has a Category column and the ListingStatusChanges table now has a Source column; the legacy listing's Title and Price are unchanged; the legacy history row's Status is unchanged and its Source backfilled to StatusUpdate. Observable outcome: upgrading an existing database changes its shape without losing or corrupting any row.",
+      "materialConcerns": [
+        "data loss: the test asserts the pre-existing listing and history row's values survive the migration byte-for-byte on the columns that existed before"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A database created before this migration has a legacy listing and a legacy history row with no Source value.",
+        "whenHeldValueAbsent": "After migrating, the same rows still exist with their original Title, Price and Status untouched, and the previously-absent Source column is present and backfilled rather than left null or dropping the row."
+      },
+      "verificationStatus": "verified: MigratingAPreChangeDatabasePreservesListingsAndHistoryTests.Should_preserve_every_listing_and_history_row_when_migrating_a_pre_change_database passed against real SQLite"
+    },
+    {
+      "id": "AC-6",
+      "criterion": "Persistence is tested against SQLite, not mocks.",
+      "plannedImplementation": "No production code implements this criterion directly; it constrains how AC-1 through AC-5 are tested.",
+      "plannedVerification": "Every persistence-touching fixture above (NewListingRecordsAnInitialScrapeHistoryRowTests, RescrapingAtANewPriceRecordsAPriceUpdateTests, RefreshObservingASaleRecordsAStatusUpdateWithPriceAndSoldDateTests, ListingDetailFieldsRoundTripThroughTheStoreTests, MigratingAPreChangeDatabasePreservesListingsAndHistoryTests) builds a real Microsoft.Data.Sqlite-backed EtlDbContext via AddDbContextFactory and IDbContextFactory<EtlDbContext>, matching the existing ScrapeStoreTests/ListingBrandRoundTripsThroughTheStoreTests pattern; none of them substitutes a mock or in-memory provider for the store or the DbContext. Observable outcome: a wrong SQL type, constraint or migration would fail these tests, which a mocked store could not catch.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: all five persistence fixtures use IDbContextFactory<EtlDbContext> over Microsoft.Data.Sqlite temp-file databases, no mocked store or DbContext"
+    },
+    {
+      "id": "AC-7",
+      "criterion": "Repo quality gate green: .githooks/pre-commit (build with all analyzers at error severity, dotnet format --verify-no-changes, Unit + Architecture tests).",
+      "plannedImplementation": "No feature-specific implementation; satisfied by keeping the change within existing analyzer limits (method length, constructor parameter count, no comments) and running dotnet format before committing.",
+      "plannedVerification": "The pre-commit hook output captured at commit time: dotnet build --no-incremental, dotnet format --verify-no-changes and dotnet test (Unit + Architecture) all succeeding.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "planned"
+    }
+  ]
+}
