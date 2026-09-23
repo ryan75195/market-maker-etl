@@ -73,7 +73,40 @@
       "plannedVerification": "The pre-commit hook output captured at commit time: dotnet build --no-incremental, dotnet format --verify-no-changes and dotnet test (Unit + Architecture) all succeeding.",
       "materialConcerns": [],
       "comparison": false,
-      "verificationStatus": "verified: .githooks/pre-commit reported Build: ok, Lint: clean, Tests: 159 passed on commit 7eb34e4"
+      "verificationStatus": "verified: .githooks/pre-commit reported Build: ok, Lint: clean, Tests: 159 passed on commit 7eb34e4; re-verified Build: ok, Lint: clean, Tests: 163 passed on commit 171c469 after the review fixes below"
+    },
+    {
+      "id": "AC-8",
+      "criterion": "Review fix: a search re-scrape must not erase enrichment fields (Likes, OriginalPrice, Category, ImageUrls, Condition, Brand, PrimaryImageUrl) the search endpoint never supplies.",
+      "plannedImplementation": "ListingUpserter.UpdateExisting now splits field application into ApplyCoreSearchFields (Title, Currency, Url, IsSold, BuyingFormat: always applied; Price: only when the incoming value is non-null) and ApplyEnrichmentFields (Condition, PrimaryImageUrl, Brand, OriginalPrice, Category, Likes: null-coalesced onto the existing stored value so a null incoming value never overwrites a stored non-null value; ImageUrls: only replaced when the incoming list is non-empty). AddNew keeps a separate, fully unconditional ApplyNewListingFields since a freshly-inserted entity has nothing to preserve.",
+      "plannedVerification": "SearchRescrapesPreserveEnrichmentFieldsTests.Should_keep_enrichment_fields_after_a_rescrape_whose_summary_has_them_null_or_empty seeds a listing with Likes=32, Brand, OriginalPrice, Category and two ImageUrls, then upserts a bare-bones re-scrape (Condition/PrimaryImageUrl/Brand null, no enrichment members set) and asserts every enrichment field is unchanged while Title and Price (both supplied) update. Verified red first: this test failed on the pre-fix ListingUpserter (all six enrichment assertions failed, ImageUrls null instead of the stored list) before the fix, then passed after. Observable outcome: a nightly search re-scrape cannot null out detail that only ticket #44's item-page fetch will ever populate.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: SearchRescrapesPreserveEnrichmentFieldsTests.Should_keep_enrichment_fields_after_a_rescrape_whose_summary_has_them_null_or_empty passed against real SQLite; confirmed red against pre-fix ListingUpserter.cs"
+    },
+    {
+      "id": "AC-9",
+      "criterion": "Review fix: a null incoming price must not be treated as a price change; it must leave the stored price unchanged and record no history row.",
+      "plannedImplementation": "ListingUpserter.UpdateExisting computes priceChanged as listing.Price is not null && existing.Price != listing.Price, so a null incoming price never triggers the PriceUpdate branch and ApplyCoreSearchFields only assigns entity.Price when listing.Price is non-null.",
+      "plannedVerification": "NullPriceOnRescrapeLeavesStoredPriceUnchangedTests.Should_leave_the_stored_price_unchanged_and_record_no_history_row_when_a_rescrape_reports_a_null_price seeds a listing at Price=100, re-upserts the same listing with Price=null, and asserts the stored price is still 100 and exactly one history row exists (the original InitialScrape row, no PriceUpdate row added). Verified red first: this test failed on the pre-fix ListingUpserter (stored price came back null and a second history row with Source PriceUpdate and a null price was present) before the fix, then passed after. Observable outcome: a parse miss on price can no longer wipe a known price or pollute price history with a null entry.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: NullPriceOnRescrapeLeavesStoredPriceUnchangedTests.Should_leave_the_stored_price_unchanged_and_record_no_history_row_when_a_rescrape_reports_a_null_price passed against real SQLite; confirmed red against pre-fix ListingUpserter.cs"
+    },
+    {
+      "id": "AC-10",
+      "criterion": "Review fix: a sold transition observed purely through search must set ItemStatus to Sold, write exactly one StatusUpdate history row with the sold price, set SoldPrice if unset, and must not duplicate the row when the listing is already sold.",
+      "plannedImplementation": "ListingUpserter.UpdateExisting computes becameSold as !existing.IsSold && listing.IsSold before mutating; when true it sets existing.ItemStatus to Sold, backfills existing.SoldPrice with listing.Price only if SoldPrice was null, and calls the new shared AddHistoryRow helper with Source ListingHistorySource.StatusUpdate and Status Sold. Because becameSold is false once existing.IsSold is already true, re-observing an already-sold listing as sold again takes neither the sold-transition branch nor the price-changed branch when the price is unchanged, so no duplicate row is added.",
+      "plannedVerification": "SearchObservingASaleTransitionRecordsAStatusUpdateTests.Should_record_a_status_update_row_and_mark_the_listing_sold_when_a_search_observes_the_sale_transition seeds an active listing at Price=85, re-upserts it as sold at the same price, and asserts ItemStatus is Sold, SoldPrice is 85, and exactly one StatusUpdate history row exists with Status Sold and Price 85. Should_not_duplicate_the_status_update_row_when_an_already_sold_listing_is_rescraped_as_sold_again then upserts the same already-sold listing a third time and asserts the StatusUpdate row count is still exactly one. Verified red first: both assertions failed on the pre-fix ListingUpserter (ItemStatus/SoldPrice stayed null/unset and no StatusUpdate row was ever written for a search-observed sale) before the fix, then passed after. Observable outcome: a nightly search that catches an item going from active to sold now leaves the same audit trail the old eBay job produced, without duplicating it on subsequent sold observations.",
+      "materialConcerns": [
+        "judgment call: Currency and BuyingFormat were left as unconditional overwrites in ApplyCoreSearchFields (not added to the null-guarded enrichment set) because the coordinator's enrichment list did not name them and there is no live bug today — Mercari's parser always emits BuyingFormat: null (a no-op overwrite) and always supplies Currency. Flagged rather than silently deciding without visibility."
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A search observing an already-stored active listing (IsSold=false) as sold (IsSold=true) sets ItemStatus to Sold, backfills SoldPrice, and writes one StatusUpdate history row.",
+        "whenHeldValueAbsent": "A search observing an already-sold listing (IsSold=true) as sold again (the false-to-true transition absent) writes no additional history row and leaves ItemStatus/SoldPrice unchanged."
+      },
+      "verificationStatus": "verified: SearchObservingASaleTransitionRecordsAStatusUpdateTests.Should_record_a_status_update_row_and_mark_the_listing_sold_when_a_search_observes_the_sale_transition and Should_not_duplicate_the_status_update_row_when_an_already_sold_listing_is_rescraped_as_sold_again both passed against real SQLite; confirmed red against pre-fix ListingUpserter.cs"
     }
   ]
 }
