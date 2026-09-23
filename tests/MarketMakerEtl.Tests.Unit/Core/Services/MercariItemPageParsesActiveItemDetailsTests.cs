@@ -5,7 +5,7 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 [TestFixture]
 public partial class MercariItemPageParserTests
 {
-    private const string ActiveItemDescription = """
+    private static readonly string ActiveItemDescription = """
         Hi!
 
         I have a PlayStation 5 Digital Console with 1 TB of storage.
@@ -24,7 +24,7 @@ public partial class MercariItemPageParserTests
         One perfectly working PlayStation 5 Digital console with a power cord and controller.
 
         If you have any questions, please don't hesitate to ask!
-        """;
+        """.ReplaceLineEndings("\n");
 
     private static readonly string[] ActiveItemImageUrls =
     [
