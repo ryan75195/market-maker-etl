@@ -4,11 +4,11 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
 public partial class MercariItemPageParserTests
 {
-    private const string SoldItemDescription = """
+    private static readonly string SoldItemDescription = """
         Brand New. Never opened.
 
         Ps5 Controller Anniversary Edition.
-        """;
+        """.ReplaceLineEndings("\n");
 
     private static readonly string[] SoldItemImageUrls =
     [
