@@ -87,7 +87,8 @@
       "plannedVerification": "The pre-commit hook itself: dotnet build --no-incremental, dotnet format --verify-no-changes, and dotnet test for Unit + Architecture all pass at commit time. Observable outcome: the commit succeeds without --no-verify.",
       "materialConcerns": [],
       "comparison": false,
-      "verificationStatus": "planned"
+      "verificationStatus": "verified",
+      "verificationEvidence": "git commit (no --no-verify) succeeded on the first attempt: pre-commit hook printed 'Build: ok', 'Lint: clean', 'Tests: 168 passed', 'All checks passed', commit 3d2ae17 on feat/40-manage-job-list-api. No HARNESS-FEEDBACK event was emitted."
     }
   ]
 }
