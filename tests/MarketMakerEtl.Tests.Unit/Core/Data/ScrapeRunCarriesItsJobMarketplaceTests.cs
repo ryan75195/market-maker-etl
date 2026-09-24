@@ -1,6 +1,7 @@
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Models.Marketplaces;
+using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -45,7 +46,7 @@ public class ScrapeRunCarriesItsJobMarketplaceTests
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         var jobId = await SeedMercariJob(factory);
 
-        var runId = await store.EnqueueRun(jobId, "mercari-run", CancellationToken.None);
+        var runId = await store.EnqueueRun(jobId, "mercari-run", TriggerType.Manual, CancellationToken.None);
         var work = await store.ClaimNextQueuedRun(CancellationToken.None);
 
         await using var db = await factory.CreateDbContextAsync();

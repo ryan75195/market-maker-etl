@@ -1,6 +1,7 @@
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
+using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
@@ -72,7 +73,7 @@ public class SoldListingsFromSoldSearchTests
             null);
         await store.UpsertListings(jobId, [legacyActive], CancellationToken.None);
 
-        await store.EnqueueRun(jobId, SearchTerm, CancellationToken.None);
+        await store.EnqueueRun(jobId, SearchTerm, TriggerType.Manual, CancellationToken.None);
         var work = await store.ClaimNextQueuedRun(CancellationToken.None);
         var runs = CreateRunService(new SoldSearchScrapeClient(SoldResultsPage, ActiveResultsPage), store);
 
@@ -95,7 +96,7 @@ public class SoldListingsFromSoldSearchTests
             _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),
             new ScrapeRunStateService());
 
-    private static ScrapeRunService CreateRunService(IScrapeClient client, ScrapeStore store) =>
+    private ScrapeRunService CreateRunService(IScrapeClient client, ScrapeStore store) =>
         new(
             new SearchPageService(
                 client,
@@ -104,7 +105,8 @@ public class SoldListingsFromSoldSearchTests
                 new ScrapeOptions(MaxPages: 1, CollectSold: true),
                 NullLogger<SearchPageService>.Instance),
             store,
-            new NoOpItemDetailFetchService());
+            new NoOpItemDetailFetchService(),
+            new ScrapeRunReportStore(_provider.GetRequiredService<IDbContextFactory<EtlDbContext>>()));
 
     private sealed class SoldSearchScrapeClient(string soldPage, string activePage) : IScrapeClient
     {

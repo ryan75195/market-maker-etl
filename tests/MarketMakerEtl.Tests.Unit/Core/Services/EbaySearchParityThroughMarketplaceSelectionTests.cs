@@ -34,7 +34,8 @@ public class EbaySearchParityThroughMarketplaceSelectionTests
             new ScrapeOptions(MaxPages: 1, CollectSold: false),
             NullLogger<SearchPageService>.Instance);
 
-        var listings = await service.Collect(SearchTerm, Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
+        var result = await service.Collect(SearchTerm, Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
+        var listings = result.Listings;
 
         Assert.Multiple(() =>
         {

@@ -5,5 +5,6 @@ public enum ScrapeRunStatus
     Queued,
     Running,
     Completed,
+    CompletedWithErrors,
     Failed
 }

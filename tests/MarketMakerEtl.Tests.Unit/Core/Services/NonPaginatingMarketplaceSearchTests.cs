@@ -27,12 +27,12 @@ public class NonPaginatingMarketplaceSearchTests
             new ScrapeOptions(MaxPages: 5, CollectSold: false),
             NullLogger<SearchPageService>.Instance);
 
-        var listings = await service.Collect(SearchTerm, Marketplace.Mercari, new HashSet<string>(), CancellationToken.None);
+        var result = await service.Collect(SearchTerm, Marketplace.Mercari, new HashSet<string>(), CancellationToken.None);
 
         await client.Received(1).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
         urls.Received(1).BuildSearch(SearchTerm, false, 1);
 
-        Assert.That(listings, Has.Count.EqualTo(1));
+        Assert.That(result.Listings, Has.Count.EqualTo(1));
     }
 
     [Test]

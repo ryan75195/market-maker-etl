@@ -5,6 +5,7 @@ using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Jobs;
 using MarketMakerEtl.Core.Models.Marketplaces;
+using MarketMakerEtl.Core.Models.Runs;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,7 +26,7 @@ app.MapPost("/api/scrape/jobs", async (
     CancellationToken ct) =>
 {
     var jobId = await store.EnsureJob(request.SearchTerm, ct, request.Marketplace);
-    var runId = await store.EnqueueRun(jobId, request.SearchTerm, ct);
+    var runId = await store.EnqueueRun(jobId, request.SearchTerm, TriggerType.Manual, ct);
     return Results.Accepted($"/api/scrape/runs/{runId}", new EnqueueRunResponse(runId));
 });
 
@@ -122,9 +123,19 @@ app.MapPost("/api/jobs/{jobId:int}/run", async (
         return Results.NotFound();
     }
 
-    var runId = await store.EnqueueRun(jobId, job.SearchTerm, ct);
+    var runId = await store.EnqueueRun(jobId, job.SearchTerm, TriggerType.Manual, ct);
     await jobs.MarkQueued(jobId, DateTime.UtcNow, ct);
     return Results.Accepted($"/api/scrape/runs/{runId}", new EnqueueRunResponse(runId));
+});
+
+app.MapGet("/api/jobs/{jobId:int}/runs", async (
+    int jobId,
+    IJobStore jobs,
+    IScrapeRunReportStore reports,
+    CancellationToken ct) =>
+{
+    var job = await jobs.GetJob(jobId, ct);
+    return job is null ? Results.NotFound() : Results.Ok(await reports.GetRunsForJob(jobId, ct));
 });
 
 app.MapGet("/api/categories", async (ICategoryStore categories, CancellationToken ct) =>

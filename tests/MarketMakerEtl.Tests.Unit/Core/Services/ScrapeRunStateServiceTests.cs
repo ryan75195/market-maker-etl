@@ -15,6 +15,7 @@ public class ScrapeRunStateServiceTests
         {
             Assert.That(() => Service.EnsureCanTransition(ScrapeRunStatus.Queued, ScrapeRunStatus.Running), Throws.Nothing);
             Assert.That(() => Service.EnsureCanTransition(ScrapeRunStatus.Running, ScrapeRunStatus.Completed), Throws.Nothing);
+            Assert.That(() => Service.EnsureCanTransition(ScrapeRunStatus.Running, ScrapeRunStatus.CompletedWithErrors), Throws.Nothing);
             Assert.That(() => Service.EnsureCanTransition(ScrapeRunStatus.Running, ScrapeRunStatus.Failed), Throws.Nothing);
         });
     }
@@ -33,8 +34,17 @@ public class ScrapeRunStateServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(Service.IsTerminal(ScrapeRunStatus.Completed), Is.True);
+            Assert.That(Service.IsTerminal(ScrapeRunStatus.CompletedWithErrors), Is.True);
             Assert.That(Service.IsTerminal(ScrapeRunStatus.Failed), Is.True);
             Assert.That(Service.IsTerminal(ScrapeRunStatus.Running), Is.False);
         });
+    }
+
+    [Test]
+    public void Should_reject_leaving_completed_with_errors()
+    {
+        Assert.That(
+            () => Service.EnsureCanTransition(ScrapeRunStatus.CompletedWithErrors, ScrapeRunStatus.Running),
+            Throws.TypeOf<InvalidOperationException>());
     }
 }

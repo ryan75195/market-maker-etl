@@ -9,8 +9,10 @@ public sealed class ScrapeRunStateService : IScrapeRunStateService
         new Dictionary<ScrapeRunStatus, ScrapeRunStatus[]>
         {
             [ScrapeRunStatus.Queued] = [ScrapeRunStatus.Running],
-            [ScrapeRunStatus.Running] = [ScrapeRunStatus.Completed, ScrapeRunStatus.Failed],
+            [ScrapeRunStatus.Running] =
+                [ScrapeRunStatus.Completed, ScrapeRunStatus.CompletedWithErrors, ScrapeRunStatus.Failed],
             [ScrapeRunStatus.Completed] = [],
+            [ScrapeRunStatus.CompletedWithErrors] = [],
             [ScrapeRunStatus.Failed] = []
         };
 
@@ -23,5 +25,5 @@ public sealed class ScrapeRunStateService : IScrapeRunStateService
     }
 
     public bool IsTerminal(ScrapeRunStatus status) =>
-        status is ScrapeRunStatus.Completed or ScrapeRunStatus.Failed;
+        status is ScrapeRunStatus.Completed or ScrapeRunStatus.CompletedWithErrors or ScrapeRunStatus.Failed;
 }

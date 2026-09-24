@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Models.Jobs;
 using MarketMakerEtl.Core.Models.Marketplaces;
+using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -86,7 +87,10 @@ public class JobSchedulingServiceTests
             _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),
             new ScrapeRunStateService());
         var work = await scrapeStore.ClaimNextQueuedRun(CancellationToken.None);
-        await scrapeStore.CompleteRun(work!.RunId, CancellationToken.None);
+        await scrapeStore.CompleteRun(
+            work!.RunId,
+            new RunCompletionCounts(0, 0, 0, 0, 0, 0, null, DateTime.UtcNow, DateTime.UtcNow),
+            CancellationToken.None);
 
         timeProvider.Advance(TimeSpan.FromHours(24));
         var secondQueuedCount = await scheduling.QueueDueJobs(CancellationToken.None);
@@ -130,7 +134,7 @@ public class JobSchedulingServiceTests
         var scrapeStore = new ScrapeStore(
             _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),
             new ScrapeRunStateService());
-        await scrapeStore.EnqueueRun(job.Id, job.SearchTerm, CancellationToken.None);
+        await scrapeStore.EnqueueRun(job.Id, job.SearchTerm, TriggerType.Manual, CancellationToken.None);
 
         var queuedCount = await scheduling.QueueDueJobs(CancellationToken.None);
 

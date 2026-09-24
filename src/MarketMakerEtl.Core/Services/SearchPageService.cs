@@ -1,6 +1,7 @@
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
+using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Models.Scraper;
 using Microsoft.Extensions.Logging;
 
@@ -28,7 +29,7 @@ public sealed class SearchPageService : ISearchPageService
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<ListingSummary>> Collect(
+    public async Task<SearchCollectionResult> Collect(
         string searchTerm,
         Marketplace marketplace,
         IReadOnlySet<string> knownSoldListingIds,
@@ -37,15 +38,18 @@ public sealed class SearchPageService : ISearchPageService
         var merged = new Dictionary<string, ListingSummary>(StringComparer.Ordinal);
         var urls = SelectUrlService(marketplace);
         var parser = SelectParser(marketplace);
+        var issues = new List<ScrapeRunIssueDetails>();
 
-        await CollectDirection(searchTerm, sold: false, urls, parser, merged, knownSoldListingIds, ct);
+        var activeSummary = await CollectDirection(searchTerm, sold: false, urls, parser, merged, knownSoldListingIds, ct);
+        AddCapHitIssue(issues, searchTerm, sold: false, activeSummary);
 
         if (_options.CollectSold)
         {
-            await CollectDirection(searchTerm, sold: true, urls, parser, merged, knownSoldListingIds, ct);
+            var soldSummary = await CollectDirection(searchTerm, sold: true, urls, parser, merged, knownSoldListingIds, ct);
+            AddCapHitIssue(issues, searchTerm, sold: true, soldSummary);
         }
 
-        return merged.Values.ToList();
+        return new SearchCollectionResult(merged.Values.ToList(), activeSummary?.TotalReported, issues);
     }
 
     private IEbaySearchUrlService SelectUrlService(Marketplace marketplace) =>
@@ -58,7 +62,7 @@ public sealed class SearchPageService : ISearchPageService
         ?? throw new InvalidOperationException(
             $"No search parser registered for marketplace {marketplace}.");
 
-    private async Task CollectDirection(
+    private async Task<PriceBandCollectionSummary?> CollectDirection(
         string searchTerm,
         bool sold,
         IEbaySearchUrlService urls,
@@ -71,8 +75,7 @@ public sealed class SearchPageService : ISearchPageService
         {
             var collector = new MercariPriceBandCollector(
                 _client, bandUrls, parser, _options.MaxBandsPerDirection, _logger);
-            await collector.Collect(searchTerm, sold, merged, knownSoldListingIds, ct);
-            return;
+            return await collector.Collect(searchTerm, sold, merged, knownSoldListingIds, ct);
         }
 
         var pageLimit = urls.SupportsPagination ? _options.MaxPages : 1;
@@ -86,7 +89,7 @@ public sealed class SearchPageService : ISearchPageService
             if (pageResult.Listings.Count == 0)
             {
                 ThrowIfListingMarkupProducedNoResults(parser, html);
-                return;
+                return null;
             }
 
             foreach (var listing in pageResult.Listings)
@@ -94,6 +97,28 @@ public sealed class SearchPageService : ISearchPageService
                 merged[listing.ListingId] = listing;
             }
         }
+
+        return null;
+    }
+
+    private static void AddCapHitIssue(
+        List<ScrapeRunIssueDetails> issues,
+        string searchTerm,
+        bool sold,
+        PriceBandCollectionSummary? summary)
+    {
+        if (summary is not { CapHit: true })
+        {
+            return;
+        }
+
+        var direction = sold ? "sold" : "active";
+        issues.Add(new ScrapeRunIssueDetails(
+            ListingId: null,
+            IssueType: "PriceBandCapHit",
+            ErrorMessage: $"Hit the {summary.BandsFetched}-band cap while collecting '{searchTerm}' ({direction}).",
+            Phase: "Search",
+            HttpStatusCode: null));
     }
 
     private static void ThrowIfListingMarkupProducedNoResults(ISearchPageParser parser, string html)

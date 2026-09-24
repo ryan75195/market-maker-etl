@@ -57,7 +57,7 @@ public class EmptySearchResultsCompleteTheRunTests
     {
         var store = CreateStore();
         var jobId = await store.EnsureJob(SearchTerm, CancellationToken.None);
-        var runId = await store.EnqueueRun(jobId, SearchTerm, CancellationToken.None);
+        var runId = await store.EnqueueRun(jobId, SearchTerm, TriggerType.Manual, CancellationToken.None);
         var work = await store.ClaimNextQueuedRun(CancellationToken.None);
         var runs = CreateRunService(new SinglePageScrapeClient(EmptyResultsPage), store);
 
@@ -78,7 +78,7 @@ public class EmptySearchResultsCompleteTheRunTests
             _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),
             new ScrapeRunStateService());
 
-    private static ScrapeRunService CreateRunService(IScrapeClient client, ScrapeStore store) =>
+    private ScrapeRunService CreateRunService(IScrapeClient client, ScrapeStore store) =>
         new(
             new SearchPageService(
                 client,
@@ -87,7 +87,8 @@ public class EmptySearchResultsCompleteTheRunTests
                 new ScrapeOptions(MaxPages: 3, CollectSold: false),
                 NullLogger<SearchPageService>.Instance),
             store,
-            new NoOpItemDetailFetchService());
+            new NoOpItemDetailFetchService(),
+            new ScrapeRunReportStore(_provider.GetRequiredService<IDbContextFactory<EtlDbContext>>()));
 
     private sealed class SinglePageScrapeClient(string html) : IScrapeClient
     {

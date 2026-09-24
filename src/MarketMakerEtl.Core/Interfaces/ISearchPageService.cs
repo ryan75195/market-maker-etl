@@ -1,11 +1,11 @@
-using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
+using MarketMakerEtl.Core.Models.Runs;
 
 namespace MarketMakerEtl.Core.Interfaces;
 
 public interface ISearchPageService
 {
-    Task<IReadOnlyList<ListingSummary>> Collect(
+    Task<SearchCollectionResult> Collect(
         string searchTerm,
         Marketplace marketplace,
         IReadOnlySet<string> knownSoldListingIds,

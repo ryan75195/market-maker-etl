@@ -1,6 +1,7 @@
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Models.Jobs;
 using MarketMakerEtl.Core.Models.Marketplaces;
+using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -193,12 +194,15 @@ public class JobStoreTests
         var scrapeStore = new ScrapeStore(
             _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),
             new ScrapeRunStateService());
-        var runId = await scrapeStore.EnqueueRun(created.Id, created.SearchTerm, CancellationToken.None);
+        var runId = await scrapeStore.EnqueueRun(created.Id, created.SearchTerm, TriggerType.Manual, CancellationToken.None);
 
         var hasQueuedRun = await store.HasQueuedOrRunningRun(created.Id, CancellationToken.None);
         await scrapeStore.ClaimNextQueuedRun(CancellationToken.None);
         var hasRunningRun = await store.HasQueuedOrRunningRun(created.Id, CancellationToken.None);
-        await scrapeStore.CompleteRun(runId, CancellationToken.None);
+        await scrapeStore.CompleteRun(
+            runId,
+            new RunCompletionCounts(0, 0, 0, 0, 0, 0, null, DateTime.UtcNow, DateTime.UtcNow),
+            CancellationToken.None);
         var hasRunAfterCompletion = await store.HasQueuedOrRunningRun(created.Id, CancellationToken.None);
 
         Assert.Multiple(() =>

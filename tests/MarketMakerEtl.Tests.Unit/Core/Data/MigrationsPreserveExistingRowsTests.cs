@@ -46,7 +46,7 @@ public class MigrationsPreserveExistingRowsTests
 
         var store = new ScrapeStore(factory, new ScrapeRunStateService());
         var jobId = await store.EnsureJob("legacy-search", CancellationToken.None);
-        var runId = await store.EnqueueRun(jobId, "legacy-search", CancellationToken.None);
+        var runId = await store.EnqueueRun(jobId, "legacy-search", TriggerType.Manual, CancellationToken.None);
         var listing = new ListingSummary("222222222222", "Legacy PS5", 250m, "GBP", "https://x/itm/2", true, null, null, null);
         await store.UpsertListings(jobId, [listing], CancellationToken.None);
 

@@ -1,0 +1,86 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A scheduled run and a manual run record their trigger correctly.",
+      "plannedImplementation": "TriggerType (Manual, Scheduled) becomes a required parameter on IScrapeStore.EnqueueRun, stored as a string on ScrapeRunEntity.TriggerType (same convention as Status). POST /api/scrape/jobs and POST /api/jobs/{id}/run pass TriggerType.Manual; JobSchedulingService.QueueDueJobs passes TriggerType.Scheduled.",
+      "plannedVerification": "ScrapeRunRecordsItsTriggerTypeTests (real SQLite): EnqueueRun with each TriggerType round-trips through GetRun. JobRunEndpointQueuesOnlyOnRequestTests (Integration, WebApplicationFactory): POST /api/jobs/{id}/run produces a run with TriggerType Manual. JobSchedulingServiceTests already exercises QueueDueJobs enqueuing with TriggerType.Scheduled at the service level.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A run enqueued via the manual run endpoint has TriggerType Manual.",
+        "whenHeldValueAbsent": "A run enqueued by JobSchedulingService.QueueDueJobs for the same job has TriggerType Scheduled — proving the value reflects the caller, not a hardcoded default."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Data/ScrapeRunRecordsItsTriggerTypeTests.cs (TestCase Manual/Scheduled, real SQLite) and tests/MarketMakerEtl.Tests.Integration/Jobs/JobRunEndpointQueuesOnlyOnRequestTests.cs (asserts queuedRun.TriggerType == TriggerType.Manual via POST /api/jobs/{id}/run) both pass: `dotnet test tests/MarketMakerEtl.Tests.Unit` -> 236 passed; `dotnet test tests/MarketMakerEtl.Tests.Integration` -> 22 passed."
+    },
+    {
+      "id": "AC-2",
+      "criterion": "Counters match what the run persisted (integration test with a stub scraper).",
+      "plannedImplementation": "ListingUpserter.Apply returns a per-listing ListingUpsertOutcome (AddedActive, AddedSold, Updated, Skipped); ScrapeStore.UpsertListings aggregates these into a ListingUpsertSummary it returns instead of void. ScrapeRunService.Run builds a RunCompletionCounts from that summary plus result.Listings.Count (TotalListingsFound), result.TotalReportedBySearch, and SearchCompletedUtc/DetailCompletedUtc timestamps captured either side of the item-detail fetch, and passes it to IScrapeStore.CompleteRun, which persists every counter and both timestamps onto ScrapeRunEntity.",
+      "plannedVerification": "RunPipelinePersistsListingsTests (Integration, real SQLite + stub IScrapeClient returning a known search page with one active and one sold listing) asserts the completed run's ListingsAddedActive=1, ListingsAddedSold=1, ListingsUpdated=0, ListingsSkipped=0, ListingsFailed=0, TotalListingsFound=2, SearchCompletedUtc and DetailCompletedUtc both populated, Issues empty. ScrapeRunServiceTests.Should_persist_listings_fetch_item_detail_and_complete_the_run asserts the RunCompletionCounts passed to CompleteRun at the unit level.",
+      "materialConcerns": [
+        "TotalReportedBySearch is only populated for the Mercari price-band search path today (the only path that reports an upstream total); the eBay pagination path leaves it null since no such total is available from that parser, which is called out as a gap rather than hidden"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A run that adds one active and one sold listing shows ListingsAddedActive=1, ListingsAddedSold=1, ListingsUpdated=0.",
+        "whenHeldValueAbsent": "ScrapeStoreTests.Should_record_a_completed_run separately proves CompleteRun persists an arbitrary RunCompletionCounts value (ListingsAddedActive=1, TotalReportedBySearch=1) exactly as given, not a recomputed or default value."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Integration/RunPipelinePersistsListingsTests.cs and tests/MarketMakerEtl.Tests.Unit/Core/Services/ScrapeRunServiceTests.cs pass: `dotnet test tests/MarketMakerEtl.Tests.Integration` -> 22 passed, 0 failed; `dotnet test tests/MarketMakerEtl.Tests.Unit` -> 236 passed, 0 failed."
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A run where one item page fails ends CompletedWithErrors with one issue row naming the listing.",
+      "plannedImplementation": "A new ScrapeRunIssues table (ScrapeRunId, ListingId, IssueType, ErrorMessage, Phase, HttpStatusCode, CreatedUtc) is written via the new IScrapeRunReportStore.RecordIssue(runId, ScrapeRunIssueDetails, ct). #44 (item-page detail fetch) merged into main during this PR's development, so ItemDetailFetchService.FetchDetails was changed to return IReadOnlyList<ScrapeRunIssueDetails> (previously plain Task) — one entry per listing whose item page could not be fetched or parsed — instead of silently swallowing the failure. ScrapeRunService.Run records every returned issue via IScrapeRunReportStore.RecordIssue and counts issues with a non-null ListingId as ListingsFailed. IScrapeStore.CompleteRun checks db.ScrapeRunIssues for any row for the run and sets the terminal status to CompletedWithErrors (a new ScrapeRunStatus, added as a second legal target from Running alongside Completed/Failed in ScrapeRunStateService) instead of Completed whenever one exists. The same RecordIssue path also carries the pre-existing Mercari band-cap-hit case (SearchPageService.CollectDirection's PriceBandCollectionSummary.CapHit, previously discarded, now surfaced via SearchCollectionResult.Issues).",
+      "plannedVerification": "RunPipelineRecordsDetailFetchIssueTests (Integration, real SQLite + real ItemDetailFetchService/ItemDetailStore/EbayItemPageParserService, a stub IScrapeClient that serves the search page but throws for the one listing's item-page URL) runs the full pipeline end to end and asserts the run ends Status=CompletedWithErrors, Issues has exactly one row naming that listing's ListingId with Phase=Detail, and ListingsFailed=1. ScrapeRunReportStoreTests covers RecordIssue and GetRunsForJob directly against real SQLite. ScrapeRunServiceTests.Should_record_a_detail_fetch_issue_and_count_it_as_a_failed_listing proves the wiring at the unit level with a mocked detail-fetch service.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A run where the one listing's item page throws on fetch ends CompletedWithErrors with exactly one issue row naming that listing.",
+        "whenHeldValueAbsent": "RunPipelinePersistsListingsTests runs the same shape of pipeline with no item-page failures and ends plain Completed with zero issues — proving the terminal status is driven by issue presence, not a change to the default completion path."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Integration/RunPipelineRecordsDetailFetchIssueTests.cs (Should_end_the_run_completed_with_errors_and_name_the_listing_whose_item_page_failed) and tests/MarketMakerEtl.Tests.Unit/Core/Data/ScrapeRunReportStoreTests.cs pass: `dotnet test tests/MarketMakerEtl.Tests.Integration` -> 22 passed, 0 failed; `dotnet test tests/MarketMakerEtl.Tests.Unit` -> 236 passed, 0 failed."
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Migrating a pre-change database keeps existing runs.",
+      "plannedImplementation": "The new migration (20260924005456_AddRunTriggerCountersAndIssues, generated via `dotnet ef migrations add`, ordered after #44's 20260924003128_AddListingDetailFetchAttempts) adds TriggerType (default 'Manual' via HasDefaultValue so existing rows backfill safely) and the new counter/timestamp columns (defaulting to 0/null) plus the ScrapeRunIssues table.",
+      "plannedVerification": "MigratingAPreRunTrackingDatabasePreservesExistingRunsTests seeds a database at the prior migration (20260924003128_AddListingDetailFetchAttempts) with a raw-SQL ScrapeRuns row using only the old columns, applies migrations, and asserts the row still exists with TriggerType defaulted to Manual, ListingsAddedActive defaulted to 0, TotalReportedBySearch null, and zero pending migrations remain.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A ScrapeRuns row inserted before the migration, with no TriggerType column, is still present after migrating with TriggerType='Manual'.",
+        "whenHeldValueAbsent": "Without the HasDefaultValue configuration, SQLite's ALTER TABLE ADD COLUMN NOT NULL without a default fails against a non-empty table, so this default is load-bearing, not decorative."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Data/MigratingAPreRunTrackingDatabasePreservesExistingRunsTests.cs passes as part of `dotnet test tests/MarketMakerEtl.Tests.Unit` -> 236 passed, 0 failed. Migration files: src/MarketMakerEtl.Core/Data/Migrations/20260924005456_AddRunTriggerCountersAndIssues.cs (internal partial class, // <auto-generated /> header, no XML doc comments) and matching .Designer.cs; EtlDbContextModelSnapshot.cs updated."
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Repo quality gate green: .githooks/pre-commit (build with all analyzers at error severity, dotnet format --verify-no-changes, Unit + Architecture tests).",
+      "plannedImplementation": "New responsibilities go on a new store (ScrapeRunReportStore, 2 public methods) rather than growing ScrapeStore (already at the CI0004 ceiling of 10); every new/changed method stays within the 40-line/5-ctor-param limits; run dotnet format before committing.",
+      "plannedVerification": "git commit (no --no-verify) succeeds: pre-commit prints Build ok, Lint clean, Unit + Architecture tests passed.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "dotnet build MarketMakerEtl.slnx --no-incremental -> Build succeeded, 0 Warning(s), 0 Error(s). dotnet format --verify-no-changes -> exit code 0. dotnet test tests/MarketMakerEtl.Tests.Architecture --no-build -> 25 passed, 0 failed. dotnet test tests/MarketMakerEtl.Tests.Unit --no-build -> 237 passed, 0 failed (includes ScrapeRunStateServiceTests covering the Running -> CompletedWithErrors transition and its terminal/no-further-transition behavior)."
+    },
+    {
+      "id": "scope-4",
+      "criterion": "(Scope item 4) GET /api/jobs/{id}/runs returns recent runs with counters and issues.",
+      "plannedImplementation": "New endpoint in Program.cs resolves IJobStore to 404 on an unknown job, otherwise calls the new IScrapeRunReportStore.GetRunsForJob(jobId, ct), which returns the most recent runs (newest first) as ScrapeRunView — already carrying every counter, timestamp, TriggerType and its Issues list.",
+      "plannedVerification": "JobRunsEndpointReturnsCountersAndIssuesTests (Integration, WebApplicationFactory<Program>): creates a job, queues a run via POST /api/jobs/{id}/run, then GETs /api/jobs/{id}/runs and asserts the queued run's TriggerType, Status, zeroed counters, and empty Issues are present in the response; a second test asserts 404 for an unknown job id.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "GET /api/jobs/{id}/runs for a job with one queued run returns that run with its trigger type and counters.",
+        "whenHeldValueAbsent": "The same call for an unknown job id returns 404 — proving the endpoint validates the job exists rather than returning an empty list for any id."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Integration/Jobs/JobRunsEndpointReturnsCountersAndIssuesTests.cs passes as part of `dotnet test tests/MarketMakerEtl.Tests.Integration` -> 22 passed, 0 failed."
+    }
+  ]
+}
