@@ -78,7 +78,8 @@
       "plannedVerification": "git commit (no --no-verify) succeeds: pre-commit prints Build ok, Lint clean, Unit + Architecture tests passed.",
       "materialConcerns": [],
       "comparison": false,
-      "verificationStatus": "pending"
+      "verificationStatus": "verified",
+      "verificationEvidence": "git commit (no --no-verify) succeeded on the first attempt: pre-commit hook printed 'Build: ok', 'Lint: clean', 'Tests: 213 passed', 'All checks passed', commit 822f68d on feat/41-queue-due-jobs-and-refresh-listings. No HARNESS-FEEDBACK event was emitted."
     },
     {
       "id": "REVIEW-1",
