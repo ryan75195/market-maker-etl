@@ -26,7 +26,8 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
 
     public async Task FetchDetails(int jobId, CancellationToken ct)
     {
-        var targets = await _store.GetListingsNeedingDetail(jobId, _options.MaxDetailFetchesPerRun, ct);
+        var targets = await _store.GetListingsNeedingDetail(
+            jobId, _options.MaxDetailFetchesPerRun, _options.MaxDetailFetchAttempts, ct);
 
         if (targets.Count == 0)
         {
@@ -56,7 +57,7 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
 
         if (string.IsNullOrWhiteSpace(target.Url) || parser is null)
         {
-            await _store.MarkDetailFetchFailed(target.Id, ct);
+            await _store.MarkDetailFetchFailed(target.Id, _options.MaxDetailFetchAttempts, ct);
             return;
         }
 
@@ -67,7 +68,7 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
 
             if (page is null || string.IsNullOrWhiteSpace(page.Title))
             {
-                await _store.MarkDetailFetchFailed(target.Id, ct);
+                await _store.MarkDetailFetchFailed(target.Id, _options.MaxDetailFetchAttempts, ct);
                 return;
             }
 
@@ -75,7 +76,7 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            await _store.MarkDetailFetchFailed(target.Id, ct);
+            await _store.MarkDetailFetchFailed(target.Id, _options.MaxDetailFetchAttempts, ct);
         }
     }
 

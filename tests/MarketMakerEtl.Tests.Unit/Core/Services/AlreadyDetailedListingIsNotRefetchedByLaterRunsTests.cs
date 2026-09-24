@@ -49,7 +49,7 @@ public class AlreadyDetailedListingIsNotRefetchedByLaterRunsTests
         var listingEntityId = await SeedAlreadyDetailedListing(factory, jobId);
         var client = Substitute.For<IScrapeClient>();
         var service = new ItemDetailFetchService(
-            new ItemDetailStore(factory), client, [new MercariItemPageParser()], new DetailFetchOptions(4, 50));
+            new ItemDetailStore(factory), client, [new MercariItemPageParser()], new DetailFetchOptions(4, 50, 3));
 
         await service.FetchDetails(jobId, CancellationToken.None);
         await service.FetchDetails(jobId, CancellationToken.None);

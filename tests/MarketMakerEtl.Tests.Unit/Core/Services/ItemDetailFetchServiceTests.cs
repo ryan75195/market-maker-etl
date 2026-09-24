@@ -19,7 +19,7 @@ public class ItemDetailFetchServiceTests
     public async Task Should_apply_detail_for_a_target_whose_page_parses_successfully()
     {
         var store = Substitute.For<IItemDetailStore>();
-        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<CancellationToken>())
+        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([Target]);
         var client = Substitute.For<IScrapeClient>();
         client.GetPageHtml(Target.Url!, Arg.Any<CancellationToken>()).Returns("<html/>");
@@ -30,14 +30,14 @@ public class ItemDetailFetchServiceTests
         await service.FetchDetails(JobId, CancellationToken.None);
 
         await store.Received(1).ApplyItemDetail(Target.Id, page, Arg.Any<CancellationToken>());
-        await store.DidNotReceive().MarkDetailFetchFailed(Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await store.DidNotReceive().MarkDetailFetchFailed(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
     public async Task Should_mark_the_listing_failed_when_the_page_fails_to_parse()
     {
         var store = Substitute.For<IItemDetailStore>();
-        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<CancellationToken>())
+        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([Target]);
         var client = Substitute.For<IScrapeClient>();
         client.GetPageHtml(Target.Url!, Arg.Any<CancellationToken>()).Returns("<html/>");
@@ -46,7 +46,7 @@ public class ItemDetailFetchServiceTests
 
         await service.FetchDetails(JobId, CancellationToken.None);
 
-        await store.Received(1).MarkDetailFetchFailed(Target.Id, Arg.Any<CancellationToken>());
+        await store.Received(1).MarkDetailFetchFailed(Target.Id, Arg.Any<int>(), Arg.Any<CancellationToken>());
         await store.DidNotReceive().ApplyItemDetail(Arg.Any<int>(), Arg.Any<ItemPageListing>(), Arg.Any<CancellationToken>());
     }
 
@@ -54,7 +54,7 @@ public class ItemDetailFetchServiceTests
     public async Task Should_mark_the_listing_failed_and_continue_when_the_client_throws()
     {
         var store = Substitute.For<IItemDetailStore>();
-        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<CancellationToken>())
+        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([Target]);
         var client = Substitute.For<IScrapeClient>();
         client.GetPageHtml(Target.Url!, Arg.Any<CancellationToken>())
@@ -63,14 +63,14 @@ public class ItemDetailFetchServiceTests
         var service = new ItemDetailFetchService(store, client, [parser], Options());
 
         Assert.DoesNotThrowAsync(() => service.FetchDetails(JobId, CancellationToken.None));
-        await store.Received(1).MarkDetailFetchFailed(Target.Id, Arg.Any<CancellationToken>());
+        await store.Received(1).MarkDetailFetchFailed(Target.Id, Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
     public async Task Should_mark_the_listing_failed_when_no_parser_matches_the_marketplace()
     {
         var store = Substitute.For<IItemDetailStore>();
-        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<CancellationToken>())
+        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([Target]);
         var client = Substitute.For<IScrapeClient>();
         var parser = BuildParser(Marketplace.Ebay, BuildPage());
@@ -78,7 +78,7 @@ public class ItemDetailFetchServiceTests
 
         await service.FetchDetails(JobId, CancellationToken.None);
 
-        await store.Received(1).MarkDetailFetchFailed(Target.Id, Arg.Any<CancellationToken>());
+        await store.Received(1).MarkDetailFetchFailed(Target.Id, Arg.Any<int>(), Arg.Any<CancellationToken>());
         await client.DidNotReceive().GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
@@ -86,7 +86,7 @@ public class ItemDetailFetchServiceTests
     public async Task Should_do_nothing_when_no_listings_need_detail()
     {
         var store = Substitute.For<IItemDetailStore>();
-        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<CancellationToken>())
+        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([]);
         var client = Substitute.For<IScrapeClient>();
         var service = new ItemDetailFetchService(store, client, [], Options());
@@ -101,14 +101,14 @@ public class ItemDetailFetchServiceTests
     public async Task Should_pass_the_per_run_cap_as_the_fetch_limit()
     {
         var store = Substitute.For<IItemDetailStore>();
-        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<CancellationToken>())
+        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([]);
-        var options = new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 17);
+        var options = new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 17, MaxDetailFetchAttempts: 3);
         var service = new ItemDetailFetchService(store, Substitute.For<IScrapeClient>(), [], options);
 
         await service.FetchDetails(JobId, CancellationToken.None);
 
-        await store.Received(1).GetListingsNeedingDetail(JobId, 17, Arg.Any<CancellationToken>());
+        await store.Received(1).GetListingsNeedingDetail(JobId, 17, 3, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -118,11 +118,11 @@ public class ItemDetailFetchServiceTests
             .Select(i => new ListingDetailTarget(i, $"listing-{i}", $"https://x/itm/{i}", "Active", Marketplace.Mercari))
             .ToArray();
         var store = Substitute.For<IItemDetailStore>();
-        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<CancellationToken>())
+        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(targets);
         var client = new ConcurrencyTrackingScrapeClient(TimeSpan.FromMilliseconds(150));
         var parser = BuildParser(Marketplace.Mercari, BuildPage());
-        var options = new DetailFetchOptions(MaxConcurrentDetailFetches: 3, MaxDetailFetchesPerRun: 50);
+        var options = new DetailFetchOptions(MaxConcurrentDetailFetches: 3, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3);
         var service = new ItemDetailFetchService(store, client, [parser], options);
 
         await service.FetchDetails(JobId, CancellationToken.None);
@@ -156,5 +156,6 @@ public class ItemDetailFetchServiceTests
         return parser;
     }
 
-    private static DetailFetchOptions Options() => new(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50);
+    private static DetailFetchOptions Options() =>
+        new(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3);
 }

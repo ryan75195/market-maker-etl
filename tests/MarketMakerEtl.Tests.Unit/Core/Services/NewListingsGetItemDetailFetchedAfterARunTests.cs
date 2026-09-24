@@ -50,7 +50,7 @@ public class NewListingsGetItemDetailFetchedAfterARunTests
         var html = ReadFixture("item-active-m71344610988.html");
         var client = new StubScrapeClient(new Dictionary<string, string> { [ListingUrl] = html });
         var service = new ItemDetailFetchService(
-            new ItemDetailStore(factory), client, [new MercariItemPageParser()], new DetailFetchOptions(4, 50));
+            new ItemDetailStore(factory), client, [new MercariItemPageParser()], new DetailFetchOptions(4, 50, 3));
 
         await service.FetchDetails(jobId, CancellationToken.None);
 

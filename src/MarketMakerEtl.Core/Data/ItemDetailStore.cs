@@ -20,12 +20,13 @@ public sealed class ItemDetailStore : IItemDetailStore
     }
 
     public async Task<IReadOnlyList<ListingDetailTarget>> GetListingsNeedingDetail(
-        int jobId, int limit, CancellationToken ct)
+        int jobId, int limit, int maxAttempts, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var listings = await db.Listings
-            .Where(l => l.ScrapeJobId == jobId && l.DetailFetchedUtc == null)
-            .OrderBy(l => l.Id)
+            .Where(l => l.ScrapeJobId == jobId && l.DetailFetchedUtc == null && l.DetailFetchAttempts < maxAttempts)
+            .OrderBy(l => l.DetailFetchAttempts)
+            .ThenBy(l => l.Id)
             .Take(limit)
             .ToListAsync(ct);
 
@@ -44,11 +45,12 @@ public sealed class ItemDetailStore : IItemDetailStore
             return;
         }
 
+        var wasSold = listing.IsSold;
         ApplyDetailFields(listing, detail);
 
         if (string.Equals(detail.Status, SoldStatus, StringComparison.Ordinal))
         {
-            ApplySoldDetail(db, listing, detail);
+            await ApplySoldDetail(db, listing, detail, wasSold, ct);
         }
 
         listing.DetailFetchedUtc = DateTime.UtcNow;
@@ -56,7 +58,7 @@ public sealed class ItemDetailStore : IItemDetailStore
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task MarkDetailFetchFailed(int listingEntityId, CancellationToken ct)
+    public async Task MarkDetailFetchFailed(int listingEntityId, int maxAttempts, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var listing = await db.Listings.FindAsync([listingEntityId], ct);
@@ -66,8 +68,13 @@ public sealed class ItemDetailStore : IItemDetailStore
             return;
         }
 
-        listing.DescriptionStatus = FailedDescriptionStatus;
-        listing.DetailFetchedUtc = DateTime.UtcNow;
+        listing.DetailFetchAttempts += 1;
+
+        if (listing.DetailFetchAttempts >= maxAttempts)
+        {
+            listing.DescriptionStatus = FailedDescriptionStatus;
+        }
+
         listing.UpdatedUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
     }
@@ -88,7 +95,8 @@ public sealed class ItemDetailStore : IItemDetailStore
         }
     }
 
-    private static void ApplySoldDetail(EtlDbContext db, ListingEntity listing, ItemPageListing detail)
+    private static async Task ApplySoldDetail(
+        EtlDbContext db, ListingEntity listing, ItemPageListing detail, bool wasSold, CancellationToken ct)
     {
         var soldPrice = detail.SoldPrice ?? detail.Price ?? listing.SoldPrice;
         var soldDate = SoldDateParser.Parse(detail.SoldDate) ?? listing.SoldDate;
@@ -97,6 +105,21 @@ public sealed class ItemDetailStore : IItemDetailStore
         listing.IsSold = true;
         listing.SoldPrice = soldPrice;
         listing.SoldDate = soldDate;
+
+        if (wasSold)
+        {
+            var existingSoldRow = await db.ListingStatusChanges
+                .Where(h => h.ListingEntityId == listing.Id && h.Status == SoldStatus)
+                .OrderByDescending(h => h.ChangedUtc)
+                .FirstOrDefaultAsync(ct);
+
+            if (existingSoldRow is not null)
+            {
+                existingSoldRow.SoldDateUtc = soldDate;
+                existingSoldRow.Price ??= soldPrice;
+                return;
+            }
+        }
 
         db.ListingStatusChanges.Add(new ListingStatusChangeEntity
         {

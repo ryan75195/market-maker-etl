@@ -54,7 +54,7 @@ public class FailedItemFetchMarksListingFailedWithoutFailingTheRunTests
             failingUrl: BlockedUrl,
             pages: new Dictionary<string, string> { [OkUrl] = ReadFixture("item-active-m71344610988.html") });
         var service = new ItemDetailFetchService(
-            new ItemDetailStore(factory), client, [new MercariItemPageParser()], new DetailFetchOptions(4, 50));
+            new ItemDetailStore(factory), client, [new MercariItemPageParser()], new DetailFetchOptions(4, 50, 1));
 
         Assert.DoesNotThrowAsync(() => service.FetchDetails(jobId, CancellationToken.None));
 
@@ -64,7 +64,8 @@ public class FailedItemFetchMarksListingFailedWithoutFailingTheRunTests
         Assert.Multiple(() =>
         {
             Assert.That(blocked.DescriptionStatus, Is.EqualTo("failed"));
-            Assert.That(blocked.DetailFetchedUtc, Is.Not.Null);
+            Assert.That(blocked.DetailFetchAttempts, Is.EqualTo(1));
+            Assert.That(blocked.DetailFetchedUtc, Is.Null);
             Assert.That(ok.DescriptionStatus, Is.EqualTo("ok"));
             Assert.That(ok.Description, Does.StartWith("Hi!"));
         });

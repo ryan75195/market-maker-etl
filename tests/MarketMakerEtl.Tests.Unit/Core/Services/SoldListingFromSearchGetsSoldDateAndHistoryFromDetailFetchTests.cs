@@ -47,10 +47,11 @@ public class SoldListingFromSearchGetsSoldDateAndHistoryFromDetailFetchTests
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         var jobId = await SeedJob(factory);
         var listingEntityId = await SeedAlreadySoldListingWithNoSoldDate(factory, jobId);
+        await SeedInitialScrapeSoldHistoryRow(factory, listingEntityId);
         var html = ReadFixture("item-sold-m44688360101.html");
         var client = new StubScrapeClient(new Dictionary<string, string> { [ListingUrl] = html });
         var service = new ItemDetailFetchService(
-            new ItemDetailStore(factory), client, [new MercariItemPageParser()], new DetailFetchOptions(4, 50));
+            new ItemDetailStore(factory), client, [new MercariItemPageParser()], new DetailFetchOptions(4, 50, 3));
 
         await service.FetchDetails(jobId, CancellationToken.None);
 
@@ -59,16 +60,31 @@ public class SoldListingFromSearchGetsSoldDateAndHistoryFromDetailFetchTests
         var historyRows = await db.ListingStatusChanges
             .Where(c => c.ListingEntityId == listingEntityId)
             .ToListAsync();
+        var soldRows = historyRows.Where(r => r.Status == "Sold").ToList();
 
         Assert.Multiple(() =>
         {
             Assert.That(listing.SoldPrice, Is.EqualTo(140.25m));
             Assert.That(listing.SoldDate, Is.EqualTo(new DateTime(2026, 9, 23, 22, 21, 59, DateTimeKind.Utc)));
-            Assert.That(historyRows.Count(r => r.Source == "StatusUpdate"), Is.EqualTo(1));
-            var row = historyRows.Single(r => r.Source == "StatusUpdate");
-            Assert.That(row.Price, Is.EqualTo(140.25m));
-            Assert.That(row.SoldDateUtc, Is.EqualTo(new DateTime(2026, 9, 23, 22, 21, 59, DateTimeKind.Utc)));
+            Assert.That(soldRows, Has.Count.EqualTo(1));
+            Assert.That(soldRows[0].SoldDateUtc, Is.EqualTo(new DateTime(2026, 9, 23, 22, 21, 59, DateTimeKind.Utc)));
+            Assert.That(soldRows[0].Price, Is.EqualTo(140.25m));
         });
+    }
+
+    private static async Task SeedInitialScrapeSoldHistoryRow(IDbContextFactory<EtlDbContext> factory, int listingEntityId)
+    {
+        await using var db = await factory.CreateDbContextAsync();
+        db.ListingStatusChanges.Add(new ListingStatusChangeEntity
+        {
+            ListingEntityId = listingEntityId,
+            Status = "Sold",
+            Source = "InitialScrape",
+            Price = 140.25m,
+            SoldDateUtc = null,
+            ChangedUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
     }
 
     private static async Task<int> SeedJob(IDbContextFactory<EtlDbContext> factory)

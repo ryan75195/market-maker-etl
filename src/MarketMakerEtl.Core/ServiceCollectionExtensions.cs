@@ -24,6 +24,7 @@ public static class ServiceCollectionExtensions
     private const int DefaultRefreshIntervalHours = 24;
     private const int DefaultMaxConcurrentDetailFetches = 4;
     private const int DefaultMaxDetailFetchesPerRun = 50;
+    private const int DefaultMaxDetailFetchAttempts = 3;
 
     private static readonly TimeSpan DefaultFetchTimeout = TimeSpan.FromMinutes(5);
 
@@ -107,7 +108,8 @@ public static class ServiceCollectionExtensions
     private static DetailFetchOptions BuildDetailFetchOptions(IConfiguration? configuration) =>
         new(
             ReadInt(configuration, "Scrape:MaxConcurrentDetailFetches", DefaultMaxConcurrentDetailFetches),
-            ReadInt(configuration, "Scrape:MaxDetailFetchesPerRun", DefaultMaxDetailFetchesPerRun));
+            ReadInt(configuration, "Scrape:MaxDetailFetchesPerRun", DefaultMaxDetailFetchesPerRun),
+            ReadInt(configuration, "Scrape:MaxDetailFetchAttempts", DefaultMaxDetailFetchAttempts));
 
     private static string BuildDatabaseConnectionString(IConfiguration? configuration)
     {

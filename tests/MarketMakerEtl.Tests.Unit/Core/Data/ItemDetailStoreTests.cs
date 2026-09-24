@@ -9,6 +9,8 @@ namespace MarketMakerEtl.Tests.Unit.Core.Data;
 [TestFixture]
 public class ItemDetailStoreTests
 {
+    private const int MaxAttempts = 3;
+
     private string _databasePath = null!;
     private ServiceProvider _provider = null!;
 
@@ -46,7 +48,7 @@ public class ItemDetailStoreTests
         await SeedListing(jobId, "detail-needed-2", detailFetched: false);
         await SeedListing(jobId, "detail-already-fetched", detailFetched: true);
 
-        var targets = await store.GetListingsNeedingDetail(jobId, 1, CancellationToken.None);
+        var targets = await store.GetListingsNeedingDetail(jobId, 1, MaxAttempts, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -101,19 +103,99 @@ public class ItemDetailStoreTests
     }
 
     [Test]
-    public async Task Should_mark_the_listing_failed_and_stamp_the_detail_fetch_time_when_a_fetch_fails()
+    public async Task Should_increment_attempts_and_stay_eligible_without_marking_failed_on_a_single_failure()
     {
         var store = CreateStore();
         var jobId = await SeedJob();
-        var listingEntityId = await SeedListing(jobId, "detail-fetch-failed", detailFetched: false);
+        var listingEntityId = await SeedListing(jobId, "detail-fetch-retry", detailFetched: false);
 
-        await store.MarkDetailFetchFailed(listingEntityId, CancellationToken.None);
+        await store.MarkDetailFetchFailed(listingEntityId, MaxAttempts, CancellationToken.None);
 
         var listing = await GetListing(listingEntityId);
         Assert.Multiple(() =>
         {
+            Assert.That(listing.DetailFetchAttempts, Is.EqualTo(1));
+            Assert.That(listing.DetailFetchedUtc, Is.Null);
+            Assert.That(listing.DescriptionStatus, Is.Not.EqualTo("failed"));
+        });
+    }
+
+    [Test]
+    public async Task Should_mark_the_listing_failed_once_attempts_reach_the_configured_maximum()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "detail-fetch-exhausted", detailFetched: false);
+
+        await store.MarkDetailFetchFailed(listingEntityId, MaxAttempts, CancellationToken.None);
+        await store.MarkDetailFetchFailed(listingEntityId, MaxAttempts, CancellationToken.None);
+        await store.MarkDetailFetchFailed(listingEntityId, MaxAttempts, CancellationToken.None);
+
+        var listing = await GetListing(listingEntityId);
+        var targets = await store.GetListingsNeedingDetail(jobId, 10, MaxAttempts, CancellationToken.None);
+        Assert.Multiple(() =>
+        {
+            Assert.That(listing.DetailFetchAttempts, Is.EqualTo(MaxAttempts));
             Assert.That(listing.DescriptionStatus, Is.EqualTo("failed"));
-            Assert.That(listing.DetailFetchedUtc, Is.Not.Null);
+            Assert.That(listing.DetailFetchedUtc, Is.Null);
+            Assert.That(targets.Any(t => t.ListingId == "detail-fetch-exhausted"), Is.False);
+        });
+    }
+
+    [Test]
+    public async Task Should_prefer_never_attempted_listings_over_previously_failed_ones_when_the_cap_is_tight()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var previouslyFailedId = await SeedListing(jobId, "detail-previously-failed", detailFetched: false);
+        await store.MarkDetailFetchFailed(previouslyFailedId, MaxAttempts, CancellationToken.None);
+        await SeedListing(jobId, "detail-never-attempted", detailFetched: false);
+
+        var targets = await store.GetListingsNeedingDetail(jobId, 1, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets.Single().ListingId, Is.EqualTo("detail-never-attempted"));
+    }
+
+    [Test]
+    public async Task Should_enrich_the_existing_sold_history_row_instead_of_adding_a_duplicate_when_already_sold()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "already-sold-from-search", detailFetched: false, isSold: true);
+        await AddHistoryRow(listingEntityId, "Sold", "InitialScrape", price: null, soldDateUtc: null);
+        var detail = BuildItemPageListing(status: "Sold");
+
+        await store.ApplyItemDetail(listingEntityId, detail, CancellationToken.None);
+
+        var historyRows = await GetHistory(listingEntityId);
+        var soldRows = historyRows.Where(r => r.Status == "Sold").ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(soldRows, Has.Count.EqualTo(1));
+            Assert.That(soldRows[0].SoldDateUtc, Is.EqualTo(new DateTime(2026, 9, 20, 0, 0, 0, DateTimeKind.Utc)));
+            Assert.That(soldRows[0].Price, Is.EqualTo(15.00m));
+            Assert.That(soldRows[0].Source, Is.EqualTo("InitialScrape"));
+        });
+    }
+
+    [Test]
+    public async Task Should_add_exactly_one_sold_row_when_an_active_listing_is_revealed_sold_by_the_item_page()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "active-revealed-sold", detailFetched: false, isSold: false);
+        await AddHistoryRow(listingEntityId, "Active", "InitialScrape", price: 10.00m, soldDateUtc: null);
+        var detail = BuildItemPageListing(status: "Sold");
+
+        await store.ApplyItemDetail(listingEntityId, detail, CancellationToken.None);
+
+        var historyRows = await GetHistory(listingEntityId);
+        var soldRows = historyRows.Where(r => r.Status == "Sold").ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(soldRows, Has.Count.EqualTo(1));
+            Assert.That(soldRows[0].Source, Is.EqualTo("StatusUpdate"));
+            Assert.That(soldRows[0].SoldDateUtc, Is.EqualTo(new DateTime(2026, 9, 20, 0, 0, 0, DateTimeKind.Utc)));
         });
     }
 
@@ -173,6 +255,22 @@ public class ItemDetailStoreTests
     {
         await using var db = await Factory().CreateDbContextAsync();
         return await db.ListingStatusChanges.Where(c => c.ListingEntityId == listingEntityId).ToListAsync();
+    }
+
+    private async Task AddHistoryRow(
+        int listingEntityId, string status, string source, decimal? price, DateTime? soldDateUtc)
+    {
+        await using var db = await Factory().CreateDbContextAsync();
+        db.ListingStatusChanges.Add(new ListingStatusChangeEntity
+        {
+            ListingEntityId = listingEntityId,
+            Status = status,
+            Source = source,
+            Price = price,
+            SoldDateUtc = soldDateUtc,
+            ChangedUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
     }
 
     private IDbContextFactory<EtlDbContext> Factory() =>

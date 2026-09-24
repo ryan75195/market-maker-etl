@@ -57,7 +57,7 @@ public class DetailFetchHonoursConcurrencyAndPerRunCapTests
         var client = Substitute.For<IScrapeClient>();
         client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("<html/>");
         var service = new ItemDetailFetchService(
-            new ItemDetailStore(factory), client, [parser], new DetailFetchOptions(4, 2));
+            new ItemDetailStore(factory), client, [parser], new DetailFetchOptions(4, 2, 3));
 
         await service.FetchDetails(jobId, CancellationToken.None);
 
