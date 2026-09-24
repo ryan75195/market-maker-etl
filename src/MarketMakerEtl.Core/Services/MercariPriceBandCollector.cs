@@ -12,9 +12,14 @@ internal sealed record PriceBandCollectionSummary(
     int ItemPageFetchesUsed = 0,
     DateTime? BackfillCutoffUtc = null,
     int BandsOverCapacityUnsplit = 0,
-    bool BackfillBudgetExhausted = false);
+    bool BackfillBudgetExhausted = false,
+    IReadOnlyList<SearchPageFailure>? SearchPageFailures = null);
 
-internal sealed record MercariCollectionSettings(int MaxBandsPerDirection, SoldBackfillPlanner? Backfill);
+internal sealed record MercariCollectionSettings(
+    int MaxBandsPerDirection,
+    SoldBackfillPlanner? Backfill,
+    int MaxSearchPageAttempts = 3,
+    TimeSpan? SearchPageRetryDelay = null);
 
 internal readonly record struct BandOutcome(SearchPageResult Result, bool Pruned, bool OverCapacity);
 
@@ -60,12 +65,13 @@ internal sealed class MercariPriceBandCollector
 {
     private const decimal MinimumBandWidth = 0.01m;
     private const int MinimumCountRequiringSplit = 100;
+    private static readonly TimeSpan DefaultSearchPageRetryDelay = TimeSpan.FromMilliseconds(500);
 
-    private readonly IScrapeClient _client;
     private readonly IPriceBandSearchUrlService _urls;
-    private readonly ISearchPageParser _parser;
     private readonly MercariCollectionSettings _settings;
     private readonly ILogger _logger;
+    private readonly SearchPageFetcher _fetcher;
+    private readonly List<SearchPageFailure> _searchPageFailures = [];
 
     internal MercariPriceBandCollector(
         IScrapeClient client,
@@ -74,11 +80,15 @@ internal sealed class MercariPriceBandCollector
         MercariCollectionSettings settings,
         ILogger logger)
     {
-        _client = client;
         _urls = urls;
-        _parser = parser;
         _settings = settings;
         _logger = logger;
+        _fetcher = new SearchPageFetcher(
+            client,
+            parser,
+            settings.MaxSearchPageAttempts,
+            settings.SearchPageRetryDelay ?? DefaultSearchPageRetryDelay,
+            logger);
     }
 
     internal async Task<PriceBandCollectionSummary> Collect(
@@ -103,13 +113,18 @@ internal sealed class MercariPriceBandCollector
                 searchTerm, sold, band, queue, backfill, pruneKnownBands, merged, knownSoldListingIds, ct);
             fetched++;
 
-            if (queue.IsSeedBand(band))
+            if (outcome is not { } bandOutcome)
             {
-                totalReported = AccumulateReportedTotal(totalReported, outcome.Result);
+                continue;
             }
 
-            bandsPruned += outcome.Pruned ? 1 : 0;
-            bandsOverCapacityUnsplit += outcome.OverCapacity ? 1 : 0;
+            if (queue.IsSeedBand(band))
+            {
+                totalReported = AccumulateReportedTotal(totalReported, bandOutcome.Result);
+            }
+
+            bandsPruned += bandOutcome.Pruned ? 1 : 0;
+            bandsOverCapacityUnsplit += bandOutcome.OverCapacity ? 1 : 0;
         }
 
         var capHit = queue.Count > 0;
@@ -126,10 +141,11 @@ internal sealed class MercariPriceBandCollector
             itemPageFetchesUsed,
             backfill?.CutoffUtc,
             bandsOverCapacityUnsplit,
-            backfillBudgetExhausted);
+            backfillBudgetExhausted,
+            _searchPageFailures);
     }
 
-    private async Task<BandOutcome> ProcessBand(
+    private async Task<BandOutcome?> ProcessBand(
         string searchTerm,
         bool sold,
         PriceBand band,
@@ -141,6 +157,10 @@ internal sealed class MercariPriceBandCollector
         CancellationToken ct)
     {
         var result = await FetchBand(searchTerm, sold, band, ct);
+        if (result is null)
+        {
+            return null;
+        }
 
         if (backfill is not null)
         {
@@ -188,11 +208,17 @@ internal sealed class MercariPriceBandCollector
         }
     }
 
-    private async Task<SearchPageResult> FetchBand(string searchTerm, bool sold, PriceBand band, CancellationToken ct)
+    private async Task<SearchPageResult?> FetchBand(string searchTerm, bool sold, PriceBand band, CancellationToken ct)
     {
         var url = _urls.BuildSearch(searchTerm, sold, band.MinPrice, band.MaxPrice);
-        var html = await _client.GetPageHtml(url, ct);
-        return _parser.Parse(html);
+        var outcome = await _fetcher.Fetch(url, band, ct);
+
+        if (outcome.Failure is { } failure)
+        {
+            _searchPageFailures.Add(failure);
+        }
+
+        return outcome.Result;
     }
 
     private static int MergeAndCountNew(

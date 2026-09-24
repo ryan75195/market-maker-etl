@@ -46,6 +46,7 @@ public sealed class SearchPageService : ISearchPageService
             searchTerm, sold: false, urls, parser, itemParser, merged, knownSoldListingIds, ct);
         SearchRunIssueFactory.AddCapHitIssue(issues, searchTerm, sold: false, activeSummary);
         SearchRunIssueFactory.AddNoResultsIssue(issues, searchTerm, sold: false, activeSummary, merged.Count - beforeActive);
+        SearchRunIssueFactory.AddSearchPageFailedIssues(issues, searchTerm, sold: false, activeSummary);
 
         var backfillFetches = 0;
 
@@ -59,6 +60,7 @@ public sealed class SearchPageService : ISearchPageService
             SearchRunIssueFactory.AddBackfillWindowIssue(issues, searchTerm, _options.SoldBackfillDays, soldSummary);
             SearchRunIssueFactory.AddBackfillOverflowIssue(issues, searchTerm, soldSummary);
             SearchRunIssueFactory.AddBackfillBudgetExhaustedIssue(issues, searchTerm, soldSummary);
+            SearchRunIssueFactory.AddSearchPageFailedIssues(issues, searchTerm, sold: true, soldSummary);
             backfillFetches = soldSummary?.ItemPageFetchesUsed ?? 0;
         }
 

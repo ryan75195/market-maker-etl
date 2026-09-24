@@ -101,6 +101,33 @@ internal static class SearchRunIssueFactory
             HttpStatusCode: null));
     }
 
+    internal static void AddSearchPageFailedIssues(
+        List<ScrapeRunIssueDetails> issues,
+        string searchTerm,
+        bool sold,
+        PriceBandCollectionSummary? summary)
+    {
+        if (summary?.SearchPageFailures is not { Count: > 0 } failures)
+        {
+            return;
+        }
+
+        var direction = sold ? "sold" : "active";
+
+        foreach (var failure in failures)
+        {
+            var range = $"{FormatPrice(failure.MinPrice)}-{FormatPrice(failure.MaxPrice)}";
+            issues.Add(new ScrapeRunIssueDetails(
+                ListingId: null,
+                IssueType: "SearchPageFailed",
+                ErrorMessage: $"Search page fetch for '{searchTerm}' ({direction}) band [{range}] failed after repeated attempts: {failure.ErrorMessage}",
+                Phase: "Search",
+                HttpStatusCode: null));
+        }
+    }
+
+    private static string FormatPrice(decimal? value) => value?.ToString("0.##") ?? "open";
+
     internal static void ThrowIfListingMarkupProducedNoResults(ISearchPageParser parser, string html)
     {
         if (!parser.ContainsListingMarkup(html))
