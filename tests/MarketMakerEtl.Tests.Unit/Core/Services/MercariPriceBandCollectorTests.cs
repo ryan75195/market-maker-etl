@@ -542,6 +542,142 @@ public class MercariPriceBandCollectorTests
             await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None));
     }
 
+    [Test]
+    public async Task Should_keep_sibling_results_and_report_no_issue_when_a_child_band_recovers_after_an_empty_page()
+    {
+        var sibling = new ListingSummary("sib", "Sib", 1m, "USD", "https://x/sib", false, null, null, null);
+        var recovered = new ListingSummary("rec", "Rec", 1m, "USD", "https://x/rec", false, null, null, null);
+        var splitParent = new PriceBand(20.01m, 50m);
+        var children = splitParent.Split();
+        var leftChild = children[0];
+        var rightChild = children[1];
+        var emptyAttempts = 0;
+
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(ci => (string)ci[0]);
+
+        var urls = Substitute.For<IPriceBandSearchUrlService>();
+        urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
+            .Returns(ci => EncodeBand((decimal?)ci[2], (decimal?)ci[3]));
+
+        var parser = Substitute.For<ISearchPageParser>();
+        parser.Parse(Arg.Any<string>()).Returns(ci =>
+        {
+            var url = (string)ci[0];
+            if (url == EncodeBand(splitParent.MinPrice, splitParent.MaxPrice))
+            {
+                return new SearchPageResult([], 200);
+            }
+
+            if (url == EncodeBand(leftChild.MinPrice, leftChild.MaxPrice))
+            {
+                emptyAttempts++;
+                return emptyAttempts == 1 ? new SearchPageResult([], 0) : new SearchPageResult([recovered], 1);
+            }
+
+            if (url == EncodeBand(rightChild.MinPrice, rightChild.MaxPrice))
+            {
+                return new SearchPageResult([sibling], 1);
+            }
+
+            return new SearchPageResult([], 0);
+        });
+
+        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageRetryDelay: TimeSpan.Zero);
+        var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(merged.Keys, Is.SupersetOf(new[] { "sib", "rec" }));
+            Assert.That(summary.SearchPageFailures, Is.Null.Or.Empty);
+        });
+    }
+
+    [Test]
+    public async Task Should_keep_sibling_results_and_record_a_search_page_empty_issue_when_a_child_band_is_persistently_empty()
+    {
+        var sibling = new ListingSummary("sib2", "Sib2", 1m, "USD", "https://x/sib2", false, null, null, null);
+        var splitParent = new PriceBand(20.01m, 50m);
+        var children = splitParent.Split();
+        var leftChild = children[0];
+        var rightChild = children[1];
+
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(ci => (string)ci[0]);
+
+        var urls = Substitute.For<IPriceBandSearchUrlService>();
+        urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
+            .Returns(ci => EncodeBand((decimal?)ci[2], (decimal?)ci[3]));
+
+        var parser = Substitute.For<ISearchPageParser>();
+        parser.Parse(Arg.Any<string>()).Returns(ci =>
+        {
+            var url = (string)ci[0];
+            if (url == EncodeBand(splitParent.MinPrice, splitParent.MaxPrice))
+            {
+                return new SearchPageResult([], 200);
+            }
+
+            if (url == EncodeBand(leftChild.MinPrice, leftChild.MaxPrice))
+            {
+                return new SearchPageResult([], 0);
+            }
+
+            if (url == EncodeBand(rightChild.MinPrice, rightChild.MaxPrice))
+            {
+                return new SearchPageResult([sibling], 1);
+            }
+
+            return new SearchPageResult([], 0);
+        });
+
+        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageRetryDelay: TimeSpan.Zero);
+        var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(merged.Keys, Is.SupersetOf(new[] { "sib2" }));
+            Assert.That(summary.SearchPageFailures, Has.Count.EqualTo(1));
+            Assert.That(summary.SearchPageFailures![0].Kind, Is.EqualTo(SearchPageFailureKind.EmptyResult));
+            Assert.That(summary.SearchPageFailures![0].ParentReportedCount, Is.EqualTo(200));
+        });
+    }
+
+    [Test]
+    public async Task Should_not_retry_or_record_an_issue_when_a_root_seed_band_is_genuinely_empty()
+    {
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("<html/>");
+
+        var urls = Substitute.For<IPriceBandSearchUrlService>();
+        urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
+            .Returns("https://search");
+
+        var parser = Substitute.For<ISearchPageParser>();
+        parser.Parse(Arg.Any<string>()).Returns(new SearchPageResult([], 0));
+
+        var settings = new MercariCollectionSettings(9, Backfill: null, SearchPageRetryDelay: TimeSpan.Zero);
+        var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.BandsFetched, Is.EqualTo(9));
+            Assert.That(summary.SearchPageFailures, Is.Null.Or.Empty);
+        });
+        await client.Received(9).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    private static string EncodeBand(decimal? min, decimal? max) => $"{min}|{max}";
+
     private static MercariPriceBandCollector BuildCollector(int maxBandsPerDirection, params SearchPageResult[] results)
     {
         var client = Substitute.For<IScrapeClient>();

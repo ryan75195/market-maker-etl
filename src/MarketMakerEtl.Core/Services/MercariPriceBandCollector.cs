@@ -23,11 +23,13 @@ internal sealed record MercariCollectionSettings(
 
 internal readonly record struct BandOutcome(SearchPageResult Result, bool Pruned, bool OverCapacity);
 
+internal readonly record struct QueuedBand(PriceBand Band, int? ParentReportedCount);
+
 internal sealed class PriceBandQueue
 {
     private const int SeedPriority = int.MinValue;
 
-    private readonly PriorityQueue<PriceBand, (int Rank, long Sequence)> _queue = new();
+    private readonly PriorityQueue<QueuedBand, (int Rank, long Sequence)> _queue = new();
     private readonly HashSet<PriceBand> _seedBands;
     private long _sequence;
 
@@ -37,7 +39,7 @@ internal sealed class PriceBandQueue
 
         foreach (var band in seedBands)
         {
-            Enqueue(band, SeedPriority);
+            Enqueue(new QueuedBand(band, null), SeedPriority);
         }
     }
 
@@ -47,18 +49,27 @@ internal sealed class PriceBandQueue
 
     internal bool IsSeedBand(PriceBand band) => _seedBands.Contains(band);
 
-    internal PriceBand Dequeue() => _queue.Dequeue();
+    internal QueuedBand Dequeue() => _queue.Dequeue();
 
     internal void EnqueueChildren(PriceBand parent, int parentReportedCount)
     {
         foreach (var child in parent.Split())
         {
-            Enqueue(child, -parentReportedCount);
+            Enqueue(new QueuedBand(child, parentReportedCount), -parentReportedCount);
         }
     }
 
-    private void Enqueue(PriceBand band, int rank) =>
+    private void Enqueue(QueuedBand band, int rank) =>
         _queue.Enqueue(band, (rank, _sequence++));
+}
+
+internal static class PriceBandResultMath
+{
+    internal static int ReportedCount(SearchPageResult result) =>
+        result.TotalCount ?? result.Listings.Count;
+
+    internal static int? AccumulateReportedTotal(int? totalReported, SearchPageResult result) =>
+        result.TotalCount is int count ? (totalReported ?? 0) + count : totalReported;
 }
 
 internal sealed class MercariPriceBandCollector
@@ -108,9 +119,9 @@ internal sealed class MercariPriceBandCollector
 
         while (queue.Count > 0 && fetched < _settings.MaxBandsPerDirection)
         {
-            var band = queue.Dequeue();
+            var queued = queue.Dequeue();
             var outcome = await ProcessBand(
-                searchTerm, sold, band, queue, backfill, pruneKnownBands, merged, knownSoldListingIds, ct);
+                searchTerm, sold, queued, queue, backfill, pruneKnownBands, merged, knownSoldListingIds, ct);
             fetched++;
 
             if (outcome is not { } bandOutcome)
@@ -118,9 +129,9 @@ internal sealed class MercariPriceBandCollector
                 continue;
             }
 
-            if (queue.IsSeedBand(band))
+            if (queue.IsSeedBand(queued.Band))
             {
-                totalReported = AccumulateReportedTotal(totalReported, bandOutcome.Result);
+                totalReported = PriceBandResultMath.AccumulateReportedTotal(totalReported, bandOutcome.Result);
             }
 
             bandsPruned += bandOutcome.Pruned ? 1 : 0;
@@ -148,7 +159,7 @@ internal sealed class MercariPriceBandCollector
     private async Task<BandOutcome?> ProcessBand(
         string searchTerm,
         bool sold,
-        PriceBand band,
+        QueuedBand queued,
         PriceBandQueue queue,
         SoldBackfillPlanner? backfill,
         bool pruneKnownBands,
@@ -156,7 +167,8 @@ internal sealed class MercariPriceBandCollector
         IReadOnlySet<string> knownSoldListingIds,
         CancellationToken ct)
     {
-        var result = await FetchBand(searchTerm, sold, band, ct);
+        var band = queued.Band;
+        var result = await FetchBand(searchTerm, sold, band, queued.ParentReportedCount, ct);
         if (result is null)
         {
             return null;
@@ -179,7 +191,7 @@ internal sealed class MercariPriceBandCollector
 
         if (ShouldSplit(result, band))
         {
-            queue.EnqueueChildren(band, ReportedCount(result));
+            queue.EnqueueChildren(band, PriceBandResultMath.ReportedCount(result));
         }
 
         return new BandOutcome(result, Pruned: false, OverCapacity: false);
@@ -197,7 +209,7 @@ internal sealed class MercariPriceBandCollector
         switch (decision.Kind)
         {
             case SoldBackfillOutcomeKind.Split:
-                queue.EnqueueChildren(band, ReportedCount(result));
+                queue.EnqueueChildren(band, PriceBandResultMath.ReportedCount(result));
                 break;
             case SoldBackfillOutcomeKind.Store:
                 MergeAndCountNew(result.Listings.Take(decision.StoreCount).ToList(), merged, knownSoldListingIds, sold);
@@ -208,10 +220,11 @@ internal sealed class MercariPriceBandCollector
         }
     }
 
-    private async Task<SearchPageResult?> FetchBand(string searchTerm, bool sold, PriceBand band, CancellationToken ct)
+    private async Task<SearchPageResult?> FetchBand(
+        string searchTerm, bool sold, PriceBand band, int? parentReportedCount, CancellationToken ct)
     {
         var url = _urls.BuildSearch(searchTerm, sold, band.MinPrice, band.MaxPrice);
-        var outcome = await _fetcher.Fetch(url, band, ct);
+        var outcome = await _fetcher.Fetch(url, band, parentReportedCount, ct);
 
         if (outcome.Failure is { } failure)
         {
@@ -251,18 +264,12 @@ internal sealed class MercariPriceBandCollector
         _logger.LogInformation(
             "Sold backfill decision for band [{MinPrice}-{MaxPrice}]: reported {Reported}, page size {PageSize}, "
                 + "decision {Decision}, stored {Stored}, item-page fetches used {ItemPageFetches}.",
-            band.MinPrice, band.MaxPrice, ReportedCount(result), result.Listings.Count,
+            band.MinPrice, band.MaxPrice, PriceBandResultMath.ReportedCount(result), result.Listings.Count,
             decision.Kind, decision.StoreCount, backfill.ItemPageFetchesUsed);
     }
 
-    private static int ReportedCount(SearchPageResult result) =>
-        result.TotalCount ?? result.Listings.Count;
-
-    private static int? AccumulateReportedTotal(int? totalReported, SearchPageResult result) =>
-        result.TotalCount is int count ? (totalReported ?? 0) + count : totalReported;
-
     private static bool ShouldSplit(SearchPageResult result, PriceBand band) =>
-        ReportedCount(result) >= MinimumCountRequiringSplit && band.CanSplit(MinimumBandWidth);
+        PriceBandResultMath.ReportedCount(result) >= MinimumCountRequiringSplit && band.CanSplit(MinimumBandWidth);
 
     private void LogOutcome(
         string searchTerm,

@@ -116,14 +116,31 @@ internal static class SearchRunIssueFactory
 
         foreach (var failure in failures)
         {
-            var range = $"{FormatPrice(failure.MinPrice)}-{FormatPrice(failure.MaxPrice)}";
-            issues.Add(new ScrapeRunIssueDetails(
-                ListingId: null,
-                IssueType: "SearchPageFailed",
-                ErrorMessage: $"Search page fetch for '{searchTerm}' ({direction}) band [{range}] failed after repeated attempts: {failure.ErrorMessage}",
-                Phase: "Search",
-                HttpStatusCode: null));
+            issues.Add(BuildSearchPageFailureIssue(searchTerm, direction, failure));
         }
+    }
+
+    private static ScrapeRunIssueDetails BuildSearchPageFailureIssue(
+        string searchTerm, string direction, SearchPageFailure failure)
+    {
+        var range = $"{FormatPrice(failure.MinPrice)}-{FormatPrice(failure.MaxPrice)}";
+
+        if (failure.Kind == SearchPageFailureKind.EmptyResult)
+        {
+            return new ScrapeRunIssueDetails(
+                ListingId: null,
+                IssueType: "SearchPageEmpty",
+                ErrorMessage: $"Search page for '{searchTerm}' ({direction}) band [{range}] repeatedly came back empty despite its parent band reporting {failure.ParentReportedCount} result(s); the band was skipped.",
+                Phase: "Search",
+                HttpStatusCode: null);
+        }
+
+        return new ScrapeRunIssueDetails(
+            ListingId: null,
+            IssueType: "SearchPageFailed",
+            ErrorMessage: $"Search page fetch for '{searchTerm}' ({direction}) band [{range}] failed after repeated attempts: {failure.ErrorMessage}",
+            Phase: "Search",
+            HttpStatusCode: null);
     }
 
     private static string FormatPrice(decimal? value) => value?.ToString("0.##") ?? "open";
