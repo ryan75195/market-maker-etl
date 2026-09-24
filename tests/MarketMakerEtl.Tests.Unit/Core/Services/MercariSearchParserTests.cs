@@ -29,6 +29,15 @@ public class MercariSearchParserTests
         </div>
         """;
 
+    private const string SoldOutCard = """
+        <div data-testid="ItemContainer" data-productid="m92390261763" data-itemprice="5000" data-itemstatus="sold_out" data-brand="Sony">
+          <a href="https://www.mercari.com/us/item/m92390261763/">
+            <img src="https://static.mercdn.net/m92390261763.jpg" alt="Sony DualSense" />
+          </a>
+          <span data-testid="ItemName">Sony DualSense</span>
+        </div>
+        """;
+
     private static readonly string CapturedRenderedCards = File.ReadAllText(
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Mercari", "search-rendered-cards.html"));
 
@@ -92,6 +101,18 @@ public class MercariSearchParserTests
         {
             Assert.That(summaries[1].IsSold, Is.True);
             Assert.That(summaries[1].Brand, Is.EqualTo("Nintendo"));
+        });
+    }
+
+    [Test]
+    public void Should_mark_a_card_that_is_sold_out_as_sold()
+    {
+        var summaries = new MercariSearchParser().Parse(SoldOutCard).Listings;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summaries, Has.Count.EqualTo(1));
+            Assert.That(summaries[0].IsSold, Is.True);
         });
     }
 

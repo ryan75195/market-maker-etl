@@ -17,6 +17,10 @@ public class MercariSearchPayloadParsesToListingsTests
         {"errors":[{"message":"Invalid request"}]}
         """;
 
+    private const string SoldOutItemPayload = """
+        {"data":{"search":{"itemsList":[{"id":"m1","name":"PS5 Controller","status":"sold_out","price":5000}]}}}
+        """;
+
     private static readonly string CapturedPayload = File.ReadAllText(
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Mercari", "search-payload.json"));
 
@@ -67,6 +71,18 @@ public class MercariSearchPayloadParsesToListingsTests
             Assert.That(summaries[2].IsSold, Is.True);
             Assert.That(summaries[2].Price, Is.EqualTo(140.25m));
             Assert.That(summaries[1].IsSold, Is.False);
+        });
+    }
+
+    [Test]
+    public void Should_mark_a_payload_item_that_is_sold_out_as_sold()
+    {
+        var summaries = new MercariSearchParser().Parse(SoldOutItemPayload).Listings;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summaries, Has.Count.EqualTo(1));
+            Assert.That(summaries[0].IsSold, Is.True);
         });
     }
 

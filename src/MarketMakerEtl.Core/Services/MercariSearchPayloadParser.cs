@@ -5,7 +5,8 @@ namespace MarketMakerEtl.Core.Services;
 
 internal static class MercariSearchPayloadParser
 {
-    private const string SoldStatus = "trading";
+    private const string TradingStatus = "trading";
+    private const string SoldOutStatus = "sold_out";
     private const string CurrencyCode = "USD";
 
     public static bool IsPayload(string content) =>
@@ -69,7 +70,7 @@ internal static class MercariSearchPayloadParser
             Price: ReadCents(item, "price"),
             Currency: CurrencyCode,
             Url: MercariItemUrl.Build(listingId),
-            IsSold: string.Equals(ReadString(item, "status"), SoldStatus, StringComparison.OrdinalIgnoreCase),
+            IsSold: IsSoldStatus(ReadString(item, "status")),
             Condition: ReadNestedName(item, "itemCondition"),
             PrimaryImageUrl: imageUrls.Count > 0 ? imageUrls[0] : null,
             BuyingFormat: null,
@@ -79,6 +80,10 @@ internal static class MercariSearchPayloadParser
             Likes: null,
             ImageUrls: imageUrls.Count > 0 ? imageUrls : null);
     }
+
+    private static bool IsSoldStatus(string? status) =>
+        string.Equals(status, TradingStatus, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, SoldOutStatus, StringComparison.OrdinalIgnoreCase);
 
     private static IReadOnlyList<string> ReadImageUrls(JsonElement item)
     {

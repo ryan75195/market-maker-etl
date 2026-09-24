@@ -145,11 +145,11 @@ internal sealed class MercariPriceBandCollector
         if (backfill is not null)
         {
             var decision = await backfill.Resolve(result, band.CanSplit(MinimumBandWidth), ct);
-            ApplyBackfillDecision(decision, band, result, queue, merged, knownSoldListingIds);
+            ApplyBackfillDecision(decision, band, result, queue, merged, knownSoldListingIds, sold);
             return new BandOutcome(result, Pruned: false, OverCapacity: decision.Overflowed);
         }
 
-        var newListingCount = MergeAndCountNew(result.Listings, merged, knownSoldListingIds);
+        var newListingCount = MergeAndCountNew(result.Listings, merged, knownSoldListingIds, sold);
 
         if (pruneKnownBands && newListingCount == 0)
         {
@@ -170,7 +170,8 @@ internal sealed class MercariPriceBandCollector
         SearchPageResult result,
         PriceBandQueue queue,
         Dictionary<string, ListingSummary> merged,
-        IReadOnlySet<string> knownSoldListingIds)
+        IReadOnlySet<string> knownSoldListingIds,
+        bool sold)
     {
         switch (decision.Kind)
         {
@@ -178,7 +179,7 @@ internal sealed class MercariPriceBandCollector
                 queue.EnqueueChildren(band, ReportedCount(result));
                 break;
             case SoldBackfillOutcomeKind.Store:
-                MergeAndCountNew(result.Listings.Take(decision.StoreCount).ToList(), merged, knownSoldListingIds);
+                MergeAndCountNew(result.Listings.Take(decision.StoreCount).ToList(), merged, knownSoldListingIds, sold);
                 break;
             case SoldBackfillOutcomeKind.None:
             default:
@@ -196,7 +197,8 @@ internal sealed class MercariPriceBandCollector
     private static int MergeAndCountNew(
         IReadOnlyList<ListingSummary> listings,
         Dictionary<string, ListingSummary> merged,
-        IReadOnlySet<string> knownSoldListingIds)
+        IReadOnlySet<string> knownSoldListingIds,
+        bool forceSold)
     {
         var newCount = 0;
 
@@ -207,7 +209,7 @@ internal sealed class MercariPriceBandCollector
                 newCount++;
             }
 
-            merged[listing.ListingId] = listing;
+            merged[listing.ListingId] = forceSold ? listing with { IsSold = true } : listing;
         }
 
         return newCount;

@@ -133,6 +133,24 @@ public class MercariPriceBandCollectorTests
     }
 
     [Test]
+    public async Task Should_force_sold_true_and_replace_a_stale_active_copy_when_merging_the_sold_direction()
+    {
+        var activeCopy = new ListingSummary("m1", "M1", 1m, "USD", "https://x/m1", false, null, null, null);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var activeCollector = BuildCollector(maxBandsPerDirection: 20, new SearchPageResult([activeCopy], 1));
+        await activeCollector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(merged["m1"].IsSold, Is.False);
+
+        var mistaggedSoldDirectionCopy = new ListingSummary("m1", "M1", 1m, "USD", "https://x/m1", false, null, null, null);
+        var soldCollector = BuildCollector(maxBandsPerDirection: 20, new SearchPageResult([mistaggedSoldDirectionCopy], 1));
+        await soldCollector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(merged["m1"].IsSold, Is.True);
+    }
+
+    [Test]
     public async Task Should_not_treat_a_genuinely_empty_first_run_as_an_early_stop_for_known_listings()
     {
         var collector = BuildCollector(maxBandsPerDirection: 20, new SearchPageResult([], 0));
