@@ -140,7 +140,9 @@ public sealed class ScrapeStore : IScrapeStore
                 l.OriginalPrice,
                 l.Category,
                 l.Likes,
-                ListingImageUrlsJson.Deserialize(l.ImageUrls)))
+                ListingImageUrlsJson.Deserialize(l.ImageUrls),
+                l.SoldPrice,
+                l.SoldDate))
             .ToList();
     }
 
