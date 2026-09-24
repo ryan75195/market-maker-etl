@@ -67,7 +67,7 @@ public sealed class HttpScrapeClient : IScrapeClient
 
             if (status == ScrapeJobStatus.Failure)
             {
-                throw new InvalidOperationException($"Scrape job {jobId} failed");
+                throw new InvalidOperationException(await BuildFailureMessage(jobId, ct));
             }
 
             if (status == ScrapeJobStatus.Success)
@@ -76,6 +76,35 @@ public sealed class HttpScrapeClient : IScrapeClient
             }
 
             await Task.Delay(_options.PollInterval, ct);
+        }
+    }
+
+    private async Task<string> BuildFailureMessage(string jobId, CancellationToken ct)
+    {
+        var reason = await TryGetFailureReason(jobId, ct);
+        return reason is null
+            ? $"Scrape job {jobId} failed"
+            : $"Scrape job {jobId} failed: {reason}";
+    }
+
+    private async Task<string?> TryGetFailureReason(string jobId, CancellationToken ct)
+    {
+        try
+        {
+            var uri = BuildUri($"api/GetResults?jobId={Uri.EscapeDataString(jobId)}");
+            var response = await _http.GetAsync(uri, ct);
+            response.EnsureSuccessStatusCode();
+
+            var items = await response.Content.ReadFromJsonAsync<List<ScrapeJobItem>>(JsonOptions, ct);
+            return items?.Find(item => !string.IsNullOrEmpty(item.Error))?.Error;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

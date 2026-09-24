@@ -60,12 +60,22 @@ only:
 - `queueStorageConnectionString`, `blobStorageKey`, `tableStorageConnectionString`
 - `residentialProxy`
 - `workerCount`
-- `routing:allowedDomains` — **must include `mercari.com` and
-  `www.mercari.com`** alongside any eBay domains already listed, or every
-  Mercari fetch is aborted client-side by `RouteFilterService` before it ever
-  reaches the network (this is a routing allowlist, not a network failure —
-  it shows up as `net::ERR_FAILED` on every URL, including the bare Mercari
-  homepage, and is easy to mistake for a proxy or Cloudflare problem)
+- `routing:allowedDomains` — **leave this empty (domain filtering off) when
+  scraping Mercari.** A non-empty list is a strict allowlist:
+  `RouteFilterService.ShouldBlock` aborts *every* request — not just the
+  top-level page navigation — to a host that isn't on the list. An empty
+  list means "leave the bare Mercari domains on it" is not enough: Mercari's
+  page load pulls in the Cloudflare beacon, Mercari's own asset CDN, a
+  consent widget, and analytics hosts, and if any of those get aborted the
+  Cloudflare JS challenge on the page fails, producing a genuine
+  `Blocked: Captcha` verdict that looks exactly like a proxy or bot-detection
+  problem but is actually self-inflicted. (A too-narrow allowlist, e.g. just
+  the bare `mercari.com`/`www.mercari.com` hosts, also produces
+  `net::ERR_FAILED` on every URL before a fetch even starts — same
+  root cause, different symptom.) See
+  [AIOWebScraper#150](https://github.com/ryan75195/AIOWebScraper/issues/150)
+  for the evidence and a curated-allowlist alternative if you need domain
+  filtering for other marketplaces at the same time as Mercari.
 - `routing:blockedResourceTypes`
 
 ### Off-screen browser requirement
@@ -83,12 +93,32 @@ session-capture flow. Do not commit this patch to the AIOWebScraper repo.
 
 ### Cloudflare challenges
 
-A meaningful fraction of Mercari fetches are blocked by a Cloudflare/CAPTCHA
-challenge rather than succeeding on the first attempt
+A meaningful fraction of Mercari fetches can be blocked by a
+Cloudflare/CAPTCHA challenge rather than succeeding on the first attempt
 ([AIOWebScraper#148](https://github.com/ryan75195/AIOWebScraper/issues/148)).
 The worker retries a few times per URL before giving up and dead-lettering
 the job; a scheduled run may need more than one scheduler tick to produce a
-successful fetch. This is expected, not a sign the stack is misconfigured.
+successful fetch. Before assuming this is a proxy or bot-detection problem,
+check `routing:allowedDomains` first — see the gotcha above. A non-empty
+allowlist that omits Cloudflare's beacon or Mercari's asset CDN reproduces a
+Cloudflare block on nearly every fetch and is easy to mistake for a genuine
+anti-bot problem.
+
+### Mercari active (unfiltered) search can silently return zero listings
+
+Mercari's price-band collector (`MercariPriceBandCollector`) issues an
+unfiltered search first (no `itemStatuses`, no price bounds) for the active
+direction. AIOWebScraper's search-payload capture only recognizes a search
+response whose URL contains `operationName=searchFacetQuery`
+(`AIOWebScraper.Unblocker/SearchPayloadCapture.cs`), which reliably matches
+sold/filtered searches (`itemStatuses=2`) but can miss the plain/unfiltered
+active search entirely. When it misses, the worker falls back to the raw
+rendered HTML, and `MercariSearchParser`'s rendered-card fallback can find
+no `data-testid="ItemContainer"` cards in that HTML — so the fetch succeeds
+(200, a real multi-hundred-KB page, no captcha verdict) but the active
+direction still collects zero listings and logs a null reported total. This
+looks identical to "the search is genuinely empty," which it is not. Filed
+as [AIOWebScraper#150](https://github.com/ryan75195/AIOWebScraper/issues/150).
 
 ## 4. Start MarketMakerEtl.Api
 
@@ -126,7 +156,7 @@ is environment-variable only):
 | `Scraper:ApiKey` | AIOWebScraper Functions API key, if configured |
 | `Scraper:SessionReference` | Optional eBay session token; never sent for Mercari fetches |
 | `ContentStore:ConnectionString` | Azure Storage connection string for scraped HTML blobs |
-| `ContentStore:ContainerName` | Blob container name for scraped HTML |
+| `ContentStore:ContainerName` | Blob container name for scraped HTML — **must be exactly `html`**. AIOWebScraper's `AzureJobRepository` hardcodes `blobs.GetBlobContainerClient("html")` when it writes scraped content; any other value here makes `BlobScrapeContentStore.BuildBlobName` throw `Blob uri '...' does not point into the '<configured>' container` even though the underlying fetch succeeded |
 | `Database:ConnectionString` | SQLite connection string for MarketMakerEtl's own database |
 | `Schedule:TickMinutes` | How often `JobQueueingWorker` checks for due jobs |
 | `Schedule:RefreshIntervalHours` | How often `ListingRefreshWorker` refreshes active listings |
@@ -140,7 +170,12 @@ is environment-variable only):
 For a short local smoke test, set a low `Schedule:TickMinutes` (e.g. `1`) and
 small `Scrape:MaxBandsPerDirection` / `Scrape:MaxDetailFetchesPerRun` values
 (e.g. `6-10`) so a full run finishes in a few minutes instead of consuming a
-large fetch budget.
+large fetch budget. Be aware that a small `Scrape:MaxBandsPerDirection` value
+means the price-band binary split can only explore a small slice of the
+price range before the cap is hit for any search term with more than a
+couple hundred results — a low listing count from a smoke-test run reflects
+the fetch budget, not a defect, and shows up as a `PriceBandCapHit` issue on
+the run.
 
 ## 6. Create a job and let the scheduler run it
 

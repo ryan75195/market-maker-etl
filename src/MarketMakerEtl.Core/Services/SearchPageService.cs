@@ -40,13 +40,17 @@ public sealed class SearchPageService : ISearchPageService
         var parser = SelectParser(marketplace);
         var issues = new List<ScrapeRunIssueDetails>();
 
+        var beforeActive = merged.Count;
         var activeSummary = await CollectDirection(searchTerm, sold: false, urls, parser, merged, knownSoldListingIds, ct);
         AddCapHitIssue(issues, searchTerm, sold: false, activeSummary);
+        AddNoResultsIssue(issues, searchTerm, sold: false, activeSummary, merged.Count - beforeActive);
 
         if (_options.CollectSold)
         {
+            var beforeSold = merged.Count;
             var soldSummary = await CollectDirection(searchTerm, sold: true, urls, parser, merged, knownSoldListingIds, ct);
             AddCapHitIssue(issues, searchTerm, sold: true, soldSummary);
+            AddNoResultsIssue(issues, searchTerm, sold: true, soldSummary, merged.Count - beforeSold);
         }
 
         return new SearchCollectionResult(merged.Values.ToList(), activeSummary?.TotalReported, issues);
@@ -117,6 +121,27 @@ public sealed class SearchPageService : ISearchPageService
             ListingId: null,
             IssueType: "PriceBandCapHit",
             ErrorMessage: $"Hit the {summary.BandsFetched}-band cap while collecting '{searchTerm}' ({direction}).",
+            Phase: "Search",
+            HttpStatusCode: null));
+    }
+
+    private static void AddNoResultsIssue(
+        List<ScrapeRunIssueDetails> issues,
+        string searchTerm,
+        bool sold,
+        PriceBandCollectionSummary? summary,
+        int listingsAdded)
+    {
+        if (summary is not { BandsFetched: > 0, TotalReported: null } || listingsAdded > 0)
+        {
+            return;
+        }
+
+        var direction = sold ? "sold" : "active";
+        issues.Add(new ScrapeRunIssueDetails(
+            ListingId: null,
+            IssueType: "SearchYieldedNoResults",
+            ErrorMessage: $"'{searchTerm}' ({direction}) fetched {summary.BandsFetched} band(s), collected 0 listings, and the search response carried no reported total; the scraper likely returned an unexpected payload shape rather than a genuinely empty search.",
             Phase: "Search",
             HttpStatusCode: null));
     }

@@ -1,6 +1,7 @@
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
+using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -53,6 +54,52 @@ public class SearchPageServiceTests
         await harness.Client.Received(1).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
 
         Assert.That(result.Listings, Is.Empty);
+    }
+
+    [Test]
+    public async Task Should_record_an_issue_when_a_price_band_search_yields_no_results_and_no_total()
+    {
+        var harness = BuildMercari(new ScrapeOptions(MaxPages: 1, CollectSold: false, MaxBandsPerDirection: 8), totalReported: null);
+
+        var result = await harness.Service.Collect("pokemon card lot", Marketplace.Mercari, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Listings, Is.Empty);
+            Assert.That(result.Issues, Has.Some.Matches<ScrapeRunIssueDetails>(
+                issue => issue.IssueType == "SearchYieldedNoResults"));
+        });
+    }
+
+    [Test]
+    public async Task Should_not_record_a_no_results_issue_when_a_real_total_is_reported()
+    {
+        var harness = BuildMercari(new ScrapeOptions(MaxPages: 1, CollectSold: false, MaxBandsPerDirection: 8), totalReported: 0);
+
+        var result = await harness.Service.Collect("pokemon card lot", Marketplace.Mercari, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(result.Issues, Has.None.Matches<ScrapeRunIssueDetails>(
+            issue => issue.IssueType == "SearchYieldedNoResults"));
+    }
+
+    private static Harness BuildMercari(ScrapeOptions options, int? totalReported)
+    {
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("{}");
+
+        var urls = Substitute.For<IEbaySearchUrlService, IPriceBandSearchUrlService>();
+        urls.Marketplace.Returns(Marketplace.Mercari);
+        ((IPriceBandSearchUrlService)urls)
+            .BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
+            .Returns("https://search");
+
+        var parser = Substitute.For<ISearchPageParser>();
+        parser.Marketplace.Returns(Marketplace.Mercari);
+        parser.Parse(Arg.Any<string>()).Returns(new SearchPageResult([], totalReported));
+
+        return new Harness(
+            new SearchPageService(client, [(IEbaySearchUrlService)urls], [parser], options, NullLogger<SearchPageService>.Instance),
+            client);
     }
 
     private static Harness Build(ScrapeOptions options, bool empty = false)
