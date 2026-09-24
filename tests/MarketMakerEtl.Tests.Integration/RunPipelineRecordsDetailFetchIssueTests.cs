@@ -6,14 +6,14 @@ using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Integration;
 
 [TestFixture]
-public class RunPipelineUsesInProcessScraperTests
+public class RunPipelineRecordsDetailFetchIssueTests
 {
     private const string SearchTerm = "ps5";
+    private const string ItemUrl = "https://www.ebay.co.uk/itm/123456789012";
 
     private const string KnownSearchPage = """
         <ul>
@@ -31,7 +31,7 @@ public class RunPipelineUsesInProcessScraperTests
     [SetUp]
     public void SetUp()
     {
-        _databasePath = Path.Combine(Path.GetTempPath(), $"mm-etl-it-{Guid.NewGuid():N}.db");
+        _databasePath = Path.Combine(Path.GetTempPath(), $"mm-etl-it-detail-issue-{Guid.NewGuid():N}.db");
         var services = new ServiceCollection();
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite($"Data Source={_databasePath}"));
@@ -54,13 +54,23 @@ public class RunPipelineUsesInProcessScraperTests
     }
 
     [Test]
-    public async Task Should_run_the_pipeline_through_an_in_process_scrape_client()
+    public async Task Should_end_the_run_completed_with_errors_and_name_the_listing_whose_item_page_failed()
     {
-        var urls = new EbaySearchUrlService();
-        var expectedUrl = urls.BuildSearch(SearchTerm, sold: false, page: 1);
-        var client = new InProcessScrapeClient(expectedUrl, KnownSearchPage);
         var store = CreateStore();
-        var runs = CreateRunService(client, urls, store);
+        var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        var client = new BlockedItemPageScrapeClient(KnownSearchPage, ItemUrl);
+        var detailFetch = new ItemDetailFetchService(
+            new ItemDetailStore(factory), client, [new EbayItemPageParserService()], new DetailFetchOptions(4, 50, 1));
+        var runs = new ScrapeRunService(
+            new SearchPageService(
+                client,
+                [new EbaySearchUrlService()],
+                [new EbaySearchParser()],
+                new ScrapeOptions(MaxPages: 1, CollectSold: false),
+                NullLogger<SearchPageService>.Instance),
+            store,
+            detailFetch,
+            new ScrapeRunReportStore(factory));
 
         var jobId = await store.EnsureJob(SearchTerm, CancellationToken.None);
         var runId = await store.EnqueueRun(jobId, SearchTerm, TriggerType.Manual, CancellationToken.None);
@@ -69,13 +79,14 @@ public class RunPipelineUsesInProcessScraperTests
         await runs.Run(work!, CancellationToken.None);
 
         var recordedRun = (await store.GetRun(runId, CancellationToken.None))!;
-        var listings = await store.GetListings(jobId, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
-            Assert.That(client.RequestedUrls, Is.EqualTo(new[] { expectedUrl }));
-            Assert.That(recordedRun.Status, Is.EqualTo(ScrapeRunStatus.Completed));
-            Assert.That(listings, Has.Count.EqualTo(1));
+            Assert.That(recordedRun.Status, Is.EqualTo(ScrapeRunStatus.CompletedWithErrors));
+            Assert.That(recordedRun.Issues, Has.Count.EqualTo(1));
+            Assert.That(recordedRun.Issues[0].ListingId, Is.EqualTo("123456789012"));
+            Assert.That(recordedRun.Issues[0].Phase, Is.EqualTo("Detail"));
+            Assert.That(recordedRun.ListingsFailed, Is.EqualTo(1));
         });
     }
 
@@ -84,40 +95,11 @@ public class RunPipelineUsesInProcessScraperTests
             _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),
             new ScrapeRunStateService());
 
-    private ScrapeRunService CreateRunService(
-        IScrapeClient client,
-        IEbaySearchUrlService urls,
-        ScrapeStore store)
+    private sealed class BlockedItemPageScrapeClient(string searchPage, string blockedUrl) : IScrapeClient
     {
-        var detailFetch = Substitute.For<IItemDetailFetchService>();
-        detailFetch.FetchDetails(Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(new List<ScrapeRunIssueDetails>());
-
-        return new ScrapeRunService(
-            new SearchPageService(
-                client,
-                [urls],
-                [new EbaySearchParser()],
-                new ScrapeOptions(MaxPages: 1, CollectSold: false),
-                NullLogger<SearchPageService>.Instance),
-            store,
-            detailFetch,
-            new ScrapeRunReportStore(_provider.GetRequiredService<IDbContextFactory<EtlDbContext>>()));
-    }
-
-    private sealed class InProcessScrapeClient(string expectedUrl, string html) : IScrapeClient
-    {
-        private readonly List<string> _requestedUrls = [];
-
-        public IReadOnlyList<string> RequestedUrls => _requestedUrls;
-
-        public Task<string> GetPageHtml(string url, CancellationToken ct)
-        {
-            _requestedUrls.Add(url);
-            return url == expectedUrl
-                ? Task.FromResult(html)
-                : Task.FromException<string>(
-                    new InvalidOperationException($"unexpected outbound request to {url}"));
-        }
+        public Task<string> GetPageHtml(string url, CancellationToken ct) =>
+            url.StartsWith(blockedUrl, StringComparison.Ordinal)
+                ? throw new InvalidOperationException("item page blocked")
+                : Task.FromResult(searchPage);
     }
 }

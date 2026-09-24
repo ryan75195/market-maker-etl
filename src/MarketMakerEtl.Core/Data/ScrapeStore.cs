@@ -40,7 +40,7 @@ public sealed class ScrapeStore : IScrapeStore
         return job.Id;
     }
 
-    public async Task<int> EnqueueRun(int jobId, string searchTerm, CancellationToken ct)
+    public async Task<int> EnqueueRun(int jobId, string searchTerm, TriggerType trigger, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var job = await db.ScrapeJobs.FindAsync([jobId], ct);
@@ -50,6 +50,7 @@ public sealed class ScrapeStore : IScrapeStore
             SearchTerm = searchTerm,
             Marketplace = job?.Marketplace ?? Marketplace.Ebay,
             Status = nameof(ScrapeRunStatus.Queued),
+            TriggerType = trigger.ToString(),
             StartedUtc = DateTime.UtcNow
         };
         db.ScrapeRuns.Add(run);
@@ -76,32 +77,36 @@ public sealed class ScrapeStore : IScrapeStore
         return new ScrapeRunWork(run.Id, run.JobId, run.SearchTerm, run.Marketplace);
     }
 
-    public async Task CompleteRun(int runId, CancellationToken ct)
+    public async Task CompleteRun(int runId, RunCompletionCounts counts, CancellationToken ct)
     {
-        var jobId = await UpdateStatus(runId, ScrapeRunStatus.Completed, null, ct);
-        if (jobId is not null)
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var run = await db.ScrapeRuns.FindAsync([runId], ct);
+        if (run is null)
         {
-            await StampJobLastRun(jobId.Value, ct);
+            return;
         }
+
+        var finalStatus = await ScrapeRunCompletion.DetermineStatus(db, runId, ct);
+        _states.EnsureCanTransition(Enum.Parse<ScrapeRunStatus>(run.Status), finalStatus);
+        ScrapeRunCompletion.Apply(run, finalStatus, counts);
+        await db.SaveChangesAsync(ct);
+        await StampJobLastRun(run.JobId, ct);
     }
 
     public Task FailRun(int runId, string error, CancellationToken ct) =>
         UpdateStatus(runId, ScrapeRunStatus.Failed, error, ct);
 
-    public async Task UpsertListings(int jobId, IReadOnlyList<ListingSummary> listings, CancellationToken ct)
+    public async Task<ListingUpsertSummary> UpsertListings(
+        int jobId,
+        IReadOnlyList<ListingSummary> listings,
+        CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var job = await db.ScrapeJobs.FindAsync([jobId], ct);
         var marketplace = job?.Marketplace ?? Marketplace.Ebay;
-
-        foreach (var listing in listings.GroupBy(l => l.ListingId).Select(g => g.Last()))
-        {
-            var existing = await db.Listings
-                .FirstOrDefaultAsync(l => l.ListingId == listing.ListingId, ct);
-            ListingUpserter.Apply(db, jobId, marketplace, listing, existing);
-        }
-
+        var summary = await ListingUpserter.ApplyAll(db, jobId, marketplace, listings, ct);
         await db.SaveChangesAsync(ct);
+        return summary;
     }
 
     public async Task<ScrapeRunView?> GetRun(int runId, CancellationToken ct)
@@ -109,14 +114,7 @@ public sealed class ScrapeStore : IScrapeStore
         await using var db = await _factory.CreateDbContextAsync(ct);
         var run = await db.ScrapeRuns.FindAsync([runId], ct);
 
-        return run is null
-            ? null
-            : new ScrapeRunView(
-                run.Id,
-                run.JobId,
-                run.SearchTerm,
-                Enum.Parse<ScrapeRunStatus>(run.Status),
-                run.ErrorMessage);
+        return run is null ? null : await ScrapeRunViewMapper.Build(db, run, ct);
     }
 
     public async Task<IReadOnlyList<ListingSummary>> GetListings(int jobId, CancellationToken ct)

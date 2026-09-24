@@ -1,12 +1,17 @@
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
+using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Models.Scraper;
 
 namespace MarketMakerEtl.Core.Services;
 
 public sealed class ItemDetailFetchService : IItemDetailFetchService
 {
+    private const string DetailPhase = "Detail";
+    private const string FetchFailedIssueType = "ItemDetailFetchFailed";
+    private const string ParseFailedIssueType = "ItemDetailParseFailed";
+
     private readonly IItemDetailStore _store;
     private readonly IScrapeClient _client;
     private readonly IEnumerable<IItemPageParser> _parsers;
@@ -24,26 +29,27 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
         _options = options;
     }
 
-    public async Task FetchDetails(int jobId, CancellationToken ct)
+    public async Task<IReadOnlyList<ScrapeRunIssueDetails>> FetchDetails(int jobId, CancellationToken ct)
     {
         var targets = await _store.GetListingsNeedingDetail(
             jobId, _options.MaxDetailFetchesPerRun, _options.MaxDetailFetchAttempts, ct);
 
         if (targets.Count == 0)
         {
-            return;
+            return [];
         }
 
         using var gate = new SemaphoreSlim(Math.Max(1, _options.MaxConcurrentDetailFetches));
-        await Task.WhenAll(targets.Select(target => FetchOne(target, gate, ct)));
+        var results = await Task.WhenAll(targets.Select(target => FetchOne(target, gate, ct)));
+        return results.Where(issue => issue is not null).Select(issue => issue!).ToList();
     }
 
-    private async Task FetchOne(ListingDetailTarget target, SemaphoreSlim gate, CancellationToken ct)
+    private async Task<ScrapeRunIssueDetails?> FetchOne(ListingDetailTarget target, SemaphoreSlim gate, CancellationToken ct)
     {
         await gate.WaitAsync(ct);
         try
         {
-            await FetchDetail(target, ct);
+            return await FetchDetail(target, ct);
         }
         finally
         {
@@ -51,14 +57,15 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
         }
     }
 
-    private async Task FetchDetail(ListingDetailTarget target, CancellationToken ct)
+    private async Task<ScrapeRunIssueDetails?> FetchDetail(ListingDetailTarget target, CancellationToken ct)
     {
         var parser = FindParser(target.Marketplace);
 
         if (string.IsNullOrWhiteSpace(target.Url) || parser is null)
         {
             await _store.MarkDetailFetchFailed(target.Id, _options.MaxDetailFetchAttempts, ct);
-            return;
+            return new ScrapeRunIssueDetails(
+                target.ListingId, FetchFailedIssueType, "No item page URL or supported parser for this marketplace.", DetailPhase, null);
         }
 
         try
@@ -69,14 +76,17 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
             if (page is null || string.IsNullOrWhiteSpace(page.Title))
             {
                 await _store.MarkDetailFetchFailed(target.Id, _options.MaxDetailFetchAttempts, ct);
-                return;
+                return new ScrapeRunIssueDetails(
+                    target.ListingId, ParseFailedIssueType, "Item page did not contain a parsable title.", DetailPhase, null);
             }
 
             await _store.ApplyItemDetail(target.Id, page, ct);
+            return null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await _store.MarkDetailFetchFailed(target.Id, _options.MaxDetailFetchAttempts, ct);
+            return new ScrapeRunIssueDetails(target.ListingId, FetchFailedIssueType, ex.Message, DetailPhase, null);
         }
     }
 

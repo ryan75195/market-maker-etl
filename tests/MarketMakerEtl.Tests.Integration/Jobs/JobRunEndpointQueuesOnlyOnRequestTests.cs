@@ -31,6 +31,7 @@ public class JobRunEndpointQueuesOnlyOnRequestTests : JobsApiTestBase
             Assert.That(runResponse.StatusCode, Is.EqualTo(HttpStatusCode.Accepted));
             Assert.That(queuedRun!.JobId, Is.EqualTo(created.Id));
             Assert.That(queuedRun.Status, Is.EqualTo(ScrapeRunStatus.Queued));
+            Assert.That(queuedRun.TriggerType, Is.EqualTo(TriggerType.Manual));
             Assert.That(jobAfterRun!.LastQueuedUtc, Is.Not.Null);
         });
     }

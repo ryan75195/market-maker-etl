@@ -52,7 +52,7 @@ public class ResultCardsWithoutListingsFailRunPerMarketplaceTests
     {
         var store = CreateStore();
         var jobId = await store.EnsureJob(SearchTerm, CancellationToken.None, marketplace);
-        var runId = await store.EnqueueRun(jobId, SearchTerm, CancellationToken.None);
+        var runId = await store.EnqueueRun(jobId, SearchTerm, TriggerType.Manual, CancellationToken.None);
         var work = await store.ClaimNextQueuedRun(CancellationToken.None);
         var runs = CreateRunService(marketplace, containsListingMarkup: true, store);
 
@@ -74,7 +74,7 @@ public class ResultCardsWithoutListingsFailRunPerMarketplaceTests
     {
         var store = CreateStore();
         var jobId = await store.EnsureJob(SearchTerm, CancellationToken.None, marketplace);
-        var runId = await store.EnqueueRun(jobId, SearchTerm, CancellationToken.None);
+        var runId = await store.EnqueueRun(jobId, SearchTerm, TriggerType.Manual, CancellationToken.None);
         var work = await store.ClaimNextQueuedRun(CancellationToken.None);
         var runs = CreateRunService(marketplace, containsListingMarkup: false, store);
 
@@ -95,7 +95,7 @@ public class ResultCardsWithoutListingsFailRunPerMarketplaceTests
             _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),
             new ScrapeRunStateService());
 
-    private static ScrapeRunService CreateRunService(
+    private ScrapeRunService CreateRunService(
         Marketplace marketplace,
         bool containsListingMarkup,
         ScrapeStore store)
@@ -119,6 +119,15 @@ public class ResultCardsWithoutListingsFailRunPerMarketplaceTests
             [parser],
             new ScrapeOptions(MaxPages: 1, CollectSold: false),
             NullLogger<SearchPageService>.Instance);
-        return new ScrapeRunService(search, store, Substitute.For<IItemDetailFetchService>());
+
+        var detailFetch = Substitute.For<IItemDetailFetchService>();
+        detailFetch.FetchDetails(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ScrapeRunIssueDetails>());
+
+        return new ScrapeRunService(
+            search,
+            store,
+            detailFetch,
+            new ScrapeRunReportStore(_provider.GetRequiredService<IDbContextFactory<EtlDbContext>>()));
     }
 }

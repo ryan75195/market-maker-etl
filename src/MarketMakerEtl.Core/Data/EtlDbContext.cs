@@ -1,4 +1,5 @@
 using MarketMakerEtl.Core.Data.Entities;
+using MarketMakerEtl.Core.Models.Runs;
 using Microsoft.EntityFrameworkCore;
 
 namespace MarketMakerEtl.Core.Data;
@@ -13,6 +14,8 @@ public sealed class EtlDbContext : DbContext
     public DbSet<ScrapeJobEntity> ScrapeJobs => Set<ScrapeJobEntity>();
 
     public DbSet<ScrapeRunEntity> ScrapeRuns => Set<ScrapeRunEntity>();
+
+    public DbSet<ScrapeRunIssueEntity> ScrapeRunIssues => Set<ScrapeRunIssueEntity>();
 
     public DbSet<ListingEntity> Listings => Set<ListingEntity>();
 
@@ -39,8 +42,20 @@ public sealed class EtlDbContext : DbContext
             entity.ToTable("ScrapeRuns");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(32);
+            entity.Property(e => e.TriggerType).IsRequired().HasMaxLength(32).HasDefaultValue(nameof(TriggerType.Manual));
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
             entity.HasIndex(e => e.Status);
+        });
+
+        modelBuilder.Entity<ScrapeRunIssueEntity>(entity =>
+        {
+            entity.ToTable("ScrapeRunIssues");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ListingId).HasMaxLength(64);
+            entity.Property(e => e.IssueType).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.ErrorMessage).IsRequired().HasMaxLength(2000);
+            entity.Property(e => e.Phase).IsRequired().HasMaxLength(32);
+            entity.HasIndex(e => e.ScrapeRunId);
         });
 
         modelBuilder.Entity<ListingEntity>(entity =>

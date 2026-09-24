@@ -19,9 +19,9 @@ public class SearchPageServiceTests
     {
         var harness = Build(new ScrapeOptions(MaxPages: 1, CollectSold: false));
 
-        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
+        var result = await harness.Service.Collect("ps5", Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
 
-        Assert.That(listings, Has.Count.EqualTo(1));
+        Assert.That(result.Listings, Has.Count.EqualTo(1));
     }
 
     [Test]
@@ -39,9 +39,9 @@ public class SearchPageServiceTests
     {
         var harness = Build(new ScrapeOptions(MaxPages: 1, CollectSold: true));
 
-        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
+        var result = await harness.Service.Collect("ps5", Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
 
-        Assert.That(listings, Has.Count.EqualTo(1));
+        Assert.That(result.Listings, Has.Count.EqualTo(1));
     }
 
     [Test]
@@ -49,10 +49,10 @@ public class SearchPageServiceTests
     {
         var harness = Build(new ScrapeOptions(MaxPages: 3, CollectSold: false), empty: true);
 
-        var listings = await harness.Service.Collect("ps5", Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
+        var result = await harness.Service.Collect("ps5", Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);
         await harness.Client.Received(1).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
 
-        Assert.That(listings, Is.Empty);
+        Assert.That(result.Listings, Is.Empty);
     }
 
     private static Harness Build(ScrapeOptions options, bool empty = false)

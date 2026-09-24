@@ -66,7 +66,7 @@ public class RunPipelinePersistsListingsTests
         var runs = CreateRunService(new StubScrapeClient(KnownSearchPage), store);
 
         var jobId = await store.EnsureJob(SearchTerm, CancellationToken.None);
-        var runId = await store.EnqueueRun(jobId, SearchTerm, CancellationToken.None);
+        var runId = await store.EnqueueRun(jobId, SearchTerm, TriggerType.Manual, CancellationToken.None);
         var work = await store.ClaimNextQueuedRun(CancellationToken.None);
 
         await runs.Run(work!, CancellationToken.None);
@@ -91,6 +91,16 @@ public class RunPipelinePersistsListingsTests
             Assert.That(sold.IsSold, Is.True);
 
             Assert.That(recordedRun.Status, Is.EqualTo(ScrapeRunStatus.Completed));
+            Assert.That(recordedRun.TriggerType, Is.EqualTo(TriggerType.Manual));
+            Assert.That(recordedRun.ListingsAddedActive, Is.EqualTo(1));
+            Assert.That(recordedRun.ListingsAddedSold, Is.EqualTo(1));
+            Assert.That(recordedRun.ListingsUpdated, Is.EqualTo(0));
+            Assert.That(recordedRun.ListingsSkipped, Is.EqualTo(0));
+            Assert.That(recordedRun.ListingsFailed, Is.EqualTo(0));
+            Assert.That(recordedRun.TotalListingsFound, Is.EqualTo(2));
+            Assert.That(recordedRun.SearchCompletedUtc, Is.Not.Null);
+            Assert.That(recordedRun.DetailCompletedUtc, Is.Not.Null);
+            Assert.That(recordedRun.Issues, Is.Empty);
         });
     }
 
@@ -99,8 +109,13 @@ public class RunPipelinePersistsListingsTests
             _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),
             new ScrapeRunStateService());
 
-    private static ScrapeRunService CreateRunService(IScrapeClient client, ScrapeStore store) =>
-        new(
+    private ScrapeRunService CreateRunService(IScrapeClient client, ScrapeStore store)
+    {
+        var detailFetch = Substitute.For<IItemDetailFetchService>();
+        detailFetch.FetchDetails(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ScrapeRunIssueDetails>());
+
+        return new ScrapeRunService(
             new SearchPageService(
                 client,
                 [new EbaySearchUrlService()],
@@ -108,7 +123,9 @@ public class RunPipelinePersistsListingsTests
                 new ScrapeOptions(MaxPages: 1, CollectSold: false),
                 NullLogger<SearchPageService>.Instance),
             store,
-            Substitute.For<IItemDetailFetchService>());
+            detailFetch,
+            new ScrapeRunReportStore(_provider.GetRequiredService<IDbContextFactory<EtlDbContext>>()));
+    }
 
     private sealed class StubScrapeClient(string html) : IScrapeClient
     {

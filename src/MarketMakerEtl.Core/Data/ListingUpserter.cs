@@ -1,15 +1,25 @@
 using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
+using MarketMakerEtl.Core.Models.Runs;
+using Microsoft.EntityFrameworkCore;
 
 namespace MarketMakerEtl.Core.Data;
+
+internal enum ListingUpsertOutcome
+{
+    AddedActive,
+    AddedSold,
+    Updated,
+    Skipped
+}
 
 internal static class ListingUpserter
 {
     private const string ActiveStatus = "Active";
     private const string SoldStatus = "Sold";
 
-    public static void Apply(
+    public static ListingUpsertOutcome Apply(
         EtlDbContext db,
         int jobId,
         Marketplace marketplace,
@@ -19,10 +29,45 @@ internal static class ListingUpserter
         if (existing is null)
         {
             AddNew(db, jobId, marketplace, listing);
-            return;
+            return listing.IsSold ? ListingUpsertOutcome.AddedSold : ListingUpsertOutcome.AddedActive;
         }
 
-        UpdateExisting(db, listing, existing);
+        return UpdateExisting(db, listing, existing);
+    }
+
+    public static async Task<ListingUpsertSummary> ApplyAll(
+        EtlDbContext db,
+        int jobId,
+        Marketplace marketplace,
+        IReadOnlyList<ListingSummary> listings,
+        CancellationToken ct)
+    {
+        var addedActive = 0;
+        var addedSold = 0;
+        var updated = 0;
+        var skipped = 0;
+
+        foreach (var listing in listings.GroupBy(l => l.ListingId).Select(g => g.Last()))
+        {
+            var existing = await db.Listings.FirstOrDefaultAsync(l => l.ListingId == listing.ListingId, ct);
+            switch (Apply(db, jobId, marketplace, listing, existing))
+            {
+                case ListingUpsertOutcome.AddedActive:
+                    addedActive++;
+                    break;
+                case ListingUpsertOutcome.AddedSold:
+                    addedSold++;
+                    break;
+                case ListingUpsertOutcome.Updated:
+                    updated++;
+                    break;
+                default:
+                    skipped++;
+                    break;
+            }
+        }
+
+        return new ListingUpsertSummary(addedActive, addedSold, updated, skipped);
     }
 
     private static void AddNew(EtlDbContext db, int jobId, Marketplace marketplace, ListingSummary listing)
@@ -50,7 +95,7 @@ internal static class ListingUpserter
             ListingHistorySource.InitialScrape);
     }
 
-    private static void UpdateExisting(EtlDbContext db, ListingSummary listing, ListingEntity existing)
+    private static ListingUpsertOutcome UpdateExisting(EtlDbContext db, ListingSummary listing, ListingEntity existing)
     {
         var priceChanged = listing.Price is not null && existing.Price != listing.Price;
         var becameSold = !existing.IsSold && listing.IsSold;
@@ -64,12 +109,12 @@ internal static class ListingUpserter
             existing.ItemStatus = SoldStatus;
             existing.SoldPrice ??= listing.Price;
             AddHistoryRow(db, existing, SoldStatus, existing.SoldPrice, ListingHistorySource.StatusUpdate);
-            return;
+            return ListingUpsertOutcome.Updated;
         }
 
         if (!priceChanged)
         {
-            return;
+            return ListingUpsertOutcome.Skipped;
         }
 
         AddHistoryRow(
@@ -78,6 +123,7 @@ internal static class ListingUpserter
             string.IsNullOrWhiteSpace(existing.ItemStatus) ? ActiveStatus : existing.ItemStatus,
             listing.Price,
             ListingHistorySource.PriceUpdate);
+        return ListingUpsertOutcome.Updated;
     }
 
     private static void AddHistoryRow(EtlDbContext db, ListingEntity entity, string status, decimal? price, string source)

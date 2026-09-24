@@ -44,7 +44,7 @@ public class ScrapeStoreTests
     {
         var store = CreateStore();
         var jobId = await store.EnsureJob("ps5", CancellationToken.None);
-        var runId = await store.EnqueueRun(jobId, "ps5", CancellationToken.None);
+        var runId = await store.EnqueueRun(jobId, "ps5", TriggerType.Manual, CancellationToken.None);
 
         var work = await store.ClaimNextQueuedRun(CancellationToken.None);
 
@@ -78,7 +78,7 @@ public class ScrapeStoreTests
     {
         var store = CreateStore();
         var jobId = await store.EnsureJob("ps5", CancellationToken.None);
-        var runId = await store.EnqueueRun(jobId, "ps5", CancellationToken.None);
+        var runId = await store.EnqueueRun(jobId, "ps5", TriggerType.Manual, CancellationToken.None);
         await store.ClaimNextQueuedRun(CancellationToken.None);
 
         await store.FailRun(runId, "scraper unreachable", CancellationToken.None);
@@ -96,10 +96,15 @@ public class ScrapeStoreTests
     {
         var store = CreateStore();
         var jobId = await store.EnsureJob("ps5", CancellationToken.None);
-        var runId = await store.EnqueueRun(jobId, "ps5", CancellationToken.None);
+        var runId = await store.EnqueueRun(jobId, "ps5", TriggerType.Manual, CancellationToken.None);
         await store.ClaimNextQueuedRun(CancellationToken.None);
+        var searchCompletedUtc = DateTime.UtcNow;
+        var detailCompletedUtc = DateTime.UtcNow;
 
-        await store.CompleteRun(runId, CancellationToken.None);
+        await store.CompleteRun(
+            runId,
+            new RunCompletionCounts(1, 0, 0, 0, 0, 1, 1, searchCompletedUtc, detailCompletedUtc),
+            CancellationToken.None);
 
         var run = await store.GetRun(runId, CancellationToken.None);
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
@@ -109,6 +114,8 @@ public class ScrapeStoreTests
         Assert.Multiple(() =>
         {
             Assert.That(run!.Status, Is.EqualTo(ScrapeRunStatus.Completed));
+            Assert.That(run.ListingsAddedActive, Is.EqualTo(1));
+            Assert.That(run.TotalReportedBySearch, Is.EqualTo(1));
             Assert.That(job.LastRunUtc, Is.Not.Null);
         });
     }

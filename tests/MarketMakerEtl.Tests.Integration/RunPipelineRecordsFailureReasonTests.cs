@@ -51,7 +51,7 @@ public class RunPipelineRecordsFailureReasonTests
         var runs = CreateRunService(new FailingScrapeClient(FailureReason), store);
 
         var jobId = await store.EnsureJob(SearchTerm, CancellationToken.None);
-        var runId = await store.EnqueueRun(jobId, SearchTerm, CancellationToken.None);
+        var runId = await store.EnqueueRun(jobId, SearchTerm, TriggerType.Manual, CancellationToken.None);
         var work = await store.ClaimNextQueuedRun(CancellationToken.None);
 
         await runs.Run(work!, CancellationToken.None);
@@ -72,7 +72,7 @@ public class RunPipelineRecordsFailureReasonTests
             _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),
             new ScrapeRunStateService());
 
-    private static ScrapeRunService CreateRunService(IScrapeClient client, ScrapeStore store) =>
+    private ScrapeRunService CreateRunService(IScrapeClient client, ScrapeStore store) =>
         new(
             new SearchPageService(
                 client,
@@ -81,7 +81,8 @@ public class RunPipelineRecordsFailureReasonTests
                 new ScrapeOptions(MaxPages: 1, CollectSold: false),
                 NullLogger<SearchPageService>.Instance),
             store,
-            Substitute.For<IItemDetailFetchService>());
+            Substitute.For<IItemDetailFetchService>(),
+            new ScrapeRunReportStore(_provider.GetRequiredService<IDbContextFactory<EtlDbContext>>()));
 
     private sealed class FailingScrapeClient(string reason) : IScrapeClient
     {

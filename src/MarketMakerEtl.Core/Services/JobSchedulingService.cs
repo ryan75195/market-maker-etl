@@ -1,5 +1,6 @@
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Jobs;
+using MarketMakerEtl.Core.Models.Runs;
 
 namespace MarketMakerEtl.Core.Services;
 
@@ -34,7 +35,7 @@ public sealed class JobSchedulingService : IJobSchedulingService
                 continue;
             }
 
-            await _scrapeStore.EnqueueRun(job.Id, job.SearchTerm, ct);
+            await _scrapeStore.EnqueueRun(job.Id, job.SearchTerm, TriggerType.Scheduled, ct);
             await _jobs.MarkQueued(job.Id, now, ct);
             queuedCount++;
         }
