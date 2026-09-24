@@ -76,6 +76,19 @@ only:
   [AIOWebScraper#150](https://github.com/ryan75195/AIOWebScraper/issues/150)
   for the evidence and a curated-allowlist alternative if you need domain
   filtering for other marketplaces at the same time as Mercari.
+
+  **Setting `allowedDomains: []` in `appsettings.local.json` does not clear
+  a populated list from an earlier-loaded config file.** ScraperWorker loads
+  `appsettings.routing.json` (tracked in git, and may hold an allowlist for
+  other marketplaces such as eBay) before `appsettings.local.json`. .NET's
+  configuration system merges array-shaped settings **by index**, not by
+  replacement: an empty array in a later-loaded file contributes no indexed
+  keys at all, so it leaves every entry from the earlier file's array in
+  place rather than overriding it. The only way to actually disable the
+  allowlist for a local run is to empty the array in
+  `appsettings.routing.json` itself, as a local, uncommitted edit (the same
+  way the off-screen `StealthBrowser.cs` patch below is local and
+  uncommitted) — an empty `appsettings.local.json` array cannot do it.
 - `routing:blockedResourceTypes`
 
 ### Off-screen browser requirement
