@@ -42,7 +42,7 @@ public class ListingDetailFieldsRoundTripThroughTheStoreTests
     [Test]
     public async Task Should_persist_image_urls_original_price_and_category_from_a_captured_search_payload_listing()
     {
-        var listing = new MercariSearchParser().Parse(CapturedPayload)[0];
+        var listing = new MercariSearchParser().Parse(CapturedPayload).Listings[0];
         var store = new ScrapeStore(
             _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),
             new ScrapeRunStateService());

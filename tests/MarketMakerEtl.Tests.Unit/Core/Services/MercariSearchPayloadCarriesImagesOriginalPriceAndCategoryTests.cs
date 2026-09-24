@@ -11,7 +11,7 @@ public class MercariSearchPayloadCarriesImagesOriginalPriceAndCategoryTests
     [Test]
     public void Should_read_the_photo_url_original_price_and_category_from_a_captured_search_payload_item()
     {
-        var summary = new MercariSearchParser().Parse(CapturedPayload)[0];
+        var summary = new MercariSearchParser().Parse(CapturedPayload).Listings[0];
 
         Assert.Multiple(() =>
         {
@@ -26,7 +26,7 @@ public class MercariSearchPayloadCarriesImagesOriginalPriceAndCategoryTests
     [Test]
     public void Should_leave_likes_unset_because_the_search_payload_never_reports_a_like_count()
     {
-        var summaries = new MercariSearchParser().Parse(CapturedPayload);
+        var summaries = new MercariSearchParser().Parse(CapturedPayload).Listings;
 
         Assert.That(summaries.Select(summary => summary.Likes), Has.All.Null);
     }
