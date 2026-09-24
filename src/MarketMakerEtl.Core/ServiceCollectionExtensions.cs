@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions
     private const bool DefaultCollectSold = true;
     private const int DefaultMaxBandsPerDirection = 200;
     private const int DefaultSoldBackfillDays = 30;
+    private const int DefaultMaxBackfillItemPageFetches = 400;
     private const string DefaultDatabaseFileName = "marketmakeretl.db";
     private const int DefaultTickMinutes = 5;
     private const int DefaultRefreshIntervalHours = 24;
@@ -105,7 +106,8 @@ public static class ServiceCollectionExtensions
             ReadInt(configuration, "Scrape:MaxPages", DefaultMaxPages),
             ReadBool(configuration, "Scrape:CollectSold", DefaultCollectSold),
             ReadInt(configuration, "Scrape:MaxBandsPerDirection", DefaultMaxBandsPerDirection),
-            ReadInt(configuration, "Scrape:SoldBackfillDays", DefaultSoldBackfillDays));
+            ReadInt(configuration, "Scrape:SoldBackfillDays", DefaultSoldBackfillDays),
+            ReadInt(configuration, "Scrape:MaxBackfillItemPageFetches", DefaultMaxBackfillItemPageFetches));
 
     private static ScheduleOptions BuildScheduleOptions(IConfiguration? configuration) =>
         new(

@@ -102,7 +102,7 @@ public class SoldListingsFromSoldSearchTests
                 client,
                 new MarketplaceAdapters([new EbaySearchUrlService()], [new EbaySearchParser()], []),
                 new ScrapeOptions(MaxPages: 1, CollectSold: true),
-                new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3),
+                TimeProvider.System,
                 NullLogger<SearchPageService>.Instance),
             store,
             new NoOpItemDetailFetchService(),

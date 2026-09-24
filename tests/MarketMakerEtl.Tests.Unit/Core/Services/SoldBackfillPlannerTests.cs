@@ -2,6 +2,7 @@ using System.Globalization;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Services;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -10,6 +11,7 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 public class SoldBackfillPlannerTests
 {
     private const int SoldBackfillDays = 30;
+    private static readonly DateTimeOffset Now = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
 
     [Test]
     public async Task Should_report_the_full_page_as_in_window_when_the_oldest_item_has_no_usable_date()
@@ -118,7 +120,7 @@ public class SoldBackfillPlannerTests
     }
 
     [Test]
-    public async Task Should_stop_fetching_item_pages_once_the_shared_detail_fetch_budget_is_exhausted()
+    public async Task Should_store_only_what_is_already_decided_when_the_item_page_fetch_budget_is_exhausted()
     {
         var newest = BuildListing("n0", "https://x/n0");
         var middle = BuildListing("n1", "https://x/n1");
@@ -135,9 +137,78 @@ public class SoldBackfillPlannerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(decision, Is.EqualTo(SoldBackfillDecision.Store(3, overflowed: false)));
+            Assert.That(decision, Is.EqualTo(SoldBackfillDecision.Store(1, overflowed: false)));
             Assert.That(planner.ItemPageFetchesUsed, Is.EqualTo(1));
+            Assert.That(planner.BudgetExhausted, Is.True);
         });
+    }
+
+    [Test]
+    public async Task Should_resolve_the_date_after_the_item_page_fetch_fails_once_then_succeeds()
+    {
+        var listing = BuildListing("r0", "https://x/r0");
+        var page = new SearchPageResult([listing], TotalCount: 1);
+        var attempts = 0;
+
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml("https://x/r0", Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                attempts++;
+                if (attempts == 1)
+                {
+                    throw new InvalidOperationException("transient scrape failure");
+                }
+
+                return "https://x/r0";
+            });
+
+        var itemParser = Substitute.For<IItemPageParser>();
+        itemParser.Parse("https://x/r0").Returns(BuildDetail(daysAgo: 1));
+
+        var planner = new SoldBackfillPlanner(
+            client, itemParser, SoldBackfillDays, 100, new FakeTimeProvider(Now));
+
+        var decision = await planner.Resolve(page, canSplit: true, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(decision, Is.EqualTo(SoldBackfillDecision.Store(1, overflowed: false)));
+            Assert.That(planner.ItemPageFetchesUsed, Is.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public async Task Should_not_let_an_unresolvable_midpoint_push_the_cutoff_later()
+    {
+        var n0 = BuildListing("u0", "https://x/u0");
+        var n1 = BuildListing("u1", "https://x/u1");
+        var n2 = BuildListing("u2", "https://x/u2");
+        var n3 = BuildListing("u3", "https://x/u3");
+        var page = new SearchPageResult([n0, n1, n2, n3], TotalCount: 4);
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/u0"] = BuildDetail(daysAgo: 1),
+            ["https://x/u2"] = BuildDetail(daysAgo: 40),
+            ["https://x/u3"] = BuildDetail(daysAgo: 45),
+        };
+        var planner = BuildPlanner(detailsByUrl);
+
+        var decision = await planner.Resolve(page, canSplit: true, CancellationToken.None);
+
+        Assert.That(decision, Is.EqualTo(SoldBackfillDecision.Store(1, overflowed: false)));
+    }
+
+    [Test]
+    public void Should_compute_the_cutoff_from_the_injected_time_provider()
+    {
+        var client = Substitute.For<IScrapeClient>();
+        var itemParser = Substitute.For<IItemPageParser>();
+        var timeProvider = new FakeTimeProvider(Now);
+
+        var planner = new SoldBackfillPlanner(client, itemParser, SoldBackfillDays, 100, timeProvider);
+
+        Assert.That(planner.CutoffUtc, Is.EqualTo(Now.UtcDateTime.AddDays(-SoldBackfillDays)));
     }
 
     private static SoldBackfillPlanner BuildPlanner(
@@ -153,7 +224,8 @@ public class SoldBackfillPlannerTests
         itemParser.Parse(Arg.Any<string>())
             .Returns(ci => detailsByUrl.GetValueOrDefault((string)ci[0]));
 
-        return new SoldBackfillPlanner(client, itemParser, soldBackfillDays, maxItemPageFetches);
+        return new SoldBackfillPlanner(
+            client, itemParser, soldBackfillDays, maxItemPageFetches, new FakeTimeProvider(Now));
     }
 
     private static SearchPageResult BuildFullPage(int totalCount)
@@ -190,7 +262,7 @@ public class SoldBackfillPlannerTests
             BuyingFormat: null,
             Status: "Sold",
             SoldPrice: null,
-            SoldDate: DateTime.UtcNow.AddDays(-daysAgo).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
+            SoldDate: Now.UtcDateTime.AddDays(-daysAgo).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
             Seller: null,
             PrimaryImageUrl: null);
 }

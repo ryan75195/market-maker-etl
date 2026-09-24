@@ -66,7 +66,7 @@ public class RunPipelineRecordsDetailFetchIssueTests
                 client,
                 new MarketplaceAdapters([new EbaySearchUrlService()], [new EbaySearchParser()], []),
                 new ScrapeOptions(MaxPages: 1, CollectSold: false),
-                new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3),
+                TimeProvider.System,
                 NullLogger<SearchPageService>.Instance),
             store,
             detailFetch,

@@ -4,6 +4,7 @@ using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -256,6 +257,29 @@ public class MercariPriceBandCollectorTests
     }
 
     [Test]
+    public async Task Should_flag_the_backfill_budget_as_exhausted_when_item_page_fetches_run_out()
+    {
+        var newest = BuildListing("g0", "https://x/g0");
+        var oldest = BuildListing("g1", "https://x/g1");
+        var page = new List<ListingSummary> { newest, oldest };
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/g0"] = BuildDetail(daysAgo: 1),
+        };
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 1,
+            soldBackfillDays: 30,
+            maxItemPageFetches: 1,
+            detailsByUrl,
+            new SearchPageResult(page, TotalCount: 2));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(summary.BackfillBudgetExhausted, Is.True);
+    }
+
+    [Test]
     public async Task Should_use_the_existing_incremental_pruning_path_when_the_job_already_has_sold_listings()
     {
         var known = BuildListing("m1", "https://x/m1");
@@ -361,7 +385,8 @@ public class MercariPriceBandCollectorTests
         itemParser.Parse(Arg.Any<string>())
             .Returns(ci => detailsByUrl.GetValueOrDefault((string)ci[0]));
 
-        var backfill = new SoldBackfillPlanner(client, itemParser, soldBackfillDays, maxItemPageFetches);
+        var backfill = new SoldBackfillPlanner(
+            client, itemParser, soldBackfillDays, maxItemPageFetches, new FakeTimeProvider(DateTimeOffset.UtcNow));
         var settings = new MercariCollectionSettings(maxBandsPerDirection, backfill);
         return new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
     }

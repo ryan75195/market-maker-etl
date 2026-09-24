@@ -15,9 +15,6 @@ public class SearchPageServiceTests
     private static readonly ListingSummary Listing =
         new("111111111111", "PS5", 100m, "GBP", "https://x/itm/1", false, null, null, null);
 
-    private static readonly DetailFetchOptions DetailOptions = new(
-        MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3);
-
     [Test]
     public async Task Should_collect_listings_from_active_pages()
     {
@@ -132,7 +129,7 @@ public class SearchPageServiceTests
 
         var adapters = new MarketplaceAdapters([(IEbaySearchUrlService)urls], [parser], [itemParser]);
         return new Harness(
-            new SearchPageService(client, adapters, options, DetailOptions, NullLogger<SearchPageService>.Instance),
+            new SearchPageService(client, adapters, options, TimeProvider.System, NullLogger<SearchPageService>.Instance),
             client);
     }
 
@@ -154,7 +151,7 @@ public class SearchPageServiceTests
 
         var adapters = new MarketplaceAdapters([urls], [parser], []);
         return new Harness(
-            new SearchPageService(client, adapters, options, DetailOptions, NullLogger<SearchPageService>.Instance),
+            new SearchPageService(client, adapters, options, TimeProvider.System, NullLogger<SearchPageService>.Instance),
             client);
     }
 

@@ -20,29 +20,52 @@ internal readonly record struct SoldBackfillDecision(SoldBackfillOutcomeKind Kin
         new(SoldBackfillOutcomeKind.Store, count, overflowed);
 }
 
+internal enum DateResolutionStatus
+{
+    Resolved,
+    Unresolved,
+}
+
+internal readonly record struct DateLookup(DateResolutionStatus Status, DateTime? Value)
+{
+    internal static DateLookup Resolved(DateTime? value) => new(DateResolutionStatus.Resolved, value);
+
+    internal static readonly DateLookup Unresolved = new(DateResolutionStatus.Unresolved, null);
+}
+
 internal sealed class SoldBackfillPlanner
 {
     private const int CutoffProbeMargin = 3;
     private const int FullPageSize = 100;
+    private const int MaxFetchAttempts = 3;
     private const string SoldStatus = "Sold";
 
     private readonly IScrapeClient _client;
     private readonly IItemPageParser _itemParser;
     private readonly int _maxItemPageFetches;
-    private readonly Dictionary<string, DateTime?> _dateCache = new(StringComparer.Ordinal);
+    private readonly TimeProvider _timeProvider;
+    private readonly Dictionary<string, DateLookup> _dateCache = new(StringComparer.Ordinal);
     private int _itemPageFetches;
 
-    internal SoldBackfillPlanner(IScrapeClient client, IItemPageParser itemParser, int soldBackfillDays, int maxItemPageFetches)
+    internal SoldBackfillPlanner(
+        IScrapeClient client,
+        IItemPageParser itemParser,
+        int soldBackfillDays,
+        int maxItemPageFetches,
+        TimeProvider timeProvider)
     {
         _client = client;
         _itemParser = itemParser;
         _maxItemPageFetches = maxItemPageFetches;
-        CutoffUtc = DateTime.UtcNow.AddDays(-soldBackfillDays);
+        _timeProvider = timeProvider;
+        CutoffUtc = timeProvider.GetUtcNow().UtcDateTime.AddDays(-soldBackfillDays);
     }
 
     internal DateTime CutoffUtc { get; }
 
     internal int ItemPageFetchesUsed => _itemPageFetches;
+
+    internal bool BudgetExhausted => _itemPageFetches >= _maxItemPageFetches;
 
     internal async Task<SoldBackfillDecision> Resolve(SearchPageResult page, bool canSplit, CancellationToken ct)
     {
@@ -52,14 +75,14 @@ internal sealed class SoldBackfillPlanner
         }
 
         var newest = await DateOf(page.Listings[0], ct);
-        if (IsBeforeCutoff(newest))
+        if (IsBeforeCutoff(AsNullable(newest)))
         {
             return SoldBackfillDecision.None();
         }
 
         var lastIndex = page.Listings.Count - 1;
         var oldest = await DateOf(page.Listings[lastIndex], ct);
-        var oldestInWindow = !IsBeforeCutoff(oldest);
+        var oldestInWindow = oldest.Status == DateResolutionStatus.Resolved && !IsBeforeCutoff(oldest.Value);
         var reportedCount = page.TotalCount ?? page.Listings.Count;
         var isFullPage = page.Listings.Count >= FullPageSize;
 
@@ -76,6 +99,9 @@ internal sealed class SoldBackfillPlanner
 
     private bool IsBeforeCutoff(DateTime? when) => when is { } value && value < CutoffUtc;
 
+    private static DateTime? AsNullable(DateLookup lookup) =>
+        lookup.Status == DateResolutionStatus.Resolved ? lookup.Value : null;
+
     private async Task<int> FindCutoff(IReadOnlyList<ListingSummary> items, CancellationToken ct)
     {
         var lo = 0;
@@ -86,7 +112,7 @@ internal sealed class SoldBackfillPlanner
             var mid = (lo + hi) / 2;
             var when = await DateOf(items[mid], ct);
 
-            if (IsBeforeCutoff(when))
+            if (when.Status == DateResolutionStatus.Unresolved || IsBeforeCutoff(when.Value))
             {
                 hi = mid;
             }
@@ -108,7 +134,7 @@ internal sealed class SoldBackfillPlanner
         for (var i = start; i <= end; i++)
         {
             var when = await DateOf(items[i], ct);
-            if (!IsBeforeCutoff(when))
+            if (when.Status == DateResolutionStatus.Resolved && !IsBeforeCutoff(when.Value))
             {
                 lastInWindow = Math.Max(lastInWindow, i);
             }
@@ -117,7 +143,7 @@ internal sealed class SoldBackfillPlanner
         return lastInWindow + 1;
     }
 
-    private async Task<DateTime?> DateOf(ListingSummary listing, CancellationToken ct)
+    private async Task<DateLookup> DateOf(ListingSummary listing, CancellationToken ct)
     {
         if (_dateCache.TryGetValue(listing.ListingId, out var cached))
         {
@@ -129,20 +155,38 @@ internal sealed class SoldBackfillPlanner
         return resolved;
     }
 
-    private async Task<DateTime?> ResolveDate(ListingSummary listing, CancellationToken ct)
+    private async Task<DateLookup> ResolveDate(ListingSummary listing, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(listing.Url) || _itemPageFetches >= _maxItemPageFetches)
+        if (string.IsNullOrWhiteSpace(listing.Url))
         {
-            return null;
+            return DateLookup.Resolved(null);
         }
 
+        for (var attempt = 0; attempt < MaxFetchAttempts; attempt++)
+        {
+            if (_itemPageFetches >= _maxItemPageFetches)
+            {
+                return DateLookup.Unresolved;
+            }
+
+            var detail = await FetchDetail(listing.Url, ct);
+            if (detail is not null)
+            {
+                return DateLookup.Resolved(ResolveSoldDate(detail));
+            }
+        }
+
+        return DateLookup.Unresolved;
+    }
+
+    private async Task<ItemPageListing?> FetchDetail(string url, CancellationToken ct)
+    {
         _itemPageFetches++;
 
         try
         {
-            var html = await _client.GetPageHtml(listing.Url, ct);
-            var detail = _itemParser.Parse(html);
-            return ResolveSoldDate(detail);
+            var html = await _client.GetPageHtml(url, ct);
+            return _itemParser.Parse(html);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -150,7 +194,7 @@ internal sealed class SoldBackfillPlanner
         }
     }
 
-    private static DateTime? ResolveSoldDate(ItemPageListing? detail)
+    private DateTime? ResolveSoldDate(ItemPageListing? detail)
     {
         if (detail is null)
         {
@@ -163,6 +207,8 @@ internal sealed class SoldBackfillPlanner
             return parsed;
         }
 
-        return string.Equals(detail.Status, SoldStatus, StringComparison.Ordinal) ? DateTime.UtcNow : null;
+        return string.Equals(detail.Status, SoldStatus, StringComparison.Ordinal)
+            ? _timeProvider.GetUtcNow().UtcDateTime
+            : null;
     }
 }

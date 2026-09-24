@@ -12,20 +12,20 @@ public sealed class SearchPageService : ISearchPageService
     private readonly IScrapeClient _client;
     private readonly MarketplaceAdapters _adapters;
     private readonly ScrapeOptions _options;
-    private readonly DetailFetchOptions _detailOptions;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<SearchPageService> _logger;
 
     public SearchPageService(
         IScrapeClient client,
         MarketplaceAdapters adapters,
         ScrapeOptions options,
-        DetailFetchOptions detailOptions,
+        TimeProvider timeProvider,
         ILogger<SearchPageService> logger)
     {
         _client = client;
         _adapters = adapters;
         _options = options;
-        _detailOptions = detailOptions;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -44,8 +44,8 @@ public sealed class SearchPageService : ISearchPageService
         var beforeActive = merged.Count;
         var activeSummary = await CollectDirection(
             searchTerm, sold: false, urls, parser, itemParser, merged, knownSoldListingIds, ct);
-        AddCapHitIssue(issues, searchTerm, sold: false, activeSummary);
-        AddNoResultsIssue(issues, searchTerm, sold: false, activeSummary, merged.Count - beforeActive);
+        SearchRunIssueFactory.AddCapHitIssue(issues, searchTerm, sold: false, activeSummary);
+        SearchRunIssueFactory.AddNoResultsIssue(issues, searchTerm, sold: false, activeSummary, merged.Count - beforeActive);
 
         var backfillFetches = 0;
 
@@ -54,10 +54,11 @@ public sealed class SearchPageService : ISearchPageService
             var beforeSold = merged.Count;
             var soldSummary = await CollectDirection(
                 searchTerm, sold: true, urls, parser, itemParser, merged, knownSoldListingIds, ct);
-            AddCapHitIssue(issues, searchTerm, sold: true, soldSummary);
-            AddNoResultsIssue(issues, searchTerm, sold: true, soldSummary, merged.Count - beforeSold);
-            AddBackfillWindowIssue(issues, searchTerm, _options.SoldBackfillDays, soldSummary);
-            AddBackfillOverflowIssue(issues, searchTerm, soldSummary);
+            SearchRunIssueFactory.AddCapHitIssue(issues, searchTerm, sold: true, soldSummary);
+            SearchRunIssueFactory.AddNoResultsIssue(issues, searchTerm, sold: true, soldSummary, merged.Count - beforeSold);
+            SearchRunIssueFactory.AddBackfillWindowIssue(issues, searchTerm, _options.SoldBackfillDays, soldSummary);
+            SearchRunIssueFactory.AddBackfillOverflowIssue(issues, searchTerm, soldSummary);
+            SearchRunIssueFactory.AddBackfillBudgetExhaustedIssue(issues, searchTerm, soldSummary);
             backfillFetches = soldSummary?.ItemPageFetchesUsed ?? 0;
         }
 
@@ -106,7 +107,7 @@ public sealed class SearchPageService : ISearchPageService
 
             if (pageResult.Listings.Count == 0)
             {
-                ThrowIfListingMarkupProducedNoResults(parser, html);
+                SearchRunIssueFactory.ThrowIfListingMarkupProducedNoResults(parser, html);
                 return null;
             }
 
@@ -128,95 +129,6 @@ public sealed class SearchPageService : ISearchPageService
         }
 
         return new SoldBackfillPlanner(
-            _client, itemParser, _options.SoldBackfillDays, _detailOptions.MaxDetailFetchesPerRun);
-    }
-
-    private static void AddCapHitIssue(
-        List<ScrapeRunIssueDetails> issues,
-        string searchTerm,
-        bool sold,
-        PriceBandCollectionSummary? summary)
-    {
-        if (summary is not { CapHit: true })
-        {
-            return;
-        }
-
-        var direction = sold ? "sold" : "active";
-        issues.Add(new ScrapeRunIssueDetails(
-            ListingId: null,
-            IssueType: "PriceBandCapHit",
-            ErrorMessage: $"Hit the {summary.BandsFetched}-band cap while collecting '{searchTerm}' ({direction}).",
-            Phase: "Search",
-            HttpStatusCode: null));
-    }
-
-    private static void AddNoResultsIssue(
-        List<ScrapeRunIssueDetails> issues,
-        string searchTerm,
-        bool sold,
-        PriceBandCollectionSummary? summary,
-        int listingsAdded)
-    {
-        if (summary is not { BandsFetched: > 0, TotalReported: null } || listingsAdded > 0)
-        {
-            return;
-        }
-
-        var direction = sold ? "sold" : "active";
-        issues.Add(new ScrapeRunIssueDetails(
-            ListingId: null,
-            IssueType: "SearchYieldedNoResults",
-            ErrorMessage: $"'{searchTerm}' ({direction}) fetched {summary.BandsFetched} band(s), collected 0 listings, and the search response carried no reported total; the scraper likely returned an unexpected payload shape rather than a genuinely empty search.",
-            Phase: "Search",
-            HttpStatusCode: null));
-    }
-
-    private static void AddBackfillWindowIssue(
-        List<ScrapeRunIssueDetails> issues,
-        string searchTerm,
-        int soldBackfillDays,
-        PriceBandCollectionSummary? summary)
-    {
-        if (summary?.BackfillCutoffUtc is not { } cutoff)
-        {
-            return;
-        }
-
-        issues.Add(new ScrapeRunIssueDetails(
-            ListingId: null,
-            IssueType: "SoldBackfillWindow",
-            ErrorMessage: $"Sold backfill for '{searchTerm}' covered the last {soldBackfillDays} day(s); cutoff {cutoff:O}.",
-            Phase: "Search",
-            HttpStatusCode: null));
-    }
-
-    private static void AddBackfillOverflowIssue(
-        List<ScrapeRunIssueDetails> issues,
-        string searchTerm,
-        PriceBandCollectionSummary? summary)
-    {
-        if (summary is not { BandsOverCapacityUnsplit: > 0 })
-        {
-            return;
-        }
-
-        issues.Add(new ScrapeRunIssueDetails(
-            ListingId: null,
-            IssueType: "SoldBackfillBandOverflow",
-            ErrorMessage: $"{summary.BandsOverCapacityUnsplit} band(s) reported over 100 in-window sold listings for '{searchTerm}' but could not be split further; only the available page was stored.",
-            Phase: "Search",
-            HttpStatusCode: null));
-    }
-
-    private static void ThrowIfListingMarkupProducedNoResults(ISearchPageParser parser, string html)
-    {
-        if (!parser.ContainsListingMarkup(html))
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            "Search page contained listing markup but produced no parsed listings.");
+            _client, itemParser, _options.SoldBackfillDays, _options.MaxBackfillItemPageFetches, _timeProvider);
     }
 }

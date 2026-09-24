@@ -11,7 +11,8 @@ internal sealed record PriceBandCollectionSummary(
     int BandsPrunedForKnownListings,
     int ItemPageFetchesUsed = 0,
     DateTime? BackfillCutoffUtc = null,
-    int BandsOverCapacityUnsplit = 0);
+    int BandsOverCapacityUnsplit = 0,
+    bool BackfillBudgetExhausted = false);
 
 internal sealed record MercariCollectionSettings(int MaxBandsPerDirection, SoldBackfillPlanner? Backfill);
 
@@ -115,6 +116,7 @@ internal sealed class MercariPriceBandCollector
         LogOutcome(searchTerm, sold, fetched, merged.Count, totalReported, capHit, bandsPruned);
 
         var itemPageFetchesUsed = backfill is null ? 0 : backfill.ItemPageFetchesUsed;
+        var backfillBudgetExhausted = backfill is not null && backfill.BudgetExhausted;
 
         return new PriceBandCollectionSummary(
             fetched,
@@ -123,7 +125,8 @@ internal sealed class MercariPriceBandCollector
             bandsPruned,
             itemPageFetchesUsed,
             backfill?.CutoffUtc,
-            bandsOverCapacityUnsplit);
+            bandsOverCapacityUnsplit,
+            backfillBudgetExhausted);
     }
 
     private async Task<BandOutcome> ProcessBand(

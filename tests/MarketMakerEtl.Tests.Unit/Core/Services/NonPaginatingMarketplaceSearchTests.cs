@@ -24,7 +24,7 @@ public class NonPaginatingMarketplaceSearchTests
             client,
             new MarketplaceAdapters([urls], [parser], []),
             new ScrapeOptions(MaxPages: 5, CollectSold: false),
-            new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3),
+            TimeProvider.System,
             NullLogger<SearchPageService>.Instance);
 
         var result = await service.Collect(SearchTerm, Marketplace.Mercari, new HashSet<string>(), CancellationToken.None);
@@ -46,7 +46,7 @@ public class NonPaginatingMarketplaceSearchTests
             client,
             new MarketplaceAdapters([urls], [parser], []),
             new ScrapeOptions(MaxPages: 3, CollectSold: false),
-            new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3),
+            TimeProvider.System,
             NullLogger<SearchPageService>.Instance);
 
         await service.Collect(SearchTerm, Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);

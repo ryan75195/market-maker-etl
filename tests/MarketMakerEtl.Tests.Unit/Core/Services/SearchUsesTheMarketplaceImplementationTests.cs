@@ -72,8 +72,7 @@ public class SearchUsesTheMarketplaceImplementationTests
 
         services.AddSingleton(new MarketplaceAdapters(urlServices, parsers, []));
         services.AddSingleton(new ScrapeOptions(MaxPages: 1, CollectSold: false));
-        services.AddSingleton(new DetailFetchOptions(
-            MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3));
+        services.AddSingleton(TimeProvider.System);
         services.AddSingleton<ISearchPageService, SearchPageService>();
         return services.BuildServiceProvider().GetRequiredService<ISearchPageService>();
     }
