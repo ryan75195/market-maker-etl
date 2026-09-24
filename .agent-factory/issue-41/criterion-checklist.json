@@ -43,16 +43,18 @@
     {
       "id": "AC-4",
       "criterion": "The listing refresh runs once per refresh interval, and its failures are logged without stopping job scheduling.",
-      "plannedImplementation": "ListingRefreshSchedulingService.RefreshListingsIfDue(ct) reads ISchedulerStateStore.GetLastListingRefreshUtc, skips if now is before lastRefresh + RefreshIntervalHours, otherwise calls IListingRefreshService.RefreshActiveListings then ISchedulerStateStore.SetLastListingRefreshUtc(now, ct). SchedulerWorker.RunOnce always calls IJobSchedulingService.QueueDueJobs first, then calls RefreshListingsIfDue inside a try/catch that logs via ILogger and swallows the exception.",
-      "plannedVerification": "ListingRefreshSchedulingServiceTests (real SQLite SchedulerState table + mocked IListingRefreshService): refresh runs when no prior timestamp exists, does not run again immediately after, and a second service instance against the same file (restart) does not re-run within the interval. SchedulerWorkerTests mocks IListingRefreshSchedulingService to throw and asserts RunOnce still returns the queued count from IJobSchedulingService and does not throw.",
-      "materialConcerns": [],
+      "plannedImplementation": "ListingRefreshSchedulingService.RefreshListingsIfDue(ct) reads ISchedulerStateStore.GetLastListingRefreshUtc, skips if now is before lastRefresh + RefreshIntervalHours, otherwise stamps ISchedulerStateStore.SetLastListingRefreshUtc(now, ct) before calling IListingRefreshService.RefreshActiveListings (reordered during review so a failing refresh still records the attempt and is not retried until the next full interval). Job queueing and listing refresh run as two independent BackgroundServices (JobQueueingWorker, ListingRefreshWorker), each wrapping its own scheduling call in its own try/catch that logs via ILogger and swallows the exception, replacing the original single SchedulerWorker where only the refresh step was protected and both steps shared one loop.",
+      "plannedVerification": "ListingRefreshSchedulingServiceTests (real SQLite SchedulerState table + mocked IListingRefreshService): refresh runs when no prior timestamp exists, does not run again immediately after, a second service instance against the same file (restart) does not re-run within the interval, and a refresh that throws still stamps the attempt and is not retried within the interval. JobQueueingWorkerTests mocks IJobSchedulingService to throw and asserts RunOnce returns 0 without throwing, then queues normally on the next call. ListingRefreshWorkerTests mocks IListingRefreshSchedulingService to throw and asserts RunOnce does not throw, and separately proves job queueing proceeds while a refresh is still in progress via a refresh stub blocked on a TaskCompletionSource.",
+      "materialConcerns": [
+        "the original design (single SchedulerWorker, only the refresh step wrapped) was flagged in PR review as unsafe: an unprotected QueueDueJobs failure (e.g. a transient SQLite 'database is locked') would escape ExecuteAsync and, under .NET's default BackgroundServiceExceptionBehavior.StopHost, crash the whole Etl host including the unrelated ScrapeWorker; and a long-running refresh (one HTTP fetch per active listing) ran inline before queueing, starving job queueing of its cadence for the whole refresh duration, with a failing refresh retried every tick since the timestamp was only written on success. All three points were addressed: split into two independent BackgroundServices, both scheduling calls individually try/caught, and the timestamp is now written before the refresh attempt rather than after."
+      ],
       "comparison": true,
       "comparisonObservation": {
-        "firstObservation": "SchedulerWorker.RunOnce returns normally and IJobSchedulingService.QueueDueJobs was called, even when RefreshListingsIfDue throws.",
-        "whenHeldValueAbsent": "Without the try/catch, the thrown exception would propagate out of RunOnce/ExecuteAsync, which for a BackgroundService can crash the whole host process, taking job scheduling down with it."
+        "firstObservation": "JobQueueingWorker.RunOnce returns normally (0 queued, logged) when the underlying IJobSchedulingService throws, and queues normally on the very next call.",
+        "whenHeldValueAbsent": "Without the try/catch, the thrown exception would propagate out of RunOnce/ExecuteAsync, which for a BackgroundService can crash the whole host process under the default exception behavior, taking the ScrapeWorker down with it even though queueing and scraping are otherwise unrelated failures."
       },
       "verificationStatus": "verified",
-      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Services/ListingRefreshSchedulingServiceTests.cs (4 tests: no-prior-refresh runs, before-interval skips, after-interval re-runs, restart-within-interval skips) and tests/MarketMakerEtl.Tests.Unit/Etl/Workers/SchedulerWorkerTests.cs::Should_still_queue_jobs_and_not_throw_when_listing_refresh_fails pass as part of the 188/188 Unit run."
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Services/ListingRefreshSchedulingServiceTests.cs (5 tests, including Should_record_the_refresh_attempt_even_when_it_throws_and_not_retry_within_the_interval), tests/MarketMakerEtl.Tests.Unit/Etl/Workers/JobQueueingWorkerTests.cs (3 tests) and tests/MarketMakerEtl.Tests.Unit/Etl/Workers/ListingRefreshWorkerTests.cs (3 tests, including Should_let_job_queueing_proceed_while_a_refresh_is_still_in_progress) all pass as part of the 209/209 Unit run."
     },
     {
       "id": "AC-5",
@@ -108,6 +110,36 @@
       },
       "verificationStatus": "verified",
       "verificationEvidence": "tests/MarketMakerEtl.Tests.Integration/Jobs/JobCategoryValidationTests.cs::Should_reject_creating_a_job_with_an_unknown_category_id, Should_accept_creating_a_job_when_every_category_id_exists, Should_reject_updating_a_job_with_an_unknown_category_id, Should_reject_setting_an_unknown_category_id_on_a_job pass (19/19 Integration passed)."
+    },
+    {
+      "id": "REVIEW-3",
+      "criterion": "(PR #52 review) A transient job-queueing failure must not escape SchedulerWorker.RunOnce/ExecuteAsync and take down the whole Etl host (and the unrelated ScrapeWorker with it).",
+      "plannedImplementation": "JobQueueingWorker.RunOnce wraps the IJobSchedulingService.QueueDueJobs call in its own try/catch (excluding OperationCanceledException), logs via ILogger, and returns 0 instead of rethrowing, so ExecuteAsync always reaches Task.Delay and retries on the next tick.",
+      "plannedVerification": "JobQueueingWorkerTests: a throwing QueueDueJobs makes RunOnce return 0 without throwing; a second RunOnce call after the fault clears queues normally again.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "RunOnce returns 0 and logs when QueueDueJobs throws, instead of the exception propagating.",
+        "whenHeldValueAbsent": "The very next RunOnce call, with the mock reconfigured to succeed, returns the real queued count — proving the try/catch does not permanently disable queueing, only isolates a single bad tick."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Etl/Workers/JobQueueingWorkerTests.cs::Should_not_throw_and_report_zero_queued_when_queueing_fails, Should_queue_normally_on_the_next_call_after_a_fault_clears pass as part of the 209/209 Unit run."
+    },
+    {
+      "id": "REVIEW-4",
+      "criterion": "(PR #52 review) A long-running or failing listing refresh must not block job queueing's cadence, and a failing refresh must not retry every tick.",
+      "plannedImplementation": "Listing refresh runs in its own BackgroundService (ListingRefreshWorker) independent of JobQueueingWorker, so the host schedules their ExecuteAsync loops as separate tasks and a slow refresh cannot delay the next queueing tick. ListingRefreshSchedulingService.RefreshListingsIfDue now calls ISchedulerStateStore.SetLastListingRefreshUtc(now, ct) before IListingRefreshService.RefreshActiveListings, so the attempt timestamp is durably recorded even if the refresh subsequently throws, giving a failing refresh a natural backoff of one full RefreshIntervalHours instead of retrying every tick.",
+      "plannedVerification": "ListingRefreshWorkerTests::Should_let_job_queueing_proceed_while_a_refresh_is_still_in_progress blocks a stubbed refresh on a TaskCompletionSource, starts ListingRefreshWorker.RunOnce without awaiting it, then awaits a separate JobQueueingWorker.RunOnce call and asserts it completes and returns the due count while the refresh task is still not completed. ListingRefreshSchedulingServiceTests::Should_record_the_refresh_attempt_even_when_it_throws_and_not_retry_within_the_interval asserts a throwing refresh still updates the stored timestamp, and a subsequent call within the interval does not re-invoke IListingRefreshService.",
+      "materialConcerns": [
+        "no appsettings.json exists anywhere in this repo (checked via glob across src/), so there is no config file to add the Schedule:TickMinutes / Schedule:RefreshIntervalHours keys and defaults to, as review also asked; the defaults remain as named constants in ServiceCollectionExtensions.BuildScheduleOptions (DefaultTickMinutes = 5, DefaultRefreshIntervalHours = 24) and are overridable via any configuration provider (e.g. environment variables), same as Scrape:MaxPages/Scrape:CollectSold already are"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "JobQueueingWorker.RunOnce completes and returns the due job count while ListingRefreshWorker.RunOnce is still awaiting a blocked refresh.",
+        "whenHeldValueAbsent": "If both scheduling calls instead ran sequentially in one worker's RunOnce (the original design), the queueing call could not even start until the blocked refresh call returned, since the blocked Task would still be running fully synchronously inside the same method invocation."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Etl/Workers/ListingRefreshWorkerTests.cs::Should_let_job_queueing_proceed_while_a_refresh_is_still_in_progress and tests/MarketMakerEtl.Tests.Unit/Core/Services/ListingRefreshSchedulingServiceTests.cs::Should_record_the_refresh_attempt_even_when_it_throws_and_not_retry_within_the_interval pass as part of the 209/209 Unit run."
     }
   ]
 }

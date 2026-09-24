@@ -3,36 +3,27 @@ using MarketMakerEtl.Core.Models.Scheduling;
 
 namespace MarketMakerEtl.Etl.Workers;
 
-public sealed class SchedulerWorker : BackgroundService
+public sealed class ListingRefreshWorker : BackgroundService
 {
-    private readonly IJobSchedulingService _jobScheduling;
     private readonly IListingRefreshSchedulingService _listingRefreshScheduling;
     private readonly ScheduleOptions _options;
     private readonly TimeProvider _timeProvider;
-    private readonly ILogger<SchedulerWorker> _logger;
+    private readonly ILogger<ListingRefreshWorker> _logger;
 
-    public SchedulerWorker(
-        IJobSchedulingService jobScheduling,
+    public ListingRefreshWorker(
         IListingRefreshSchedulingService listingRefreshScheduling,
         ScheduleOptions options,
         TimeProvider timeProvider,
-        ILogger<SchedulerWorker> logger)
+        ILogger<ListingRefreshWorker> logger)
     {
-        _jobScheduling = jobScheduling;
         _listingRefreshScheduling = listingRefreshScheduling;
         _options = options;
         _timeProvider = timeProvider;
         _logger = logger;
     }
 
-    public async Task<int> RunOnce(CancellationToken ct)
+    public async Task RunOnce(CancellationToken ct)
     {
-        var queued = await _jobScheduling.QueueDueJobs(ct);
-        if (queued > 0)
-        {
-            _logger.LogInformation("Queued {Count} due jobs", queued);
-        }
-
         try
         {
             await _listingRefreshScheduling.RefreshListingsIfDue(ct);
@@ -41,8 +32,6 @@ public sealed class SchedulerWorker : BackgroundService
         {
             _logger.LogError(ex, "Listing refresh failed");
         }
-
-        return queued;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

@@ -100,6 +100,26 @@ public class ListingRefreshSchedulingServiceTests
         await refresh.DidNotReceive().RefreshActiveListings(Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task Should_record_the_refresh_attempt_even_when_it_throws_and_not_retry_within_the_interval()
+    {
+        var refresh = Substitute.For<IListingRefreshService>();
+        refresh.RefreshActiveListings(Arg.Any<CancellationToken>())
+            .Returns<Task>(_ => throw new InvalidOperationException("refresh failed"));
+        var timeProvider = new FakeTimeProvider(StartTime);
+        var scheduling = CreateService(refresh, timeProvider, refreshIntervalHours: 24);
+
+        Assert.That(
+            async () => await scheduling.RefreshListingsIfDue(CancellationToken.None),
+            Throws.TypeOf<InvalidOperationException>());
+        refresh.ClearReceivedCalls();
+
+        timeProvider.Advance(TimeSpan.FromHours(1));
+        await scheduling.RefreshListingsIfDue(CancellationToken.None);
+
+        await refresh.DidNotReceive().RefreshActiveListings(Arg.Any<CancellationToken>());
+    }
+
     private ListingRefreshSchedulingService CreateService(
         IListingRefreshService refresh,
         TimeProvider timeProvider,

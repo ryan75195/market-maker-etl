@@ -25,14 +25,14 @@ public sealed class ListingRefreshSchedulingService : IListingRefreshSchedulingS
     public async Task RefreshListingsIfDue(CancellationToken ct)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var lastRefresh = await _state.GetLastListingRefreshUtc(ct);
+        var lastAttempt = await _state.GetLastListingRefreshUtc(ct);
 
-        if (lastRefresh is not null && lastRefresh.Value.AddHours(_options.RefreshIntervalHours) > now)
+        if (lastAttempt is not null && lastAttempt.Value.AddHours(_options.RefreshIntervalHours) > now)
         {
             return;
         }
 
-        await _refresh.RefreshActiveListings(ct);
         await _state.SetLastListingRefreshUtc(now, ct);
+        await _refresh.RefreshActiveListings(ct);
     }
 }
