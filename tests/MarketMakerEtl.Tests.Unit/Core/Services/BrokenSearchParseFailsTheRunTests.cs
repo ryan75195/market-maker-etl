@@ -86,7 +86,8 @@ public class BrokenSearchParseFailsTheRunTests
                 [new EbaySearchParser()],
                 new ScrapeOptions(MaxPages: 1, CollectSold: false),
                 NullLogger<SearchPageService>.Instance),
-            store);
+            store,
+            new NoOpItemDetailFetchService());
 
     private sealed class SinglePageScrapeClient(string html) : IScrapeClient
     {

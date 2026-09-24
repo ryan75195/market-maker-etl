@@ -1,0 +1,69 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "After a run, new listings have description, images, shipping cost and seller filled from their item pages.",
+      "plannedImplementation": "ScrapeRunService.Run calls IItemDetailFetchService.FetchDetails(jobId, ct) after the search upsert completes. ItemDetailFetchService.FetchDetails loads targets via IItemDetailStore.GetListingsNeedingDetail (listings in the job with DetailFetchedUtc null), fetches each item page through IScrapeClient, parses it with the marketplace-matching IItemPageParser, and calls ItemDetailStore.ApplyItemDetail, which copies Description, DescriptionStatus=\"ok\", Seller, ShippingCost, OriginalPrice, Likes, PostedUtc and ImageUrls (serialised via ListingImageUrlsJson) onto the ListingEntity and sets DetailFetchedUtc.",
+      "plannedVerification": "NewListingsGetItemDetailFetchedAfterARunTests.Should_populate_description_images_shipping_cost_and_seller_from_the_item_page_after_a_run runs ScrapeRunService end to end against a real SQLite database with a stub IScrapeClient returning a captured Mercari active item-page fixture, then asserts the persisted listing's Description, ImageUrls, ShippingCost and Seller match the fixture's content. Observable outcome: a completed run leaves a caller able to read full item detail for a listing it just discovered.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: NewListingsGetItemDetailFetchedAfterARunTests.Should_populate_description_images_shipping_cost_and_seller_from_the_item_page_after_a_run passed against real SQLite"
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A sold listing from a sold search ends the run with SoldDate and SoldPrice set and a history row recorded.",
+      "plannedImplementation": "ItemDetailStore.ApplyItemDetail checks detail.Status == \"Sold\" (ordinal) and, when true, calls ApplySoldDetail: sets ItemStatus=\"Sold\", IsSold=true, SoldPrice (preferring detail.SoldPrice, falling back to detail.Price, then the existing stored value) and SoldDate (via SoldDateParser.Parse(detail.SoldDate), falling back to the existing value), and unconditionally adds one ListingStatusChangeEntity with Source ListingHistorySource.StatusUpdate. This write is unconditional on status rather than gated by a status-diff check, because the listing may already have been marked Sold by the search pass itself (the exact scenario this criterion targets) and a diff-gated write would silently no-op and never record the sold date.",
+      "plannedVerification": "SoldListingFromSearchGetsSoldDateAndHistoryFromDetailFetchTests.Should_end_the_run_with_sold_date_sold_price_and_a_history_row_for_a_listing_a_sold_search_already_marked_sold seeds a listing already marked IsSold=true by a prior search pass, runs detail fetch against a captured Mercari sold item-page fixture, and asserts the persisted listing has SoldDate and SoldPrice set from the fixture and exactly one new ListingStatusChangeEntity row with Source StatusUpdate exists. Observable outcome: a sold comp discovered via a sold search carries a usable sale date and price, not just an IsSold flag.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: SoldListingFromSearchGetsSoldDateAndHistoryFromDetailFetchTests.Should_end_the_run_with_sold_date_sold_price_and_a_history_row_for_a_listing_a_sold_search_already_marked_sold passed against real SQLite"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A listing already detailed is not fetched again by later runs.",
+      "plannedImplementation": "ItemDetailStore.GetListingsNeedingDetail filters on l.DetailFetchedUtc == null, and ApplyItemDetail / MarkDetailFetchFailed both set DetailFetchedUtc = DateTime.UtcNow on every outcome (success or failure), so a listing is a fetch target exactly once regardless of run boundaries.",
+      "plannedVerification": "AlreadyDetailedListingIsNotRefetchedByLaterRunsTests.Should_not_fetch_a_listing_again_once_it_already_has_a_detail_fetch_timestamp seeds a listing with DetailFetchedUtc already set, runs ScrapeRunService again with an IScrapeClient that throws if invoked, and asserts the run completes without the client being called and the listing's fields are unchanged. Observable outcome: repeated nightly runs never re-fetch a listing's item page once it has been detailed.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: AlreadyDetailedListingIsNotRefetchedByLaterRunsTests.Should_not_fetch_a_listing_again_once_it_already_has_a_detail_fetch_timestamp passed against real SQLite"
+    },
+    {
+      "id": "AC-4",
+      "criterion": "A failed item fetch marks that listing failed and does not fail the run.",
+      "plannedImplementation": "ItemDetailFetchService.FetchDetail wraps the client call and parse in a try/catch (excluding OperationCanceledException) and treats a null page or blank Title as a failure; either path calls IItemDetailStore.MarkDetailFetchFailed, which sets DescriptionStatus=\"failed\" and DetailFetchedUtc, and FetchDetails never rethrows past FetchOne, so one listing's failure cannot propagate up into ScrapeRunService.Run and fail the run.",
+      "plannedVerification": "FailedItemFetchMarksListingFailedWithoutFailingTheRunTests.Should_mark_the_blocked_listing_failed_and_still_apply_detail_to_the_listing_that_succeeds runs detail fetch across two listings through a SelectivelyFailingScrapeClient that throws for one URL and returns valid HTML for the other, then asserts the run completes (ScrapeRunStatus.Completed), the failing listing has DescriptionStatus=\"failed\", and the succeeding listing has its detail fields populated. ItemDetailFetchServiceTests.Should_mark_the_listing_failed_when_the_page_fails_to_parse and Should_mark_the_listing_failed_and_continue_when_the_client_throws and Should_mark_the_listing_failed_when_no_parser_matches_the_marketplace cover the three individual failure paths (parse-null, client-throw, no-parser-match) against a mocked store. Observable outcome: a blocked or malformed item page degrades one listing's detail instead of losing an entire night's run.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: FailedItemFetchMarksListingFailedWithoutFailingTheRunTests.Should_mark_the_blocked_listing_failed_and_still_apply_detail_to_the_listing_that_succeeds passed against real SQLite; ItemDetailFetchServiceTests.Should_mark_the_listing_failed_when_the_page_fails_to_parse, Should_mark_the_listing_failed_and_continue_when_the_client_throws and Should_mark_the_listing_failed_when_no_parser_matches_the_marketplace all passed"
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Concurrency and per-run cap are honoured (test with a stub client counting in-flight calls).",
+      "plannedImplementation": "ItemDetailFetchService.FetchDetails requests at most DetailFetchOptions.MaxDetailFetchesPerRun targets from the store, then bounds concurrent fetches with a SemaphoreSlim sized to DetailFetchOptions.MaxConcurrentDetailFetches (floored at 1) around Task.WhenAll. ServiceCollectionExtensions.BuildDetailFetchOptions reads Scrape:MaxConcurrentDetailFetches (default 4) and Scrape:MaxDetailFetchesPerRun (default 50) from configuration.",
+      "plannedVerification": "DetailFetchHonoursConcurrencyAndPerRunCapTests.Should_fetch_only_up_to_the_per_run_cap_and_leave_the_rest_for_a_later_run seeds more undetailed listings than the configured per-run cap, runs detail fetch against a real SQLite database, and asserts exactly the cap's-worth of listings received DetailFetchedUtc while the remainder are left for a later run. ItemDetailFetchServiceTests.Should_never_exceed_the_configured_concurrency_limit_while_fetching_details uses ConcurrencyTrackingScrapeClient (an IScrapeClient test double tracking peak concurrent in-flight calls via an Interlocked CAS loop) to assert the observed peak concurrency never exceeds MaxConcurrentDetailFetches, and Should_pass_the_per_run_cap_as_the_fetch_limit asserts GetListingsNeedingDetail is called with the configured cap as its limit argument. Observable outcome: a large backlog of undetailed listings spreads fetch load across nights instead of hammering the marketplace in one run.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: DetailFetchHonoursConcurrencyAndPerRunCapTests.Should_fetch_only_up_to_the_per_run_cap_and_leave_the_rest_for_a_later_run passed against real SQLite; ItemDetailFetchServiceTests.Should_never_exceed_the_configured_concurrency_limit_while_fetching_details and Should_pass_the_per_run_cap_as_the_fetch_limit both passed"
+    },
+    {
+      "id": "AC-6",
+      "criterion": "Repo quality gate green: .githooks/pre-commit (build with all analyzers at error severity, dotnet format --verify-no-changes, Unit + Architecture tests).",
+      "plannedImplementation": "No feature-specific implementation; satisfied by keeping ItemDetailStore, ItemDetailFetchService and their supporting models within existing analyzer limits (method length, ctor param count, no comments, one public type per file) and registering both new interfaces in ServiceCollectionExtensions.AddCoreServices for DiRegistrationTests.",
+      "plannedVerification": "dotnet build --no-incremental for the full solution and dotnet format --verify-no-changes, followed by dotnet test for MarketMakerEtl.Tests.Unit and MarketMakerEtl.Tests.Architecture, and the .githooks/pre-commit hook run at commit time.",
+      "materialConcerns": [
+        "The ticket names no default for MaxDetailFetchesPerRun; 50 was chosen as a judgment call (bounded but generous enough not to starve a large first run across many nights), mirroring the ticket's own note that a large first run should spread across nights."
+      ],
+      "comparison": false,
+      "verificationStatus": "verified: dotnet build --no-incremental reported 0 Warning(s) 0 Error(s); dotnet format --verify-no-changes reported no changes; dotnet test MarketMakerEtl.Tests.Unit.csproj passed 226/226; dotnet test MarketMakerEtl.Tests.Architecture.csproj passed 25/25; dotnet test MarketMakerEtl.Tests.Integration.csproj passed 19/19 (not part of the enforced gate but re-verified since three Integration fixtures construct ScrapeRunService directly) after rebasing onto origin/main through #45 and #41"
+    },
+    {
+      "id": "AC-7",
+      "criterion": "Rebase fix: reconcile this branch with two origin/main moves that landed while it was in flight — #45 (Mercari price-band slicing: ISearchPageParser.Parse returning SearchPageResult, ISearchPageService.Collect gaining a knownSoldListingIds parameter, SearchPageService taking an ILogger<SearchPageService>, ScrapeOptions gaining MaxBandsPerDirection) and #41 (job scheduling/refresh: JobSchedulingService, JobQueueingWorker/ListingRefreshWorker, SchedulerState table/migration, ScheduleOptions) — while keeping all three feature sets' behaviour and, if a migration were added, ordering it after #41's.",
+      "plannedImplementation": "For each origin/main move, stashed the in-progress issue-44 working tree with a uniquely-tagged git stash push -u -m, fast-forwarded the branch onto the new origin/main, and reapplied the stash with git stash apply <sha> (never a bare pop, since the stash stack is shared across worktrees). Against #45 (commit f63b39b): ScrapeRunService.cs and ServiceCollectionExtensions.cs auto-merged with no conflicts; six test files conflicted on shared ScrapeRunService/SearchPageService construction call sites and were manually resolved to keep #45's 5-arg SearchPageService constructor together with #44's 3rd ScrapeRunService constructor argument; three Integration fixtures (RunPipelineRecordsFailureReasonTests, RunPipelineUsesInProcessScraperTests, RunPipelinePersistsListingsTests), also touched by #45's own merge, still constructed ScrapeRunService with only two arguments and were fixed by adding Substitute.For<IItemDetailFetchService>() as the third argument. Against #41 (commit f3e9955): only ServiceCollectionExtensions.cs conflicted, on two disjoint const-declaration and AddSingleton-call blocks (#41's ScheduleOptions/TimeProvider registrations versus #44's DetailFetchOptions registration); resolved by keeping both blocks side by side. ScrapeRunService.cs itself was untouched by #41 and needed no changes. This ticket added no EF migration, so no reordering against #41's 20260924000124_AddSchedulerState migration was needed.",
+      "plannedVerification": "git status after each rebase showed no remaining unmerged paths once conflicts were resolved and staged. dotnet build --no-incremental of the full solution succeeded with 0 warnings/0 errors after both rebases. dotnet test of Unit, Architecture and Integration all passed after the final rebase onto f3e9955, confirming #44's item-detail-fetch behaviour, #45's price-band-slicing behaviour and #41's scheduling/refresh behaviour all coexist correctly.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: full solution build 0 warnings/0 errors after rebasing onto origin/main at f63b39b (#45) and again at f3e9955 (#41); dotnet test Unit 226/226, Architecture 25/25, Integration 19/19 all passed after the final rebase"
+    }
+  ]
+}

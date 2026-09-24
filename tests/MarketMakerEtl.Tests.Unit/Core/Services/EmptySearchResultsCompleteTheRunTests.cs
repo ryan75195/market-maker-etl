@@ -86,7 +86,8 @@ public class EmptySearchResultsCompleteTheRunTests
                 [new EbaySearchParser()],
                 new ScrapeOptions(MaxPages: 3, CollectSold: false),
                 NullLogger<SearchPageService>.Instance),
-            store);
+            store,
+            new NoOpItemDetailFetchService());
 
     private sealed class SinglePageScrapeClient(string html) : IScrapeClient
     {

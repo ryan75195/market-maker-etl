@@ -13,18 +13,20 @@ public class ScrapeRunServiceTests
     private static readonly ScrapeRunWork Work = new(RunId: 1, JobId: 2, SearchTerm: "ps5");
 
     [Test]
-    public async Task Should_persist_listings_and_complete_the_run()
+    public async Task Should_persist_listings_fetch_item_detail_and_complete_the_run()
     {
         var search = Substitute.For<ISearchPageService>();
         search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns([new ListingSummary("111111111111", "PS5", 1m, "GBP", "https://x/itm/1", false, null, null, null)]);
         var store = Substitute.For<IScrapeStore>();
         store.GetListings(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new List<ListingSummary>());
-        var service = new ScrapeRunService(search, store);
+        var detailFetch = Substitute.For<IItemDetailFetchService>();
+        var service = new ScrapeRunService(search, store, detailFetch);
 
         await service.Run(Work, CancellationToken.None);
 
         await store.Received(1).UpsertListings(2, Arg.Any<IReadOnlyList<ListingSummary>>(), Arg.Any<CancellationToken>());
+        await detailFetch.Received(1).FetchDetails(2, Arg.Any<CancellationToken>());
         await store.Received(1).CompleteRun(1, Arg.Any<CancellationToken>());
         await store.DidNotReceive().FailRun(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -37,11 +39,31 @@ public class ScrapeRunServiceTests
             .Returns<IReadOnlyList<ListingSummary>>(_ => throw new InvalidOperationException("scraper down"));
         var store = Substitute.For<IScrapeStore>();
         store.GetListings(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new List<ListingSummary>());
-        var service = new ScrapeRunService(search, store);
+        var detailFetch = Substitute.For<IItemDetailFetchService>();
+        var service = new ScrapeRunService(search, store, detailFetch);
 
         await service.Run(Work, CancellationToken.None);
 
         await store.Received(1).FailRun(1, "scraper down", Arg.Any<CancellationToken>());
+        await store.DidNotReceive().CompleteRun(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_fail_the_run_when_item_detail_fetching_throws()
+    {
+        var search = Substitute.For<ISearchPageService>();
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns([new ListingSummary("111111111111", "PS5", 1m, "GBP", "https://x/itm/1", false, null, null, null)]);
+        var store = Substitute.For<IScrapeStore>();
+        store.GetListings(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new List<ListingSummary>());
+        var detailFetch = Substitute.For<IItemDetailFetchService>();
+        detailFetch.FetchDetails(2, Arg.Any<CancellationToken>())
+            .Returns<Task>(_ => throw new InvalidOperationException("detail store unavailable"));
+        var service = new ScrapeRunService(search, store, detailFetch);
+
+        await service.Run(Work, CancellationToken.None);
+
+        await store.Received(1).FailRun(1, "detail store unavailable", Arg.Any<CancellationToken>());
         await store.DidNotReceive().CompleteRun(Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
@@ -54,7 +76,7 @@ public class ScrapeRunServiceTests
         var store = Substitute.For<IScrapeStore>();
         store.GetListings(2, Arg.Any<CancellationToken>()).Returns(
             [new ListingSummary("999999999999", "Existing", 1m, "GBP", "https://x/itm/9", true, null, null, null)]);
-        var service = new ScrapeRunService(search, store);
+        var service = new ScrapeRunService(search, store, Substitute.For<IItemDetailFetchService>());
 
         await service.Run(Work, CancellationToken.None);
 
@@ -74,7 +96,7 @@ public class ScrapeRunServiceTests
         var store = Substitute.For<IScrapeStore>();
         store.GetListings(2, Arg.Any<CancellationToken>()).Returns(
             [new ListingSummary("777777777777", "Still active", 1m, "GBP", "https://x/itm/7", false, null, null, null)]);
-        var service = new ScrapeRunService(search, store);
+        var service = new ScrapeRunService(search, store, Substitute.For<IItemDetailFetchService>());
 
         await service.Run(Work, CancellationToken.None);
 
