@@ -59,4 +59,47 @@ public class PriceBandTests
             Assert.That(new PriceBand(10m, null).CanSplit(0.01m), Is.True);
         });
     }
+
+    [Test]
+    public void Should_seed_nine_geometric_bands()
+    {
+        var seeds = PriceBand.SeedBands();
+
+        Assert.That(seeds, Has.Count.EqualTo(9));
+    }
+
+    [Test]
+    public void Should_start_the_first_seed_band_at_zero_and_leave_the_last_open_ended()
+    {
+        var seeds = PriceBand.SeedBands();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(seeds[0].MinPrice, Is.EqualTo(0m));
+            Assert.That(seeds[^1].MaxPrice, Is.Null);
+        });
+    }
+
+    [Test]
+    public void Should_keep_adjacent_seed_bands_exactly_one_cent_apart()
+    {
+        var seeds = PriceBand.SeedBands();
+
+        Assert.Multiple(() =>
+        {
+            for (var i = 0; i < seeds.Count - 1; i++)
+            {
+                Assert.That(seeds[i].MaxPrice, Is.Not.Null);
+                Assert.That(seeds[i + 1].MinPrice, Is.EqualTo(seeds[i].MaxPrice!.Value + 0.01m));
+            }
+        });
+    }
+
+    [Test]
+    public void Should_cover_the_range_below_one_hundred_dollars_within_the_first_five_seed_bands()
+    {
+        var seeds = PriceBand.SeedBands();
+
+        Assert.That(seeds[4].MaxPrice, Is.EqualTo(100m));
+    }
 }
