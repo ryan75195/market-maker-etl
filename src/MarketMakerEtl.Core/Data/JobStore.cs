@@ -1,6 +1,7 @@
 using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Jobs;
+using MarketMakerEtl.Core.Models.Runs;
 using Microsoft.EntityFrameworkCore;
 
 namespace MarketMakerEtl.Core.Data;
@@ -105,7 +106,7 @@ public sealed class JobStore : IJobStore
         return await LoadView(db, jobId, ct);
     }
 
-    public async Task<JobView?> MarkQueued(int jobId, CancellationToken ct)
+    public async Task<JobView?> MarkQueued(int jobId, DateTime queuedUtc, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var job = await db.ScrapeJobs.FindAsync([jobId], ct);
@@ -114,7 +115,7 @@ public sealed class JobStore : IJobStore
             return null;
         }
 
-        job.LastQueuedUtc = DateTime.UtcNow;
+        job.LastQueuedUtc = queuedUtc;
         await db.SaveChangesAsync(ct);
         return await LoadView(db, jobId, ct);
     }
@@ -127,6 +128,15 @@ public sealed class JobStore : IJobStore
             .OrderBy(j => j.Id)
             .ToListAsync(ct);
         return jobs.Select(MapToView).ToList();
+    }
+
+    public async Task<bool> HasQueuedOrRunningRun(int jobId, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        return await db.ScrapeRuns.AnyAsync(
+            r => r.JobId == jobId
+                && (r.Status == nameof(ScrapeRunStatus.Queued) || r.Status == nameof(ScrapeRunStatus.Running)),
+            ct);
     }
 
     private static IQueryable<ScrapeJobEntity> JobsWithCategories(EtlDbContext db) =>

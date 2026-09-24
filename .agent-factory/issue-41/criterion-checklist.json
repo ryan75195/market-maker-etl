@@ -1,0 +1,145 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A due, enabled job gets exactly one queued run per interval. A job that is not due, disabled, or effectively disabled by its categories gets none.",
+      "plannedImplementation": "JobSchedulingService.QueueDueJobs(ct) reads IJobStore.GetEffectivelyEnabledJobs (already excludes disabled jobs and jobs whose categories are all disabled), keeps only jobs where LastQueuedUtc is null or LastQueuedUtc + IntervalHours <= TimeProvider.GetUtcNow(), and for each due job calls IScrapeStore.EnqueueRun then IJobStore.MarkQueued(jobId, now, ct).",
+      "plannedVerification": "JobSchedulingServiceTests, against real SQLite: a job with no LastQueuedUtc is queued (returns 1, one ScrapeRuns row); a job whose LastQueuedUtc + IntervalHours is in the future is not queued (returns 0, no new row); a disabled job and a job whose only category is disabled are not queued even though otherwise due.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A job whose LastQueuedUtc is exactly IntervalHours in the past is queued.",
+        "whenHeldValueAbsent": "A job whose LastQueuedUtc is one hour short of IntervalHours in the past is left unqueued — the interval boundary, not just presence of a value, gates the decision."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Services/JobSchedulingServiceTests.cs::Should_queue_exactly_one_run_for_a_due_enabled_job, Should_not_queue_a_job_before_its_interval_elapses, Should_queue_a_job_once_its_interval_has_fully_elapsed, Should_not_queue_a_disabled_job, Should_not_queue_a_job_disabled_by_its_categories pass as part of the 188/188 Unit run (dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj)."
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A job with a run already queued or running is not queued again.",
+      "plannedImplementation": "IJobStore.HasQueuedOrRunningRun(jobId, ct) checks ScrapeRuns for a row with Status Queued or Running for that job (moved here from IScrapeStore during implementation: ScrapeStore was already at the CI0004 10-public-method ceiling, and #43 landed concurrently touching ScrapeStore/listing entities, so adding it to JobStore avoided both the analyzer violation and a merge-conflict-prone file). JobSchedulingService skips a due job when this returns true, without calling MarkQueued, so the next tick re-evaluates it once the run leaves those states.",
+      "plannedVerification": "JobStoreTests directly exercises HasQueuedOrRunningRun (true for Queued, true for Running after ClaimNextQueuedRun, false after CompleteRun). JobSchedulingServiceTests seeds a due job with an existing Queued run and asserts QueueDueJobs returns 0 and does not add a second ScrapeRuns row.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A due job with an existing Queued run is skipped.",
+        "whenHeldValueAbsent": "The same job once its only run is Completed is queued again on the next call — the skip is about active runs, not about ever having run before."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Data/JobStoreTests.cs::Should_report_no_active_run_when_none_exists, Should_report_an_active_run_when_queued_or_running and tests/MarketMakerEtl.Tests.Unit/Core/Services/JobSchedulingServiceTests.cs::Should_not_queue_a_job_with_an_existing_queued_run pass as part of the 188/188 Unit run."
+    },
+    {
+      "id": "AC-3",
+      "criterion": "Restarting the process does not re-queue jobs that were queued within their interval.",
+      "plannedImplementation": "LastQueuedUtc is persisted on ScrapeJobs (already durable from #40) and stamped with the scheduler's own TimeProvider-derived timestamp via the new MarkQueued(jobId, queuedUtc, ct) overload, so the due-check on the next JobSchedulingService instance — built fresh, as happens on a process restart — reads the same persisted value.",
+      "plannedVerification": "JobSchedulingServiceTests constructs a first JobSchedulingService against a SQLite file, queues a due job, then constructs a second JobSchedulingService instance against the same file (simulating a restart) with the same or slightly advanced FakeTimeProvider and asserts QueueDueJobs returns 0 for that job.",
+      "materialConcerns": [
+        "the scheduler itself does not open a long-lived DB connection or in-memory cache across ticks, so this reduces to 'is the due-check purely a function of persisted state' — deliberately proven by using two separate service instances rather than one long-lived one"
+      ],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Services/JobSchedulingServiceTests.cs::Should_not_requeue_a_job_across_a_simulated_restart_within_its_interval passes as part of the 188/188 Unit run; end-to-end restart behaviour additionally covered by tests/MarketMakerEtl.Tests.Integration/Scheduling/SchedulerQueuesJobsForScrapeWorkerTests.cs::Should_not_requeue_the_job_before_its_interval_elapses (fresh DI scope per call against the same SQLite-backed WebApplicationFactory, 19/19 Integration passed)."
+    },
+    {
+      "id": "AC-4",
+      "criterion": "The listing refresh runs once per refresh interval, and its failures are logged without stopping job scheduling.",
+      "plannedImplementation": "ListingRefreshSchedulingService.RefreshListingsIfDue(ct) reads ISchedulerStateStore.GetLastListingRefreshUtc, skips if now is before lastRefresh + RefreshIntervalHours, otherwise stamps ISchedulerStateStore.SetLastListingRefreshUtc(now, ct) before calling IListingRefreshService.RefreshActiveListings (reordered during review so a failing refresh still records the attempt and is not retried until the next full interval). Job queueing and listing refresh run as two independent BackgroundServices (JobQueueingWorker, ListingRefreshWorker), each wrapping its own scheduling call in its own try/catch that logs via ILogger and swallows the exception, replacing the original single SchedulerWorker where only the refresh step was protected and both steps shared one loop.",
+      "plannedVerification": "ListingRefreshSchedulingServiceTests (real SQLite SchedulerState table + mocked IListingRefreshService): refresh runs when no prior timestamp exists, does not run again immediately after, a second service instance against the same file (restart) does not re-run within the interval, and a refresh that throws still stamps the attempt and is not retried within the interval. JobQueueingWorkerTests mocks IJobSchedulingService to throw and asserts RunOnce returns 0 without throwing, then queues normally on the next call. ListingRefreshWorkerTests mocks IListingRefreshSchedulingService to throw and asserts RunOnce does not throw, and separately proves job queueing proceeds while a refresh is still in progress via a refresh stub blocked on a TaskCompletionSource.",
+      "materialConcerns": [
+        "the original design (single SchedulerWorker, only the refresh step wrapped) was flagged in PR review as unsafe: an unprotected QueueDueJobs failure (e.g. a transient SQLite 'database is locked') would escape ExecuteAsync and, under .NET's default BackgroundServiceExceptionBehavior.StopHost, crash the whole Etl host including the unrelated ScrapeWorker; and a long-running refresh (one HTTP fetch per active listing) ran inline before queueing, starving job queueing of its cadence for the whole refresh duration, with a failing refresh retried every tick since the timestamp was only written on success. All three points were addressed: split into two independent BackgroundServices, both scheduling calls individually try/caught, and the timestamp is now written before the refresh attempt rather than after."
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "JobQueueingWorker.RunOnce returns normally (0 queued, logged) when the underlying IJobSchedulingService throws, and queues normally on the very next call.",
+        "whenHeldValueAbsent": "Without the try/catch, the thrown exception would propagate out of RunOnce/ExecuteAsync, which for a BackgroundService can crash the whole host process under the default exception behavior, taking the ScrapeWorker down with it even though queueing and scraping are otherwise unrelated failures."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Services/ListingRefreshSchedulingServiceTests.cs (5 tests, including Should_record_the_refresh_attempt_even_when_it_throws_and_not_retry_within_the_interval), tests/MarketMakerEtl.Tests.Unit/Etl/Workers/JobQueueingWorkerTests.cs (3 tests) and tests/MarketMakerEtl.Tests.Unit/Etl/Workers/ListingRefreshWorkerTests.cs (3 tests, including Should_let_job_queueing_proceed_while_a_refresh_is_still_in_progress) all pass as part of the 209/209 Unit run."
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Integration test: a job created through the API is queued by the scheduler and processed by ScrapeWorker (stub scraper), using a controlled TimeProvider.",
+      "plannedImplementation": "SchedulerQueuesJobsForScrapeWorkerTests hosts WebApplicationFactory<Program> (Api) with TimeProvider replaced by a FakeTimeProvider and IScrapeClient replaced by a stub returning canned eBay search HTML (registered via services.RemoveAll + AddSingleton in WithWebHostBuilder(...ConfigureServices), Scrape:MaxPages/CollectSold pinned to 1/false via configuration so the stub only needs to answer one URL), backed by a temp SQLite file with the app's own startup migration. It creates a job via POST /api/jobs, resolves IJobSchedulingService from a DI scope on the factory and calls QueueDueJobs, then constructs a real ScrapeWorker over the same IScrapeStore/IScrapeRunService and calls RunOnce.",
+      "plannedVerification": "Assert QueueDueJobs returns 1, ScrapeWorker.RunOnce returns true, GET /api/jobs/{id} shows LastQueuedUtc equal to the fake clock's fixed time (proving the scheduler and the API observe the same injected TimeProvider), and GET /api/scrape/jobs/{id}/listings is non-empty with the stubbed listing's title 'Sony PlayStation 5 Console'. A second test proves a due-but-already-queued job is not re-queued one hour into a 24-hour interval across a fresh DI scope (simulating a new request/tick).",
+      "materialConcerns": [
+        "crosses three real boundaries at once (HTTP, SQLite, BackgroundService-style worker) deliberately, since this is exactly the seam the ticket calls out as needing an integration test",
+        "does not separately assert GET /api/scrape/runs/{runId} status as originally planned; ScrapeWorker.RunOnce returning true plus the listings endpoint returning the parsed listing is used as the observable proof the run completed instead, since RunOnce's return value already fails the test if ClaimNextQueuedRun found nothing"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "The job's LastQueuedUtc after QueueDueJobs equals the FakeTimeProvider's fixed timestamp, not wall-clock time.",
+        "whenHeldValueAbsent": "Removing the TimeProvider override (letting the default TimeProvider.System register win) would make this assertion fail nondeterministically, confirming the override is load-bearing rather than incidental."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Integration/Scheduling/SchedulerQueuesJobsForScrapeWorkerTests.cs::Should_queue_and_run_a_due_job_end_to_end and Should_not_requeue_the_job_before_its_interval_elapses pass (dotnet test tests/MarketMakerEtl.Tests.Integration/MarketMakerEtl.Tests.Integration.csproj: 19/19 passed)."
+    },
+    {
+      "id": "AC-6",
+      "criterion": "Repo quality gate green: .githooks/pre-commit (build with all analyzers at error severity, dotnet format --verify-no-changes, Unit + Architecture tests).",
+      "plannedImplementation": "Keep every new type within the analyzer limits (max 5 ctor params, max 40 lines/method, max 200 lines/class, no comments) by splitting scheduling into JobSchedulingService and ListingRefreshSchedulingService rather than one wide class, and run dotnet format before committing.",
+      "plannedVerification": "git commit (no --no-verify) succeeds: pre-commit prints Build ok, Lint clean, Unit + Architecture tests passed.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "git commit (no --no-verify) succeeded on the first attempt: pre-commit hook printed 'Build: ok', 'Lint: clean', 'Tests: 213 passed', 'All checks passed', commit 822f68d on feat/41-queue-due-jobs-and-refresh-listings. No HARNESS-FEEDBACK event was emitted."
+    },
+    {
+      "id": "REVIEW-1",
+      "criterion": "(Task brief, follow-up from #40 review) POST /api/jobs and PUT /api/jobs/{id} reject IntervalHours < 1 with 400 ValidationProblem, so the scheduler never sees a zero/negative interval.",
+      "plannedImplementation": "Program.cs validates request.IntervalHours < 1 before calling IJobStore.CreateJob/UpdateJob and returns Results.ValidationProblem with an IntervalHours error, for both POST /api/jobs and PUT /api/jobs/{id}.",
+      "plannedVerification": "JobIntervalHoursValidationTests posts/puts IntervalHours: 0 and IntervalHours: -1 and asserts 400 with a validation-problem body, and that no job/row was created or changed.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "IntervalHours: 0 is rejected with 400 before any store call.",
+        "whenHeldValueAbsent": "IntervalHours: 1 (the boundary) is accepted, proving the check is '< 1' and not an over-broad rejection of small-but-valid intervals."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Integration/Jobs/JobIntervalHoursValidationTests.cs::Should_reject_creating_a_job_with_interval_hours_below_one, Should_accept_creating_a_job_with_interval_hours_of_one, Should_reject_updating_a_job_with_interval_hours_below_one pass (19/19 Integration passed)."
+    },
+    {
+      "id": "REVIEW-2",
+      "criterion": "(Task brief, follow-up from #40 review) Unknown categoryIds on create/update/set-categories return 400 instead of a 500 FK failure.",
+      "plannedImplementation": "Program.cs checks every requested categoryId against ICategoryStore.GetCategories before calling IJobStore.CreateJob/UpdateJob/SetJobCategories, and returns Results.ValidationProblem naming the missing ids instead of letting the SQLite FK constraint fail inside SaveChangesAsync.",
+      "plannedVerification": "JobCategoryValidationTests posts/puts/sets CategoryIds containing an id that does not exist in Categories, for all three endpoints, and asserts 400 with a validation-problem body naming the missing id, and that the job's categories are unchanged.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A categoryIds list containing one real id and one nonexistent id is rejected wholesale with 400.",
+        "whenHeldValueAbsent": "The same list with only the real id succeeds and the job is assigned that category — proving the check is precise about which id is missing, not a blanket rejection of any categoryIds list."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Integration/Jobs/JobCategoryValidationTests.cs::Should_reject_creating_a_job_with_an_unknown_category_id, Should_accept_creating_a_job_when_every_category_id_exists, Should_reject_updating_a_job_with_an_unknown_category_id, Should_reject_setting_an_unknown_category_id_on_a_job pass (19/19 Integration passed)."
+    },
+    {
+      "id": "REVIEW-3",
+      "criterion": "(PR #52 review) A transient job-queueing failure must not escape SchedulerWorker.RunOnce/ExecuteAsync and take down the whole Etl host (and the unrelated ScrapeWorker with it).",
+      "plannedImplementation": "JobQueueingWorker.RunOnce wraps the IJobSchedulingService.QueueDueJobs call in its own try/catch (excluding OperationCanceledException), logs via ILogger, and returns 0 instead of rethrowing, so ExecuteAsync always reaches Task.Delay and retries on the next tick.",
+      "plannedVerification": "JobQueueingWorkerTests: a throwing QueueDueJobs makes RunOnce return 0 without throwing; a second RunOnce call after the fault clears queues normally again.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "RunOnce returns 0 and logs when QueueDueJobs throws, instead of the exception propagating.",
+        "whenHeldValueAbsent": "The very next RunOnce call, with the mock reconfigured to succeed, returns the real queued count — proving the try/catch does not permanently disable queueing, only isolates a single bad tick."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Etl/Workers/JobQueueingWorkerTests.cs::Should_not_throw_and_report_zero_queued_when_queueing_fails, Should_queue_normally_on_the_next_call_after_a_fault_clears pass as part of the 209/209 Unit run."
+    },
+    {
+      "id": "REVIEW-4",
+      "criterion": "(PR #52 review) A long-running or failing listing refresh must not block job queueing's cadence, and a failing refresh must not retry every tick.",
+      "plannedImplementation": "Listing refresh runs in its own BackgroundService (ListingRefreshWorker) independent of JobQueueingWorker, so the host schedules their ExecuteAsync loops as separate tasks and a slow refresh cannot delay the next queueing tick. ListingRefreshSchedulingService.RefreshListingsIfDue now calls ISchedulerStateStore.SetLastListingRefreshUtc(now, ct) before IListingRefreshService.RefreshActiveListings, so the attempt timestamp is durably recorded even if the refresh subsequently throws, giving a failing refresh a natural backoff of one full RefreshIntervalHours instead of retrying every tick.",
+      "plannedVerification": "ListingRefreshWorkerTests::Should_let_job_queueing_proceed_while_a_refresh_is_still_in_progress blocks a stubbed refresh on a TaskCompletionSource, starts ListingRefreshWorker.RunOnce without awaiting it, then awaits a separate JobQueueingWorker.RunOnce call and asserts it completes and returns the due count while the refresh task is still not completed. ListingRefreshSchedulingServiceTests::Should_record_the_refresh_attempt_even_when_it_throws_and_not_retry_within_the_interval asserts a throwing refresh still updates the stored timestamp, and a subsequent call within the interval does not re-invoke IListingRefreshService.",
+      "materialConcerns": [
+        "no appsettings.json exists anywhere in this repo (checked via glob across src/), so there is no config file to add the Schedule:TickMinutes / Schedule:RefreshIntervalHours keys and defaults to, as review also asked; the defaults remain as named constants in ServiceCollectionExtensions.BuildScheduleOptions (DefaultTickMinutes = 5, DefaultRefreshIntervalHours = 24) and are overridable via any configuration provider (e.g. environment variables), same as Scrape:MaxPages/Scrape:CollectSold already are"
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "JobQueueingWorker.RunOnce completes and returns the due job count while ListingRefreshWorker.RunOnce is still awaiting a blocked refresh.",
+        "whenHeldValueAbsent": "If both scheduling calls instead ran sequentially in one worker's RunOnce (the original design), the queueing call could not even start until the blocked refresh call returned, since the blocked Task would still be running fully synchronously inside the same method invocation."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Etl/Workers/ListingRefreshWorkerTests.cs::Should_let_job_queueing_proceed_while_a_refresh_is_still_in_progress and tests/MarketMakerEtl.Tests.Unit/Core/Services/ListingRefreshSchedulingServiceTests.cs::Should_record_the_refresh_attempt_even_when_it_throws_and_not_retry_within_the_interval pass as part of the 209/209 Unit run."
+    }
+  ]
+}

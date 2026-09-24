@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddCoreServices(builder.Configuration);
 builder.Services.AddHostedService<ScrapeWorker>();
+builder.Services.AddHostedService<JobQueueingWorker>();
+builder.Services.AddHostedService<ListingRefreshWorker>();
 var host = builder.Build();
 
 using (var scope = host.Services.CreateScope())

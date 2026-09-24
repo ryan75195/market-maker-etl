@@ -18,7 +18,9 @@ public interface IJobStore
 
     Task<JobView?> SetJobCategories(int jobId, IReadOnlyList<int> categoryIds, CancellationToken ct);
 
-    Task<JobView?> MarkQueued(int jobId, CancellationToken ct);
+    Task<JobView?> MarkQueued(int jobId, DateTime queuedUtc, CancellationToken ct);
 
     Task<IReadOnlyList<JobView>> GetEffectivelyEnabledJobs(CancellationToken ct);
+
+    Task<bool> HasQueuedOrRunningRun(int jobId, CancellationToken ct);
 }

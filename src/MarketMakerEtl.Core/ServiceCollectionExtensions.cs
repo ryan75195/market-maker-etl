@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Scheduling;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,8 @@ public static class ServiceCollectionExtensions
     private const bool DefaultCollectSold = true;
     private const int DefaultMaxBandsPerDirection = 200;
     private const string DefaultDatabaseFileName = "marketmakeretl.db";
+    private const int DefaultTickMinutes = 5;
+    private const int DefaultRefreshIntervalHours = 24;
 
     private static readonly TimeSpan DefaultFetchTimeout = TimeSpan.FromMinutes(5);
 
@@ -45,6 +48,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(BuildScrapeClientOptions(configuration));
         services.AddSingleton(BuildScrapeContentOptions(configuration));
         services.AddSingleton(BuildScrapeOptions(configuration));
+        services.AddSingleton(BuildScheduleOptions(configuration));
+        services.AddSingleton(TimeProvider.System);
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite(BuildDatabaseConnectionString(configuration)));
 
@@ -64,6 +69,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISearchPageService, SearchPageService>();
         services.AddSingleton<IScrapeRunService, ScrapeRunService>();
         services.AddSingleton<IListingRefreshService, ListingRefreshService>();
+        services.AddSingleton<ISchedulerStateStore, SchedulerStateStore>();
+        services.AddSingleton<IJobSchedulingService, JobSchedulingService>();
+        services.AddSingleton<IListingRefreshSchedulingService, ListingRefreshSchedulingService>();
         return services;
     }
 
@@ -85,6 +93,11 @@ public static class ServiceCollectionExtensions
             ReadInt(configuration, "Scrape:MaxPages", DefaultMaxPages),
             ReadBool(configuration, "Scrape:CollectSold", DefaultCollectSold),
             ReadInt(configuration, "Scrape:MaxBandsPerDirection", DefaultMaxBandsPerDirection));
+
+    private static ScheduleOptions BuildScheduleOptions(IConfiguration? configuration) =>
+        new(
+            ReadInt(configuration, "Schedule:TickMinutes", DefaultTickMinutes),
+            ReadInt(configuration, "Schedule:RefreshIntervalHours", DefaultRefreshIntervalHours));
 
     private static string BuildDatabaseConnectionString(IConfiguration? configuration)
     {
