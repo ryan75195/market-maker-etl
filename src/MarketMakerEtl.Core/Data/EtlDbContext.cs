@@ -22,6 +22,8 @@ public sealed class EtlDbContext : DbContext
 
     public DbSet<JobCategoryEntity> JobCategories => Set<JobCategoryEntity>();
 
+    public DbSet<SchedulerStateEntity> SchedulerState => Set<SchedulerStateEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ScrapeJobEntity>(entity =>
@@ -51,6 +53,12 @@ public sealed class EtlDbContext : DbContext
         });
 
         ConfigureCategories(modelBuilder);
+
+        modelBuilder.Entity<SchedulerStateEntity>(entity =>
+        {
+            entity.ToTable("SchedulerState");
+            entity.HasKey(e => e.Id);
+        });
     }
 
     private static void ConfigureCategories(ModelBuilder modelBuilder)

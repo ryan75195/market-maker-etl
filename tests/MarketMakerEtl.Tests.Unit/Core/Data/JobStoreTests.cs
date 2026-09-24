@@ -1,6 +1,7 @@
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Models.Jobs;
 using MarketMakerEtl.Core.Models.Marketplaces;
+using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -152,9 +153,10 @@ public class JobStoreTests
         var store = CreateStore();
         var created = await store.CreateJob(BuildDetails("queue me"), CancellationToken.None);
 
-        var queued = await store.MarkQueued(created.Id, CancellationToken.None);
+        var queuedUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var queued = await store.MarkQueued(created.Id, queuedUtc, CancellationToken.None);
 
-        Assert.That(queued!.LastQueuedUtc, Is.Not.EqualTo(default(DateTime)));
+        Assert.That(queued!.LastQueuedUtc, Is.EqualTo(queuedUtc));
     }
 
     [Test]
@@ -170,6 +172,41 @@ public class JobStoreTests
         var effectivelyEnabled = await store.GetEffectivelyEnabledJobs(CancellationToken.None);
 
         Assert.That(effectivelyEnabled.Select(j => j.Id), Is.EquivalentTo(new[] { enabledJob.Id }));
+    }
+
+    [Test]
+    public async Task Should_report_no_active_run_when_none_exists()
+    {
+        var store = CreateStore();
+        var created = await store.CreateJob(BuildDetails("no active run"), CancellationToken.None);
+
+        var hasActiveRun = await store.HasQueuedOrRunningRun(created.Id, CancellationToken.None);
+
+        Assert.That(hasActiveRun, Is.False);
+    }
+
+    [Test]
+    public async Task Should_report_an_active_run_when_queued_or_running()
+    {
+        var store = CreateStore();
+        var created = await store.CreateJob(BuildDetails("active run"), CancellationToken.None);
+        var scrapeStore = new ScrapeStore(
+            _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(),
+            new ScrapeRunStateService());
+        var runId = await scrapeStore.EnqueueRun(created.Id, created.SearchTerm, CancellationToken.None);
+
+        var hasQueuedRun = await store.HasQueuedOrRunningRun(created.Id, CancellationToken.None);
+        await scrapeStore.ClaimNextQueuedRun(CancellationToken.None);
+        var hasRunningRun = await store.HasQueuedOrRunningRun(created.Id, CancellationToken.None);
+        await scrapeStore.CompleteRun(runId, CancellationToken.None);
+        var hasRunAfterCompletion = await store.HasQueuedOrRunningRun(created.Id, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(hasQueuedRun, Is.True);
+            Assert.That(hasRunningRun, Is.True);
+            Assert.That(hasRunAfterCompletion, Is.False);
+        });
     }
 
     private JobStore CreateStore() =>

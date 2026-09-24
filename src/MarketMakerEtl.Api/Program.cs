@@ -1,4 +1,5 @@
-﻿using MarketMakerEtl.Api;
+﻿using System.Globalization;
+using MarketMakerEtl.Api;
 using MarketMakerEtl.Core;
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
@@ -42,8 +43,14 @@ app.MapGet("/api/scrape/jobs/{jobId:int}/listings", async (
 app.MapGet("/api/jobs", async (IJobStore jobs, CancellationToken ct) =>
     Results.Ok(await jobs.GetJobs(ct)));
 
-app.MapPost("/api/jobs", async (CreateJobRequest request, IJobStore jobs, CancellationToken ct) =>
+app.MapPost("/api/jobs", async (CreateJobRequest request, IJobStore jobs, ICategoryStore categories, CancellationToken ct) =>
 {
+    var invalid = await ValidateJobDetails(request.IntervalHours, request.CategoryIds, categories, ct);
+    if (invalid is not null)
+    {
+        return invalid;
+    }
+
     var job = await jobs.CreateJob(request.ToDetails(), ct);
     return Results.Created($"/api/jobs/{job.Id}", job);
 });
@@ -54,8 +61,19 @@ app.MapGet("/api/jobs/{jobId:int}", async (int jobId, IJobStore jobs, Cancellati
     return job is null ? Results.NotFound() : Results.Ok(job);
 });
 
-app.MapPut("/api/jobs/{jobId:int}", async (int jobId, UpdateJobRequest request, IJobStore jobs, CancellationToken ct) =>
+app.MapPut("/api/jobs/{jobId:int}", async (
+    int jobId,
+    UpdateJobRequest request,
+    IJobStore jobs,
+    ICategoryStore categories,
+    CancellationToken ct) =>
 {
+    var invalid = await ValidateJobDetails(request.IntervalHours, request.CategoryIds, categories, ct);
+    if (invalid is not null)
+    {
+        return invalid;
+    }
+
     var job = await jobs.UpdateJob(jobId, request.ToDetails(), ct);
     return job is null ? Results.NotFound() : Results.Ok(job);
 });
@@ -67,8 +85,15 @@ app.MapPost("/api/jobs/{jobId:int}/categories", async (
     int jobId,
     SetJobCategoriesRequest request,
     IJobStore jobs,
+    ICategoryStore categories,
     CancellationToken ct) =>
 {
+    var missingCategoryIds = await FindMissingCategoryIds(request.CategoryIds, categories, ct);
+    if (missingCategoryIds is not null)
+    {
+        return CategoryValidationProblem(missingCategoryIds);
+    }
+
     var job = await jobs.SetJobCategories(jobId, request.CategoryIds, ct);
     return job is null ? Results.NotFound() : Results.Ok(job);
 });
@@ -98,7 +123,7 @@ app.MapPost("/api/jobs/{jobId:int}/run", async (
     }
 
     var runId = await store.EnqueueRun(jobId, job.SearchTerm, ct);
-    await jobs.MarkQueued(jobId, ct);
+    await jobs.MarkQueued(jobId, DateTime.UtcNow, ct);
     return Results.Accepted($"/api/scrape/runs/{runId}", new EnqueueRunResponse(runId));
 });
 
@@ -143,6 +168,49 @@ app.MapPost("/api/categories/{categoryId:int}/disable", async (int categoryId, I
 });
 
 await app.RunAsync();
+
+static async Task<IResult?> ValidateJobDetails(
+    int intervalHours,
+    IReadOnlyList<int>? categoryIds,
+    ICategoryStore categories,
+    CancellationToken ct)
+{
+    if (intervalHours < 1)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["IntervalHours"] = ["IntervalHours must be at least 1."]
+        });
+    }
+
+    var missingCategoryIds = await FindMissingCategoryIds(categoryIds, categories, ct);
+    return missingCategoryIds is null ? null : CategoryValidationProblem(missingCategoryIds);
+}
+
+static async Task<string[]?> FindMissingCategoryIds(
+    IReadOnlyList<int>? categoryIds,
+    ICategoryStore categories,
+    CancellationToken ct)
+{
+    if (categoryIds is null || categoryIds.Count == 0)
+    {
+        return null;
+    }
+
+    var existingIds = (await categories.GetCategories(ct)).Select(c => c.Id).ToHashSet();
+    var missing = categoryIds
+        .Where(id => !existingIds.Contains(id))
+        .Distinct()
+        .Select(id => id.ToString(CultureInfo.InvariantCulture))
+        .ToArray();
+    return missing.Length == 0 ? null : missing;
+}
+
+static IResult CategoryValidationProblem(string[] missingCategoryIds) =>
+    Results.ValidationProblem(new Dictionary<string, string[]>
+    {
+        ["CategoryIds"] = missingCategoryIds.Select(id => $"Category {id} does not exist.").ToArray()
+    });
 
 public partial class Program;
 
