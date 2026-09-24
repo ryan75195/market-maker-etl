@@ -1,0 +1,15 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~HttpScrapeClientTests\"",
+  "rationale": "Issue #47 has four acceptance criteria. AC-2 (Scraper:SessionReference is not sent with Mercari fetches) is the only criterion that is a unit-testable code behaviour; it is pinned by a new test in the existing HttpScrapeClientTests fixture (HttpScrapeClient already has full CI0002 coverage from #38/#44, so this extends that fixture rather than adding a new one). AC-1 (a scheduled Mercari job completes through the real stack and its listings are readable from the API) is verified by a live, human-observed run against the real AIOWebScraper stack per the ticket's Scope section 2 and is not expressible as an automated dotnet test: it depends on a live browser fetch through Cloudflare, Azurite blob storage, and the real Functions host, none of which the repo's automated suite exercises (by design — AIOWebScraper is a separate repo reached only over HTTP). Its evidence is recorded directly in the PR body (listings stored per direction, bands fetched, detail pages fetched, sale dates recorded, issues hit) rather than in a test fixture. AC-3 (docs/running-locally.md lets a fresh reader start the stack) is a documentation criterion verified by review, not a test. AC-4 (repo quality gate green) is enforced by .githooks/pre-commit itself, not a named test. At base (before the fix), HttpScrapeClient.StartJob always includes _options.SessionReference on every ScrapeJobRequest regardless of the target URL, so the new red test (Should_not_send_session_reference_for_mercari_fetches) fails by observing SessionReference present in the request body for a mercari.com URL when SessionReference is configured. No test reads git or working-tree state.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Services/HttpScrapeClient.cs"
+  ],
+  "implementationPaths": [],
+  "declaredRedTests": [
+    "MarketMakerEtl.Tests.Unit.Core.Services.HttpScrapeClientTests.Should_not_send_session_reference_for_mercari_fetches"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Services/HttpScrapeClient.cs": "AC-2"
+  }
+}

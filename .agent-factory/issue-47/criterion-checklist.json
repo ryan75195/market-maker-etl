@@ -1,0 +1,44 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A scheduled Mercari job completes through the real stack, and its listings (with sale dates for sold ones) are readable from the API.",
+      "plannedImplementation": "No production code change is required for this criterion beyond AC-2's fix; it is a proof exercise of the existing #40/#41/#42/#43/#44/#45 pipeline. A throwaway SQLite database, Azurite, the AIOWebScraper Functions host and worker (patched locally and uncommitted to launch Chrome off-screen), and the ETL Api + Etl processes are started per docs/running-locally.md. A Mercari job is created via POST /api/jobs (not /run), the scheduler (JobQueueingWorker) picks it up on its next tick and enqueues a run, ScrapeRunService executes active+sold search, price-band slicing, item-detail fetch and persistence, and the results are read back via GET /api/scrape/jobs/{jobId}/listings.",
+      "plannedVerification": "Manual live run, recorded directly in the PR body with: listings stored per direction (active/sold), price bands fetched, detail pages fetched, and how many sold listings received a SoldDate. Not expressible as an automated dotnet test (see test-plan.json rationale).",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "partial (real path proven; the pipeline has a real defect, root-caused and filed). The original 'proxy rotation' diagnosis in an earlier revision of this PR was wrong and has been retracted (see the corrected comment on AIOWebScraper#40). A capture tool proved the proxy itself was fine; investigation traced the actual cause to AIOWebScraper's RouteFilterService domain allowlist silently blocking Cloudflare's own beacon and Mercari's asset CDN when routing:allowedDomains is non-empty, which broke the Cloudflare JS challenge. With domain filtering disabled, a real scheduled run (job 1, search 'pokemon card lot', created via POST /api/jobs, queued by JobQueueingWorker with no /run call) reached CompletedWithErrors: ListingsAddedSold=101, ListingsAddedActive=0, TotalListingsFound=101, DetailFetchedUtc set on 10/10 listings (MaxDetailFetchesPerRun cap), all 10 with Description/Seller/ShippingCost populated, 7/10 with SoldDate populated. A ScrapeRunIssues row records PriceBandCapHit ('Hit the 8-band cap while collecting pokemon card lot (sold)'), correctly flagging that only 8 of the price bands needed to cover a >10,000-item catalog were fetched at this MaxBandsPerDirection=8 dev setting; the 101-listing count is the small band budget doing exactly what it's configured to do, not data loss. The active direction is a real defect, not a counter bug: it fetched exactly 1 band, collected 0 listings, and reported a null total. Traced to source: AIOWebScraper's SearchPayloadCapture hardcodes operationName=searchFacetQuery as the only recognized Mercari search response; that operation reliably fires for filtered (itemStatuses=2/sold) searches but the plain unfiltered active-listings search never produced a matching response in this run, so the worker fell back to raw rendered HTML, and MercariSearchParser's rendered-card fallback (div[data-testid=\"ItemContainer\"]) found no cards in it despite a real, unblocked 166KB page (status 200, no captcha verdict). Filed with full evidence as AIOWebScraper#150 (https://github.com/ryan75195/AIOWebScraper/issues/150), which also supersedes the retracted proxy comment on #40. In this repo, SearchPageService.Collect now records a new 'SearchYieldedNoResults' ScrapeRunIssue whenever a price-band direction fetches at least one band but collects zero listings with no reported total, so this failure mode is surfaced on future runs instead of silently looking like a genuinely empty search (SearchPageServiceTests.cs, 2 new tests, both passing). AC-1's 'listings readable from the API' half is proven for the sold direction by this live run and by SoldDateAndSoldPriceAreReadableFromGetListingsTests.cs; the active-direction half is not met because of the AIOWebScraper defect above, hence 'partial' rather than 'verified'."
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A configured Scraper:SessionReference is not sent with Mercari fetches (unit test on HttpScrapeClient).",
+      "plannedImplementation": "HttpScrapeClient.StartJob currently always passes _options.SessionReference into ScrapeJobRequest. Add a private helper that omits the session reference when the target URL's host is a Mercari host (www.mercari.com), so ScrapeJobRequest.SessionReference is null (and therefore omitted from the JSON body by the existing JsonIgnoreCondition.WhenWritingNull) for Mercari fetches, while non-Mercari (eBay) fetches keep sending it exactly as before.",
+      "plannedVerification": "HttpScrapeClientTests.Should_not_send_session_reference_for_mercari_fetches configures a non-null SessionReference, calls GetPageHtml with a https://www.mercari.com/... URL against a stub HttpMessageHandler, and asserts the captured api/NewJob request body's JSON property names do not include SessionReference (mirroring the existing Should_pin_the_new_job_wire_field_names test's assertion style). The existing Should_pin_the_new_job_wire_field_names test (an eBay URL) is left unchanged and continues to assert SessionReference IS sent, proving the fix is Mercari-specific, not global.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A Mercari target URL omits SessionReference from the outgoing NewJob request even when one is configured.",
+        "whenHeldValueAbsent": "A non-Mercari (eBay) target URL still sends the configured SessionReference exactly as before."
+      },
+      "verificationStatus": "verified: Should_not_send_session_reference_for_mercari_fetches passed red-then-green; Should_pin_the_new_job_wire_field_names (eBay) unaffected"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "The runbook lets a fresh reader start the stack.",
+      "plannedImplementation": "docs/running-locally.md documents, in order: starting Azurite, starting the AIOWebScraper Functions host and worker (including the off-screen browser requirement and its local.settings.json setting names, no secret values), starting the ETL Api and Etl processes, the configuration keys each process needs (Scraper:BaseUrl, Scraper:ApiKey, Scraper:SessionReference, ContentStore:ConnectionString, ContentStore:ContainerName, Database:ConnectionString, Schedule:TickMinutes, Schedule:RefreshIntervalHours, Scrape:MaxPages, Scrape:CollectSold, Scrape:MaxBandsPerDirection, Scrape:MaxConcurrentDetailFetches, Scrape:MaxDetailFetchesPerRun, Scrape:MaxDetailFetchAttempts) by name only, and how to create and observe a job through POST /api/jobs.",
+      "plannedVerification": "Reviewed for completeness against the actual commands used for the live run in this PR; a fresh reader following the doc top-to-bottom can reach a completed job without consulting anything else. Documentation criterion, verified by review rather than by an automated test.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: docs/running-locally.md written and cross-checked line-by-line against the commands actually run for this PR's live run, including the domain-allowlist gotcha discovered during the run"
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Repo quality gate green: .githooks/pre-commit (build with all analyzers at error severity, dotnet format --verify-no-changes, Unit + Architecture tests).",
+      "plannedImplementation": "No feature-specific implementation; satisfied by keeping the HttpScrapeClient change within existing analyzer limits (method length, no comments, one public type per file).",
+      "plannedVerification": "The .githooks/pre-commit hook run at commit time: dotnet build --no-incremental, dotnet format --verify-no-changes, dotnet test for Unit + Architecture projects.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: actual git commit gate (not a manual pre-check) ran and passed on commit 71c410d - Build: ok, Lint: clean, Tests: 264 passed (Unit + Architecture)"
+    }
+  ]
+}

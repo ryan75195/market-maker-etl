@@ -44,13 +44,19 @@ public sealed class HttpScrapeClient : IScrapeClient
 
     private async Task<string> StartJob(string url, CancellationToken ct)
     {
-        var request = new ScrapeJobRequest([url], _options.SessionReference);
+        var request = new ScrapeJobRequest([url], SessionReferenceFor(url));
         var response = await _http.PostAsJsonAsync(BuildUri("api/NewJob"), request, JsonOptions, ct);
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadFromJsonAsync<ScrapeJobResponse>(JsonOptions, ct);
         return body?.JobId ?? throw new InvalidOperationException("Scraper returned no job id");
     }
+
+    private string? SessionReferenceFor(string url) => IsMercariUrl(url) ? null : _options.SessionReference;
+
+    private static bool IsMercariUrl(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var parsed) &&
+        parsed.Host.EndsWith("mercari.com", StringComparison.OrdinalIgnoreCase);
 
     private async Task WaitForTerminal(string jobId, CancellationToken ct)
     {
@@ -61,7 +67,7 @@ public sealed class HttpScrapeClient : IScrapeClient
 
             if (status == ScrapeJobStatus.Failure)
             {
-                throw new InvalidOperationException($"Scrape job {jobId} failed");
+                throw new InvalidOperationException(await BuildFailureMessage(jobId, ct));
             }
 
             if (status == ScrapeJobStatus.Success)
@@ -70,6 +76,35 @@ public sealed class HttpScrapeClient : IScrapeClient
             }
 
             await Task.Delay(_options.PollInterval, ct);
+        }
+    }
+
+    private async Task<string> BuildFailureMessage(string jobId, CancellationToken ct)
+    {
+        var reason = await TryGetFailureReason(jobId, ct);
+        return reason is null
+            ? $"Scrape job {jobId} failed"
+            : $"Scrape job {jobId} failed: {reason}";
+    }
+
+    private async Task<string?> TryGetFailureReason(string jobId, CancellationToken ct)
+    {
+        try
+        {
+            var uri = BuildUri($"api/GetResults?jobId={Uri.EscapeDataString(jobId)}");
+            var response = await _http.GetAsync(uri, ct);
+            response.EnsureSuccessStatusCode();
+
+            var items = await response.Content.ReadFromJsonAsync<List<ScrapeJobItem>>(JsonOptions, ct);
+            return items?.Find(item => !string.IsNullOrEmpty(item.Error))?.Error;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

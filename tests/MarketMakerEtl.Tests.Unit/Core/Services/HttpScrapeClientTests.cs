@@ -45,6 +45,18 @@ public class HttpScrapeClientTests
     }
 
     [Test]
+    public void Should_surface_the_upstream_failure_reason_when_a_job_fails()
+    {
+        var handler = new StubScrapeHandler(BlobUri, failJob: true, failureReason: "Blocked: Captcha (21KB)");
+        var content = Substitute.For<IScrapeContentStore>();
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await CreateClient(handler, content).GetPageHtml("https://www.mercari.com/search/?keyword=test", CancellationToken.None));
+
+        Assert.That(exception!.Message, Does.Contain("Blocked: Captcha (21KB)"));
+    }
+
+    [Test]
     public void Should_throw_when_no_content_is_stored()
     {
         var handler = new StubScrapeHandler(blobUri: null);
@@ -75,6 +87,27 @@ public class HttpScrapeClientTests
         Assert.That(names, Is.EqualTo(new[] { "Urls", "SessionReference" }));
     }
 
+    [Test]
+    public async Task Should_not_send_session_reference_for_mercari_fetches()
+    {
+        var handler = new StubScrapeHandler(BlobUri);
+        var content = Substitute.For<IScrapeContentStore>();
+        content.GetHtml(BlobUri, Arg.Any<CancellationToken>()).Returns("<html></html>");
+        var options = new ScrapeClientOptions(
+            "http://scraper.test",
+            "key",
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(1),
+            "operator-session-token");
+
+        await new HttpScrapeClient(new HttpClient(handler), options, content, NullLogger<HttpScrapeClient>.Instance)
+            .GetPageHtml("https://www.mercari.com/us/item/m12345/", CancellationToken.None);
+
+        using var document = JsonDocument.Parse(handler.NewJobBody!);
+        var names = document.RootElement.EnumerateObject().Select(property => property.Name).ToList();
+        Assert.That(names, Is.EqualTo(new[] { "Urls" }));
+    }
+
     private static HttpScrapeClient CreateClient(HttpMessageHandler handler, IScrapeContentStore content) =>
         new(new HttpClient(handler), Options, content, NullLogger<HttpScrapeClient>.Instance);
 
@@ -82,12 +115,14 @@ public class HttpScrapeClientTests
     {
         private readonly string? _blobUri;
         private readonly bool _failJob;
+        private readonly string? _failureReason;
         private int _statusCalls;
 
-        public StubScrapeHandler(string? blobUri, bool failJob = false)
+        public StubScrapeHandler(string? blobUri, bool failJob = false, string? failureReason = null)
         {
             _blobUri = blobUri;
             _failJob = failJob;
+            _failureReason = failureReason;
         }
 
         public string? NewJobBody { get; private set; }
@@ -107,12 +142,22 @@ public class HttpScrapeClientTests
             var response = path switch
             {
                 "/api/GetStatus" => Json(StatusBody()),
-                "/api/GetResults" => Json(_blobUri is null
-                    ? "[{\"blobUri\":null}]"
-                    : $"[{{\"blobUri\":\"{_blobUri}\"}}]"),
+                "/api/GetResults" => Json(ResultsBody()),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound)
             };
             return response;
+        }
+
+        private string ResultsBody()
+        {
+            if (_failJob && _failureReason is not null)
+            {
+                return $"[{{\"error\":\"{_failureReason}\"}}]";
+            }
+
+            return _blobUri is null
+                ? "[{\"blobUri\":null}]"
+                : $"[{{\"blobUri\":\"{_blobUri}\"}}]";
         }
 
         private string StatusBody()

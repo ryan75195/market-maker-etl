@@ -14,4 +14,6 @@ public sealed record ListingSummary(
     decimal? OriginalPrice = null,
     string? Category = null,
     int? Likes = null,
-    IReadOnlyList<string>? ImageUrls = null);
+    IReadOnlyList<string>? ImageUrls = null,
+    decimal? SoldPrice = null,
+    DateTime? SoldDate = null);
