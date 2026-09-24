@@ -192,6 +192,42 @@ public class ItemDetailStoreTests
     }
 
     [Test]
+    public async Task Should_succeed_when_a_transient_sqlite_lock_blocks_the_save()
+    {
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "detail-apply-lock-contended", detailFetched: false);
+        var detail = BuildItemPageListing(status: null);
+
+        var lockingServices = new ServiceCollection();
+        lockingServices.AddDbContextFactory<EtlDbContext>(options =>
+            options.UseSqlite($"Data Source={_databasePath};Default Timeout=1"));
+        await using var lockingProvider = lockingServices.BuildServiceProvider();
+        var store = new ItemDetailStore(lockingProvider.GetRequiredService<IDbContextFactory<EtlDbContext>>());
+
+        await using var blocker = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={_databasePath}");
+        await blocker.OpenAsync();
+        await using (var begin = blocker.CreateCommand())
+        {
+            begin.CommandText = "BEGIN IMMEDIATE;";
+            await begin.ExecuteNonQueryAsync();
+        }
+
+        var releaseLock = Task.Run(async () =>
+        {
+            await Task.Delay(1500);
+            await using var rollback = blocker.CreateCommand();
+            rollback.CommandText = "ROLLBACK;";
+            await rollback.ExecuteNonQueryAsync();
+        });
+
+        await store.ApplyItemDetail(listingEntityId, detail, CancellationToken.None);
+        await releaseLock;
+
+        var listing = await GetListing(listingEntityId);
+        Assert.That(listing.DetailFetchedUtc, Is.Not.Null);
+    }
+
+    [Test]
     public async Task Should_add_exactly_one_sold_row_when_an_active_listing_is_revealed_sold_by_the_item_page()
     {
         var store = CreateStore();
