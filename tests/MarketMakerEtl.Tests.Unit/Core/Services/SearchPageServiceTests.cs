@@ -15,6 +15,9 @@ public class SearchPageServiceTests
     private static readonly ListingSummary Listing =
         new("111111111111", "PS5", 100m, "GBP", "https://x/itm/1", false, null, null, null);
 
+    private static readonly DetailFetchOptions DetailOptions = new(
+        MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3);
+
     [Test]
     public async Task Should_collect_listings_from_active_pages()
     {
@@ -82,6 +85,33 @@ public class SearchPageServiceTests
             issue => issue.IssueType == "SearchYieldedNoResults"));
     }
 
+    [Test]
+    public async Task Should_record_a_sold_backfill_window_issue_when_a_jobs_first_sold_run_backfills()
+    {
+        var harness = BuildMercari(
+            new ScrapeOptions(MaxPages: 1, CollectSold: true, MaxBandsPerDirection: 9, SoldBackfillDays: 30),
+            totalReported: 0);
+
+        var result = await harness.Service.Collect("pokemon card lot", Marketplace.Mercari, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(result.Issues, Has.Some.Matches<ScrapeRunIssueDetails>(
+            issue => issue.IssueType == "SoldBackfillWindow"));
+    }
+
+    [Test]
+    public async Task Should_not_record_a_backfill_window_issue_on_a_later_incremental_run()
+    {
+        var harness = BuildMercari(
+            new ScrapeOptions(MaxPages: 1, CollectSold: true, MaxBandsPerDirection: 9, SoldBackfillDays: 30),
+            totalReported: 0);
+
+        var result = await harness.Service.Collect(
+            "pokemon card lot", Marketplace.Mercari, new HashSet<string> { "already-known" }, CancellationToken.None);
+
+        Assert.That(result.Issues, Has.None.Matches<ScrapeRunIssueDetails>(
+            issue => issue.IssueType == "SoldBackfillWindow"));
+    }
+
     private static Harness BuildMercari(ScrapeOptions options, int? totalReported)
     {
         var client = Substitute.For<IScrapeClient>();
@@ -97,8 +127,12 @@ public class SearchPageServiceTests
         parser.Marketplace.Returns(Marketplace.Mercari);
         parser.Parse(Arg.Any<string>()).Returns(new SearchPageResult([], totalReported));
 
+        var itemParser = Substitute.For<IItemPageParser>();
+        itemParser.Marketplace.Returns(Marketplace.Mercari);
+
+        var adapters = new MarketplaceAdapters([(IEbaySearchUrlService)urls], [parser], [itemParser]);
         return new Harness(
-            new SearchPageService(client, [(IEbaySearchUrlService)urls], [parser], options, NullLogger<SearchPageService>.Instance),
+            new SearchPageService(client, adapters, options, DetailOptions, NullLogger<SearchPageService>.Instance),
             client);
     }
 
@@ -118,8 +152,9 @@ public class SearchPageServiceTests
         parser.Parse(Arg.Any<string>()).Returns(
             empty ? new SearchPageResult([], null) : new SearchPageResult([Listing], null));
 
+        var adapters = new MarketplaceAdapters([urls], [parser], []);
         return new Harness(
-            new SearchPageService(client, [urls], [parser], options, NullLogger<SearchPageService>.Instance),
+            new SearchPageService(client, adapters, options, DetailOptions, NullLogger<SearchPageService>.Instance),
             client);
     }
 

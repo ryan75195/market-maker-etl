@@ -1,0 +1,63 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~SoldBackfillPlannerTests|FullyQualifiedName~MercariPriceBandCollectorTests|FullyQualifiedName~SearchPageServiceTests|FullyQualifiedName~ScrapeRunServiceTests|FullyQualifiedName~ItemDetailStoreTests|FullyQualifiedName~CoreServicesDefaultsTests|FullyQualifiedName~ScrapeLimitsConfigurationTests|FullyQualifiedName~SearchUsesTheMarketplaceImplementationTests\"",
+  "rationale": "A job's first sold run (knownSoldListingIds.Count == 0, the same signal SearchPageService/MercariPriceBandCollector already use to decide whether known-sold pruning applies) now runs in 'backfill' mode instead of walking bands purely by count. Scrape:SoldBackfillDays (default 30, ScrapeOptions) sets a cutoff = UtcNow - N days. A new internal SoldBackfillPlanner (src/MarketMakerEtl.Core/Services/SoldBackfillPlanner.cs) owns the date-driven decision for one fetched band: it fetches the item page for a band's first and last listing (via the existing IScrapeClient + the Mercari IItemPageParser, matching the prototype's approach), resolves a sold date per listing (SoldDateParser.Parse(detail.SoldDate), falling back to DateTime.UtcNow when Status=='Sold' but no parsable date -- the 'trading, no lastSoldAt' case -- and to null, treated as in-window, when nothing is usable), and caches resolved dates per listing id for the life of the run. If the newest item is already older than the cutoff, the band contributes nothing. If the band's page is full (100 items) with a reported total over 100 and its last item is still inside the window, the band splits (its own items are not stored -- the children cover them) when it can still split, or is stored whole with an 'Overflowed' flag when it cannot split further (feeding the run issue in scope item 5). Otherwise a binary search over the page (using the already-resolved endpoints as the lo/hi anchors) finds the approximate cutoff position, then probes a fixed +/-3 position margin around it and takes one past the last in-window position seen in that margin -- tolerating the 2-3 local order inversions the prototype observed near real boundaries -- and only that many leading items are stored. Item-page lookups are capped by the existing Scrape:MaxDetailFetchesPerRun budget (DetailFetchOptions) so backfill dating cannot run unbounded; hitting the cap makes further lookups return 'no usable date' (conservatively in-window) rather than throwing. MercariPriceBandCollector takes this planner through a new MercariCollectionSettings(int MaxBandsPerDirection, SoldBackfillPlanner? Backfill) record (replacing the old bare int parameter) to stay within the 5-constructor-parameter limit; when sold && knownSoldListingIds.Count == 0, SearchPageService builds a planner and passes it in, otherwise it passes null and the collector's existing count-based ShouldSplit/pruning path runs completely unchanged (AC-d). SearchPageService itself gained a MarketplaceAdapters(UrlServices, SearchParsers, ItemParsers) bundle replacing its two separate IEnumerable<...> constructor parameters (again to make room within the 5-parameter cap) so it can resolve the Mercari IItemPageParser needed to build the planner. PriceBandCollectionSummary gained ItemPageFetchesUsed / BackfillCutoffUtc / BandsOverCapacityUnsplit fields (all default to 0/null so every pre-existing positional-construction call site in MercariPriceBandCollectorTests keeps compiling); SearchPageService turns a non-null BackfillCutoffUtc into a 'SoldBackfillWindow' run issue and a positive BandsOverCapacityUnsplit into a 'SoldBackfillBandOverflow' run issue (scope item 5), and threads ItemPageFetchesUsed through SearchCollectionResult -> ScrapeRunService -> RunCompletionCounts -> ScrapeRunEntity.BackfillItemPageFetches (new column, new migration) -> ScrapeRunView (scope item 4's 'record them on the run'). ItemDetailStore.GetListingsNeedingDetail now orders never-attempted sold listings before everything else (scope item 6, first half only -- the optional SoldDate write-through in scope item 6's second half is not implemented; see Gaps).",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Models/Scraper/ScrapeOptions.cs",
+    "src/MarketMakerEtl.Core/Models/Scraper/MarketplaceAdapters.cs",
+    "src/MarketMakerEtl.Core/Services/SoldBackfillPlanner.cs",
+    "src/MarketMakerEtl.Core/Services/MercariPriceBandCollector.cs",
+    "src/MarketMakerEtl.Core/Services/SearchPageService.cs",
+    "src/MarketMakerEtl.Core/Data/ItemDetailStore.cs",
+    "src/MarketMakerEtl.Core/Data/Entities/ScrapeRunEntity.cs",
+    "src/MarketMakerEtl.Core/Data/ScrapeRunCompletion.cs",
+    "src/MarketMakerEtl.Core/Models/Runs/RunCompletionCounts.cs",
+    "src/MarketMakerEtl.Core/Models/Runs/SearchCollectionResult.cs",
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs"
+  ],
+  "implementationPaths": [
+    "src/MarketMakerEtl.Core/Models/Scraper/ScrapeOptions.cs",
+    "src/MarketMakerEtl.Core/Models/Scraper/MarketplaceAdapters.cs",
+    "src/MarketMakerEtl.Core/Services/SoldBackfillPlanner.cs",
+    "src/MarketMakerEtl.Core/Services/MercariPriceBandCollector.cs",
+    "src/MarketMakerEtl.Core/Services/SearchPageService.cs",
+    "src/MarketMakerEtl.Core/Data/ItemDetailStore.cs",
+    "src/MarketMakerEtl.Core/Data/Entities/ScrapeRunEntity.cs",
+    "src/MarketMakerEtl.Core/Data/ScrapeRunCompletion.cs",
+    "src/MarketMakerEtl.Core/Data/ScrapeRunViewMapper.cs",
+    "src/MarketMakerEtl.Core/Models/Runs/ScrapeRunView.cs",
+    "src/MarketMakerEtl.Core/Models/Runs/RunCompletionCounts.cs",
+    "src/MarketMakerEtl.Core/Models/Runs/SearchCollectionResult.cs",
+    "src/MarketMakerEtl.Core/Services/ScrapeRunService.cs",
+    "src/MarketMakerEtl.Core/ServiceCollectionExtensions.cs",
+    "src/MarketMakerEtl.Core/Data/Migrations/20260924131942_AddBackfillItemPageFetches.cs"
+  ],
+  "declaredRedTests": [
+    "SoldBackfillPlannerTests.Should_report_the_full_page_as_in_window_when_the_oldest_item_has_no_usable_date",
+    "SoldBackfillPlannerTests.Should_split_a_full_band_whose_last_item_is_still_inside_the_window",
+    "SoldBackfillPlannerTests.Should_flag_overflow_when_a_full_in_window_band_cannot_split_further",
+    "SoldBackfillPlannerTests.Should_find_the_cutoff_tolerant_of_a_few_out_of_order_dates_near_the_boundary",
+    "SoldBackfillPlannerTests.Should_treat_a_trading_item_with_no_sold_date_as_sold_now",
+    "SoldBackfillPlannerTests.Should_report_nothing_in_window_when_the_newest_item_is_already_older_than_the_cutoff",
+    "SoldBackfillPlannerTests.Should_stop_fetching_item_pages_once_the_shared_detail_fetch_budget_is_exhausted",
+    "MercariPriceBandCollectorTests.Should_not_store_a_split_bands_own_items_when_backfilling",
+    "MercariPriceBandCollectorTests.Should_use_the_existing_incremental_pruning_path_when_the_job_already_has_sold_listings",
+    "MercariPriceBandCollectorTests.Should_store_only_the_in_window_items_for_a_partial_band_even_with_local_order_inversions_near_the_boundary",
+    "SearchPageServiceTests.Should_record_a_sold_backfill_window_issue_when_a_jobs_first_sold_run_backfills",
+    "SearchPageServiceTests.Should_not_record_a_backfill_window_issue_on_a_later_incremental_run",
+    "ScrapeRunServiceTests.Should_record_backfill_item_page_fetches_on_the_completed_run",
+    "ItemDetailStoreTests.Should_return_never_attempted_sold_listings_before_others_when_the_cap_is_tight",
+    "CoreServicesDefaultsTests.Should_default_sold_backfill_days_to_thirty",
+    "ScrapeLimitsConfigurationTests.Should_read_sold_backfill_days_from_configuration",
+    "SearchUsesTheMarketplaceImplementationTests.Should_use_the_url_builder_and_parser_of_the_requested_marketplace"
+  ],
+  "declaredRedTestsNote": "Two tests originally declared before implementation were dropped as impractical/redundant during design: MercariPriceBandCollectorTests.Should_apply_backfill_only_to_the_sold_direction_of_a_jobs_first_run (superseded by Should_use_the_existing_incremental_pruning_path_when_the_job_already_has_sold_listings, which asserts the same branch more directly) and SearchPageServiceTests.Should_record_a_band_overflow_issue_when_a_backfill_band_cannot_split / MercariPriceBandCollectorTests.Should_record_bands_over_capacity_unsplit_on_the_summary (reaching an unsplittable band width requires ~9 sequential halvings of a seed band, disproportionate for this non-critical-path issue; the underlying Overflowed decision is instead covered directly at the planner level by SoldBackfillPlannerTests.Should_flag_overflow_when_a_full_in_window_band_cannot_split_further -- see AC-4's materialConcerns in criterion-checklist.json). SearchUsesTheMarketplaceImplementationTests.Should_use_the_url_builder_and_parser_of_the_requested_marketplace was not new work but needed a mechanical fix (registering the new MarketplaceAdapters/DetailFetchOptions in its manual ServiceCollection) to keep passing after SearchPageService's constructor shape changed.",
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Services/SoldBackfillPlanner.cs": "AC-1,AC-2,AC-3",
+    "src/MarketMakerEtl.Core/Services/MercariPriceBandCollector.cs": "AC-1,AC-4",
+    "src/MarketMakerEtl.Core/Services/SearchPageService.cs": "AC-1,AC-5",
+    "src/MarketMakerEtl.Core/Data/ItemDetailStore.cs": "AC-6",
+    "src/MarketMakerEtl.Core/Data/Entities/ScrapeRunEntity.cs": "AC-5",
+    "src/MarketMakerEtl.Core/Models/Scraper/ScrapeOptions.cs": "AC-1"
+  }
+}

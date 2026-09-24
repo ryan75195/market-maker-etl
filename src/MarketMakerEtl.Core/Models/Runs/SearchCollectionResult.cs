@@ -5,4 +5,5 @@ namespace MarketMakerEtl.Core.Models.Runs;
 public sealed record SearchCollectionResult(
     IReadOnlyList<ListingSummary> Listings,
     int? TotalReportedBySearch,
-    IReadOnlyList<ScrapeRunIssueDetails> Issues);
+    IReadOnlyList<ScrapeRunIssueDetails> Issues,
+    int BackfillItemPageFetches = 0);

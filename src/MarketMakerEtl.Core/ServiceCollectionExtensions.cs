@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions
     private const int DefaultMaxPages = 2;
     private const bool DefaultCollectSold = true;
     private const int DefaultMaxBandsPerDirection = 200;
+    private const int DefaultSoldBackfillDays = 30;
     private const string DefaultDatabaseFileName = "marketmakeretl.db";
     private const int DefaultTickMinutes = 5;
     private const int DefaultRefreshIntervalHours = 24;
@@ -66,6 +67,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISearchPageParser, MercariSearchParser>();
         services.AddSingleton<IItemPageParser, EbayItemPageParserService>();
         services.AddSingleton<IItemPageParser, MercariItemPageParser>();
+        services.AddSingleton(sp => new MarketplaceAdapters(
+            sp.GetServices<IEbaySearchUrlService>(),
+            sp.GetServices<ISearchPageParser>(),
+            sp.GetServices<IItemPageParser>()));
         services.AddSingleton<IScrapeRunStateService, ScrapeRunStateService>();
         services.AddSingleton<IScrapeStore, ScrapeStore>();
         services.AddSingleton<IScrapeRunReportStore, ScrapeRunReportStore>();
@@ -99,7 +104,8 @@ public static class ServiceCollectionExtensions
         new(
             ReadInt(configuration, "Scrape:MaxPages", DefaultMaxPages),
             ReadBool(configuration, "Scrape:CollectSold", DefaultCollectSold),
-            ReadInt(configuration, "Scrape:MaxBandsPerDirection", DefaultMaxBandsPerDirection));
+            ReadInt(configuration, "Scrape:MaxBandsPerDirection", DefaultMaxBandsPerDirection),
+            ReadInt(configuration, "Scrape:SoldBackfillDays", DefaultSoldBackfillDays));
 
     private static ScheduleOptions BuildScheduleOptions(IConfiguration? configuration) =>
         new(

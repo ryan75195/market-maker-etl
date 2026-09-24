@@ -117,6 +117,33 @@ public class ScrapeRunServiceTests
     }
 
     [Test]
+    public async Task Should_record_backfill_item_page_fetches_on_the_completed_run()
+    {
+        var search = Substitute.For<ISearchPageService>();
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new SearchCollectionResult(
+                [],
+                TotalReportedBySearch: 0,
+                Issues: [],
+                BackfillItemPageFetches: 7));
+        var store = Substitute.For<IScrapeStore>();
+        store.GetListings(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new List<ListingSummary>());
+        store.UpsertListings(Arg.Any<int>(), Arg.Any<IReadOnlyList<ListingSummary>>(), Arg.Any<CancellationToken>())
+            .Returns(new ListingUpsertSummary(0, 0, 0, 0));
+        var detailFetch = Substitute.For<IItemDetailFetchService>();
+        detailFetch.FetchDetails(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ScrapeRunIssueDetails>());
+        var service = new ScrapeRunService(search, store, detailFetch, Substitute.For<IScrapeRunReportStore>());
+
+        await service.Run(Work, CancellationToken.None);
+
+        await store.Received(1).CompleteRun(
+            1,
+            Arg.Is<RunCompletionCounts>(counts => counts.BackfillItemPageFetches == 7),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task Should_pass_the_jobs_existing_sold_listing_ids_as_known_sold_listings()
     {
         var search = Substitute.For<ISearchPageService>();

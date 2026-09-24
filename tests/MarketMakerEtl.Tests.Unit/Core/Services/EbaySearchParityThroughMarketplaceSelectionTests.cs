@@ -29,9 +29,9 @@ public class EbaySearchParityThroughMarketplaceSelectionTests
         var client = new CapturingScrapeClient(KnownEbayPage);
         var service = new SearchPageService(
             client,
-            [new EbaySearchUrlService()],
-            [new EbaySearchParser()],
+            new MarketplaceAdapters([new EbaySearchUrlService()], [new EbaySearchParser()], []),
             new ScrapeOptions(MaxPages: 1, CollectSold: false),
+            new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3),
             NullLogger<SearchPageService>.Instance);
 
         var result = await service.Collect(SearchTerm, Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);

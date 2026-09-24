@@ -100,9 +100,9 @@ public class SoldListingsFromSoldSearchTests
         new(
             new SearchPageService(
                 client,
-                [new EbaySearchUrlService()],
-                [new EbaySearchParser()],
+                new MarketplaceAdapters([new EbaySearchUrlService()], [new EbaySearchParser()], []),
                 new ScrapeOptions(MaxPages: 1, CollectSold: true),
+                new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3),
                 NullLogger<SearchPageService>.Instance),
             store,
             new NoOpItemDetailFetchService(),

@@ -34,6 +34,19 @@ public class ScrapeLimitsConfigurationTests
         Assert.That(options.CollectSold, Is.False);
     }
 
+    [Test]
+    public void Should_read_sold_backfill_days_from_configuration()
+    {
+        var configuration = BuildConfiguration(new Dictionary<string, string?>
+        {
+            ["Scrape:SoldBackfillDays"] = "14"
+        });
+
+        var options = ResolveOptions(configuration);
+
+        Assert.That(options.SoldBackfillDays, Is.EqualTo(14));
+    }
+
     private static IConfiguration BuildConfiguration(Dictionary<string, string?> values) =>
         new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 

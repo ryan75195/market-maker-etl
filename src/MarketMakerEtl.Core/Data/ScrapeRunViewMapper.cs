@@ -27,6 +27,7 @@ internal static class ScrapeRunViewMapper
             run.ListingsFailed,
             run.TotalListingsFound,
             run.TotalReportedBySearch,
+            run.BackfillItemPageFetches,
             run.StartedUtc,
             run.SearchCompletedUtc,
             run.DetailCompletedUtc,

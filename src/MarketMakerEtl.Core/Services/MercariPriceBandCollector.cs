@@ -8,7 +8,14 @@ internal sealed record PriceBandCollectionSummary(
     int BandsFetched,
     int? TotalReported,
     bool CapHit,
-    int BandsPrunedForKnownListings);
+    int BandsPrunedForKnownListings,
+    int ItemPageFetchesUsed = 0,
+    DateTime? BackfillCutoffUtc = null,
+    int BandsOverCapacityUnsplit = 0);
+
+internal sealed record MercariCollectionSettings(int MaxBandsPerDirection, SoldBackfillPlanner? Backfill);
+
+internal readonly record struct BandOutcome(SearchPageResult Result, bool Pruned, bool OverCapacity);
 
 internal sealed class PriceBandQueue
 {
@@ -56,20 +63,20 @@ internal sealed class MercariPriceBandCollector
     private readonly IScrapeClient _client;
     private readonly IPriceBandSearchUrlService _urls;
     private readonly ISearchPageParser _parser;
-    private readonly int _maxBandsPerDirection;
+    private readonly MercariCollectionSettings _settings;
     private readonly ILogger _logger;
 
     internal MercariPriceBandCollector(
         IScrapeClient client,
         IPriceBandSearchUrlService urls,
         ISearchPageParser parser,
-        int maxBandsPerDirection,
+        MercariCollectionSettings settings,
         ILogger logger)
     {
         _client = client;
         _urls = urls;
         _parser = parser;
-        _maxBandsPerDirection = maxBandsPerDirection;
+        _settings = settings;
         _logger = logger;
     }
 
@@ -82,39 +89,98 @@ internal sealed class MercariPriceBandCollector
     {
         var queue = PriceBandQueue.SeededWithGeometricBands();
         var pruneKnownBands = sold && knownSoldListingIds.Count > 0;
+        var backfill = sold && knownSoldListingIds.Count == 0 ? _settings.Backfill : null;
         var fetched = 0;
         var bandsPruned = 0;
+        var bandsOverCapacityUnsplit = 0;
         int? totalReported = null;
 
-        while (queue.Count > 0 && fetched < _maxBandsPerDirection)
+        while (queue.Count > 0 && fetched < _settings.MaxBandsPerDirection)
         {
             var band = queue.Dequeue();
-            var result = await FetchBand(searchTerm, sold, band, ct);
+            var outcome = await ProcessBand(
+                searchTerm, sold, band, queue, backfill, pruneKnownBands, merged, knownSoldListingIds, ct);
             fetched++;
 
             if (queue.IsSeedBand(band))
             {
-                totalReported = AccumulateReportedTotal(totalReported, result);
+                totalReported = AccumulateReportedTotal(totalReported, outcome.Result);
             }
 
-            var newListingCount = MergeAndCountNew(result.Listings, merged, knownSoldListingIds);
-
-            if (pruneKnownBands && newListingCount == 0)
-            {
-                bandsPruned++;
-                continue;
-            }
-
-            if (ShouldSplit(result, band))
-            {
-                queue.EnqueueChildren(band, ReportedCount(result));
-            }
+            bandsPruned += outcome.Pruned ? 1 : 0;
+            bandsOverCapacityUnsplit += outcome.OverCapacity ? 1 : 0;
         }
 
         var capHit = queue.Count > 0;
         LogOutcome(searchTerm, sold, fetched, merged.Count, totalReported, capHit, bandsPruned);
 
-        return new PriceBandCollectionSummary(fetched, totalReported, capHit, bandsPruned);
+        var itemPageFetchesUsed = backfill is null ? 0 : backfill.ItemPageFetchesUsed;
+
+        return new PriceBandCollectionSummary(
+            fetched,
+            totalReported,
+            capHit,
+            bandsPruned,
+            itemPageFetchesUsed,
+            backfill?.CutoffUtc,
+            bandsOverCapacityUnsplit);
+    }
+
+    private async Task<BandOutcome> ProcessBand(
+        string searchTerm,
+        bool sold,
+        PriceBand band,
+        PriceBandQueue queue,
+        SoldBackfillPlanner? backfill,
+        bool pruneKnownBands,
+        Dictionary<string, ListingSummary> merged,
+        IReadOnlySet<string> knownSoldListingIds,
+        CancellationToken ct)
+    {
+        var result = await FetchBand(searchTerm, sold, band, ct);
+
+        if (backfill is not null)
+        {
+            var decision = await backfill.Resolve(result, band.CanSplit(MinimumBandWidth), ct);
+            ApplyBackfillDecision(decision, band, result, queue, merged, knownSoldListingIds);
+            return new BandOutcome(result, Pruned: false, OverCapacity: decision.Overflowed);
+        }
+
+        var newListingCount = MergeAndCountNew(result.Listings, merged, knownSoldListingIds);
+
+        if (pruneKnownBands && newListingCount == 0)
+        {
+            return new BandOutcome(result, Pruned: true, OverCapacity: false);
+        }
+
+        if (ShouldSplit(result, band))
+        {
+            queue.EnqueueChildren(band, ReportedCount(result));
+        }
+
+        return new BandOutcome(result, Pruned: false, OverCapacity: false);
+    }
+
+    private static void ApplyBackfillDecision(
+        SoldBackfillDecision decision,
+        PriceBand band,
+        SearchPageResult result,
+        PriceBandQueue queue,
+        Dictionary<string, ListingSummary> merged,
+        IReadOnlySet<string> knownSoldListingIds)
+    {
+        switch (decision.Kind)
+        {
+            case SoldBackfillOutcomeKind.Split:
+                queue.EnqueueChildren(band, ReportedCount(result));
+                break;
+            case SoldBackfillOutcomeKind.Store:
+                MergeAndCountNew(result.Listings.Take(decision.StoreCount).ToList(), merged, knownSoldListingIds);
+                break;
+            case SoldBackfillOutcomeKind.None:
+            default:
+                break;
+        }
     }
 
     private async Task<SearchPageResult> FetchBand(string searchTerm, bool sold, PriceBand band, CancellationToken ct)
@@ -168,7 +234,7 @@ internal sealed class MercariPriceBandCollector
         {
             _logger.LogWarning(
                 "Mercari band search for '{SearchTerm}' ({Direction}) hit the {MaxBands} band cap after {Fetched} fetches.",
-                searchTerm, direction, _maxBandsPerDirection, fetched);
+                searchTerm, direction, _settings.MaxBandsPerDirection, fetched);
         }
 
         if (bandsPruned > 0)

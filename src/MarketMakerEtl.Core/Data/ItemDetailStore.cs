@@ -25,7 +25,8 @@ public sealed class ItemDetailStore : IItemDetailStore
         await using var db = await _factory.CreateDbContextAsync(ct);
         var listings = await db.Listings
             .Where(l => l.ScrapeJobId == jobId && l.DetailFetchedUtc == null && l.DetailFetchAttempts < maxAttempts)
-            .OrderBy(l => l.DetailFetchAttempts)
+            .OrderByDescending(l => l.DetailFetchAttempts == 0 && l.IsSold)
+            .ThenBy(l => l.DetailFetchAttempts)
             .ThenBy(l => l.Id)
             .Take(limit)
             .ToListAsync(ct);

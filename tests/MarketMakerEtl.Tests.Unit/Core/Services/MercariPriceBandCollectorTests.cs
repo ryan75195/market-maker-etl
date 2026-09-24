@@ -221,6 +221,94 @@ public class MercariPriceBandCollectorTests
     }
 
     [Test]
+    public async Task Should_not_store_a_split_bands_own_items_when_backfilling()
+    {
+        var newest = BuildListing("s0", "https://x/s0");
+        var oldest = BuildListing("s99", "https://x/s99");
+        var page = new List<ListingSummary> { newest };
+        for (var i = 1; i < 99; i++)
+        {
+            page.Add(BuildListing($"s{i}", $"https://x/s{i}"));
+        }
+
+        page.Add(oldest);
+
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/s0"] = BuildDetail(daysAgo: 1),
+            ["https://x/s99"] = BuildDetail(daysAgo: 1),
+        };
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 1,
+            soldBackfillDays: 30,
+            maxItemPageFetches: 10,
+            detailsByUrl,
+            new SearchPageResult(page, TotalCount: 150));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(merged, Is.Empty);
+            Assert.That(summary.BackfillCutoffUtc, Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public async Task Should_use_the_existing_incremental_pruning_path_when_the_job_already_has_sold_listings()
+    {
+        var known = BuildListing("m1", "https://x/m1");
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 20,
+            soldBackfillDays: 30,
+            maxItemPageFetches: 10,
+            new Dictionary<string, ItemPageListing>(StringComparer.Ordinal),
+            new SearchPageResult([known], 1));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(
+            SearchTerm, sold: true, merged, new HashSet<string> { "m1" }, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.BandsFetched, Is.EqualTo(9));
+            Assert.That(summary.BandsPrunedForKnownListings, Is.EqualTo(9));
+            Assert.That(merged.Keys, Is.EquivalentTo(new[] { "m1" }));
+            Assert.That(summary.BackfillCutoffUtc, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task Should_store_only_the_in_window_items_for_a_partial_band_even_with_local_order_inversions_near_the_boundary()
+    {
+        var offsetsInDays = new[] { 1, 5, 3, 7, 9, 11, 17, 19, 21, 23 };
+        var page = new List<ListingSummary>();
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal);
+
+        for (var i = 0; i < offsetsInDays.Length; i++)
+        {
+            var url = $"https://x/b{i}";
+            page.Add(BuildListing($"b{i}", url));
+            detailsByUrl[url] = BuildDetail(offsetsInDays[i]);
+        }
+
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 1,
+            soldBackfillDays: 15,
+            maxItemPageFetches: 20,
+            detailsByUrl,
+            new SearchPageResult(page, TotalCount: page.Count));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        await collector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(
+            merged.Keys,
+            Is.EquivalentTo(new[] { "b0", "b1", "b2", "b3", "b4", "b5" }));
+    }
+
+    [Test]
     public async Task Should_collect_more_unique_listings_than_the_old_unfiltered_bisection_under_the_same_band_budget()
     {
         var catalogue = BuildCatalogueConcentratedBelowOneHundredDollars();
@@ -247,8 +335,53 @@ public class MercariPriceBandCollectorTests
         var parser = Substitute.For<ISearchPageParser>();
         parser.Parse(Arg.Any<string>()).Returns(results[0], results[1..]);
 
-        return new MercariPriceBandCollector(client, urls, parser, maxBandsPerDirection, NullLogger.Instance);
+        return new MercariPriceBandCollector(
+            client, urls, parser, new MercariCollectionSettings(maxBandsPerDirection, Backfill: null), NullLogger.Instance);
     }
+
+    private static MercariPriceBandCollector BuildBackfillCollector(
+        int maxBandsPerDirection,
+        int soldBackfillDays,
+        int maxItemPageFetches,
+        IReadOnlyDictionary<string, ItemPageListing> detailsByUrl,
+        params SearchPageResult[] results)
+    {
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ci => (string)ci[0]);
+
+        var urls = Substitute.For<IPriceBandSearchUrlService>();
+        urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
+            .Returns("https://search");
+
+        var parser = Substitute.For<ISearchPageParser>();
+        parser.Parse(Arg.Any<string>()).Returns(results[0], results[1..]);
+
+        var itemParser = Substitute.For<IItemPageParser>();
+        itemParser.Parse(Arg.Any<string>())
+            .Returns(ci => detailsByUrl.GetValueOrDefault((string)ci[0]));
+
+        var backfill = new SoldBackfillPlanner(client, itemParser, soldBackfillDays, maxItemPageFetches);
+        var settings = new MercariCollectionSettings(maxBandsPerDirection, backfill);
+        return new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
+    }
+
+    private static ListingSummary BuildListing(string id, string url) =>
+        new(id, id, 1m, "USD", url, false, null, null, null);
+
+    private static ItemPageListing BuildDetail(int daysAgo) =>
+        new(
+            ListingId: null,
+            Title: null,
+            Price: null,
+            Currency: null,
+            Condition: null,
+            BuyingFormat: null,
+            Status: "Sold",
+            SoldPrice: null,
+            SoldDate: DateTime.UtcNow.AddDays(-daysAgo).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
+            Seller: null,
+            PrimaryImageUrl: null);
 
     private static async Task<int> CollectWithGeometricSeeding(IReadOnlyList<CatalogueItem> catalogue, int bandBudget)
     {
@@ -256,7 +389,7 @@ public class MercariPriceBandCollectorTests
             new PassthroughScrapeClient(),
             new CatalogueUrlService(),
             new CatalogueParser(catalogue),
-            bandBudget,
+            new MercariCollectionSettings(bandBudget, Backfill: null),
             NullLogger.Instance);
         var merged = new Dictionary<string, ListingSummary>();
 

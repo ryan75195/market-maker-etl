@@ -22,6 +22,7 @@ internal static class ScrapeRunCompletion
         run.ListingsFailed = counts.ListingsFailed;
         run.TotalListingsFound = counts.TotalListingsFound;
         run.TotalReportedBySearch = counts.TotalReportedBySearch;
+        run.BackfillItemPageFetches = counts.BackfillItemPageFetches;
         run.SearchCompletedUtc = counts.SearchCompletedUtc;
         run.DetailCompletedUtc = counts.DetailCompletedUtc;
         run.CompletedUtc = DateTime.UtcNow;

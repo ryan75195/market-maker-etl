@@ -9,4 +9,5 @@ public sealed record RunCompletionCounts(
     int TotalListingsFound,
     int? TotalReportedBySearch,
     DateTime SearchCompletedUtc,
-    DateTime DetailCompletedUtc);
+    DateTime DetailCompletedUtc,
+    int BackfillItemPageFetches = 0);

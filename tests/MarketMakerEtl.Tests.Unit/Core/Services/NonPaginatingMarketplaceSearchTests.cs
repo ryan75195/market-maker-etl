@@ -22,9 +22,9 @@ public class NonPaginatingMarketplaceSearchTests
         var parser = BuildParser(Marketplace.Mercari);
         var service = new SearchPageService(
             client,
-            [urls],
-            [parser],
+            new MarketplaceAdapters([urls], [parser], []),
             new ScrapeOptions(MaxPages: 5, CollectSold: false),
+            new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3),
             NullLogger<SearchPageService>.Instance);
 
         var result = await service.Collect(SearchTerm, Marketplace.Mercari, new HashSet<string>(), CancellationToken.None);
@@ -44,9 +44,9 @@ public class NonPaginatingMarketplaceSearchTests
         var parser = BuildParser(Marketplace.Ebay);
         var service = new SearchPageService(
             client,
-            [urls],
-            [parser],
+            new MarketplaceAdapters([urls], [parser], []),
             new ScrapeOptions(MaxPages: 3, CollectSold: false),
+            new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3),
             NullLogger<SearchPageService>.Instance);
 
         await service.Collect(SearchTerm, Marketplace.Ebay, new HashSet<string>(), CancellationToken.None);

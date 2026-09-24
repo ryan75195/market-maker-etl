@@ -115,9 +115,9 @@ public class ResultCardsWithoutListingsFailRunPerMarketplaceTests
 
         var search = new SearchPageService(
             client,
-            [urls],
-            [parser],
+            new MarketplaceAdapters([urls], [parser], []),
             new ScrapeOptions(MaxPages: 1, CollectSold: false),
+            new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3),
             NullLogger<SearchPageService>.Instance);
 
         var detailFetch = Substitute.For<IItemDetailFetchService>();
