@@ -120,6 +120,61 @@ public class SoldBackfillPlannerTests
     }
 
     [Test]
+    public async Task Should_not_discard_an_in_window_page_because_a_single_out_of_order_old_item_sits_at_position_zero()
+    {
+        var outOfOrderOld = BuildListing("old0", "https://x/old0");
+        var listings = new List<ListingSummary> { outOfOrderOld };
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/old0"] = BuildDetail(daysAgo: 90),
+        };
+
+        for (var i = 0; i < 9; i++)
+        {
+            var url = $"https://x/n{i}";
+            listings.Add(BuildListing($"n{i}", url));
+            detailsByUrl[url] = BuildDetail(daysAgo: 1);
+        }
+
+        var page = new SearchPageResult(listings, TotalCount: listings.Count);
+        var planner = BuildPlanner(detailsByUrl);
+
+        var decision = await planner.Resolve(page, canSplit: true, CancellationToken.None);
+
+        Assert.That(decision.Kind, Is.EqualTo(SoldBackfillOutcomeKind.Store));
+        Assert.That(decision.StoreCount, Is.GreaterThan(0));
+    }
+
+    [Test]
+    public async Task Should_still_report_none_when_the_first_three_items_all_resolve_before_the_cutoff()
+    {
+        var listings = new List<ListingSummary>
+        {
+            BuildListing("old0", "https://x/old0"),
+            BuildListing("old1", "https://x/old1"),
+            BuildListing("old2", "https://x/old2"),
+            BuildListing("old3", "https://x/old3"),
+        };
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/old0"] = BuildDetail(daysAgo: 90),
+            ["https://x/old1"] = BuildDetail(daysAgo: 91),
+            ["https://x/old2"] = BuildDetail(daysAgo: 92),
+            ["https://x/old3"] = BuildDetail(daysAgo: 93),
+        };
+        var page = new SearchPageResult(listings, TotalCount: listings.Count);
+        var planner = BuildPlanner(detailsByUrl);
+
+        var decision = await planner.Resolve(page, canSplit: true, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(decision, Is.EqualTo(SoldBackfillDecision.None()));
+            Assert.That(planner.ItemPageFetchesUsed, Is.EqualTo(3));
+        });
+    }
+
+    [Test]
     public async Task Should_store_only_what_is_already_decided_when_the_item_page_fetch_budget_is_exhausted()
     {
         var newest = BuildListing("n0", "https://x/n0");

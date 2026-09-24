@@ -351,6 +351,70 @@ public class MercariPriceBandCollectorTests
     }
 
     [Test]
+    public async Task Should_not_lose_an_in_window_page_when_a_single_old_item_is_out_of_order_at_position_zero()
+    {
+        var outOfOrderOld = BuildListing("old0", "https://x/old0");
+        var page = new List<ListingSummary> { outOfOrderOld };
+        for (var i = 0; i < 9; i++)
+        {
+            page.Add(BuildListing($"n{i}", $"https://x/n{i}"));
+        }
+
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/old0"] = BuildDetail(daysAgo: 90),
+        };
+
+        for (var i = 0; i < 9; i++)
+        {
+            detailsByUrl[$"https://x/n{i}"] = BuildDetail(daysAgo: 1);
+        }
+
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 1,
+            soldBackfillDays: 30,
+            maxItemPageFetches: 20,
+            detailsByUrl,
+            new SearchPageResult(page, TotalCount: page.Count));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        await collector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(merged.Keys, Is.SupersetOf(Enumerable.Range(0, 9).Select(i => $"n{i}")));
+    }
+
+    [Test]
+    public async Task Should_still_treat_a_page_as_entirely_old_when_the_first_three_items_all_resolve_before_the_cutoff()
+    {
+        var page = new List<ListingSummary>
+        {
+            BuildListing("old0", "https://x/old0"),
+            BuildListing("old1", "https://x/old1"),
+            BuildListing("old2", "https://x/old2"),
+            BuildListing("old3", "https://x/old3"),
+        };
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/old0"] = BuildDetail(daysAgo: 90),
+            ["https://x/old1"] = BuildDetail(daysAgo: 91),
+            ["https://x/old2"] = BuildDetail(daysAgo: 92),
+            ["https://x/old3"] = BuildDetail(daysAgo: 93),
+        };
+
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 1,
+            soldBackfillDays: 30,
+            maxItemPageFetches: 20,
+            detailsByUrl,
+            new SearchPageResult(page, TotalCount: page.Count));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        await collector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(merged, Is.Empty);
+    }
+
+    [Test]
     public async Task Should_collect_more_unique_listings_than_the_old_unfiltered_bisection_under_the_same_band_budget()
     {
         var catalogue = BuildCatalogueConcentratedBelowOneHundredDollars();

@@ -145,6 +145,7 @@ internal sealed class MercariPriceBandCollector
         if (backfill is not null)
         {
             var decision = await backfill.Resolve(result, band.CanSplit(MinimumBandWidth), ct);
+            LogBackfillDecision(band, result, decision, backfill);
             ApplyBackfillDecision(decision, band, result, queue, merged, knownSoldListingIds, sold);
             return new BandOutcome(result, Pruned: false, OverCapacity: decision.Overflowed);
         }
@@ -213,6 +214,19 @@ internal sealed class MercariPriceBandCollector
         }
 
         return newCount;
+    }
+
+    private void LogBackfillDecision(
+        PriceBand band,
+        SearchPageResult result,
+        SoldBackfillDecision decision,
+        SoldBackfillPlanner backfill)
+    {
+        _logger.LogInformation(
+            "Sold backfill decision for band [{MinPrice}-{MaxPrice}]: reported {Reported}, page size {PageSize}, "
+                + "decision {Decision}, stored {Stored}, item-page fetches used {ItemPageFetches}.",
+            band.MinPrice, band.MaxPrice, ReportedCount(result), result.Listings.Count,
+            decision.Kind, decision.StoreCount, backfill.ItemPageFetchesUsed);
     }
 
     private static int ReportedCount(SearchPageResult result) =>

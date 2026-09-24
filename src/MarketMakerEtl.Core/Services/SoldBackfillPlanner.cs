@@ -38,6 +38,7 @@ internal sealed class SoldBackfillPlanner
     private const int CutoffProbeMargin = 3;
     private const int FullPageSize = 100;
     private const int MaxFetchAttempts = 3;
+    private const int LeadingOldSampleSize = 3;
     private const string SoldStatus = "Sold";
 
     private readonly IScrapeClient _client;
@@ -74,8 +75,7 @@ internal sealed class SoldBackfillPlanner
             return SoldBackfillDecision.None();
         }
 
-        var newest = await DateOf(page.Listings[0], ct);
-        if (IsBeforeCutoff(AsNullable(newest)))
+        if (await IsEntirelyBeforeCutoff(page.Listings, ct))
         {
             return SoldBackfillDecision.None();
         }
@@ -99,8 +99,21 @@ internal sealed class SoldBackfillPlanner
 
     private bool IsBeforeCutoff(DateTime? when) => when is { } value && value < CutoffUtc;
 
-    private static DateTime? AsNullable(DateLookup lookup) =>
-        lookup.Status == DateResolutionStatus.Resolved ? lookup.Value : null;
+    private async Task<bool> IsEntirelyBeforeCutoff(IReadOnlyList<ListingSummary> listings, CancellationToken ct)
+    {
+        var sampleSize = Math.Min(LeadingOldSampleSize, listings.Count);
+
+        for (var i = 0; i < sampleSize; i++)
+        {
+            var when = await DateOf(listings[i], ct);
+            if (when.Status != DateResolutionStatus.Resolved || !IsBeforeCutoff(when.Value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private async Task<int> FindCutoff(IReadOnlyList<ListingSummary> items, CancellationToken ct)
     {
