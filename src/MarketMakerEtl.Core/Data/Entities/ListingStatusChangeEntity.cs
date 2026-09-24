@@ -8,6 +8,12 @@ public sealed class ListingStatusChangeEntity
 
     public string Status { get; set; } = string.Empty;
 
+    public decimal? Price { get; set; }
+
+    public DateTime? SoldDateUtc { get; set; }
+
+    public string Source { get; set; } = string.Empty;
+
     public DateTime ChangedUtc { get; set; }
 
     public ListingEntity? Listing { get; set; }

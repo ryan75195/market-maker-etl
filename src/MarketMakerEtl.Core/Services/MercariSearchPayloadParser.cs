@@ -59,8 +59,11 @@ internal static class MercariSearchPayloadParser
             && items.ValueKind == JsonValueKind.Array;
     }
 
-    private static ListingSummary BuildSummary(string listingId, JsonElement item) =>
-        new(
+    private static ListingSummary BuildSummary(string listingId, JsonElement item)
+    {
+        var imageUrls = ReadImageUrls(item);
+
+        return new(
             ListingId: listingId,
             Title: ReadString(item, "name"),
             Price: ReadCents(item, "price"),
@@ -68,20 +71,33 @@ internal static class MercariSearchPayloadParser
             Url: MercariItemUrl.Build(listingId),
             IsSold: string.Equals(ReadString(item, "status"), SoldStatus, StringComparison.OrdinalIgnoreCase),
             Condition: ReadNestedName(item, "itemCondition"),
-            PrimaryImageUrl: ReadPrimaryImageUrl(item),
+            PrimaryImageUrl: imageUrls.Count > 0 ? imageUrls[0] : null,
             BuyingFormat: null,
-            Brand: ReadNestedName(item, "brand"));
+            Brand: ReadNestedName(item, "brand"),
+            OriginalPrice: ReadCents(item, "originalPrice"),
+            Category: ReadNestedName(item, "itemCategory"),
+            Likes: null,
+            ImageUrls: imageUrls.Count > 0 ? imageUrls : null);
+    }
 
-    private static string? ReadPrimaryImageUrl(JsonElement item)
+    private static IReadOnlyList<string> ReadImageUrls(JsonElement item)
     {
-        if (!item.TryGetProperty("photos", out var photos)
-            || photos.ValueKind != JsonValueKind.Array
-            || photos.GetArrayLength() == 0)
+        if (!item.TryGetProperty("photos", out var photos) || photos.ValueKind != JsonValueKind.Array)
         {
-            return null;
+            return [];
         }
 
-        return ReadString(photos[0], "imageUrl");
+        var urls = new List<string>();
+        foreach (var photo in photos.EnumerateArray())
+        {
+            var url = ReadString(photo, "imageUrl");
+            if (url is not null)
+            {
+                urls.Add(url);
+            }
+        }
+
+        return urls;
     }
 
     private static string? ReadNestedName(JsonElement item, string propertyName) =>

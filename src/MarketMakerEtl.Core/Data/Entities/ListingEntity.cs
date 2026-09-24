@@ -38,6 +38,24 @@ public sealed class ListingEntity
 
     public string? Seller { get; set; }
 
+    public decimal? ShippingCost { get; set; }
+
+    public string? Description { get; set; }
+
+    public string? DescriptionStatus { get; set; }
+
+    public string? ImageUrls { get; set; }
+
+    public decimal? OriginalPrice { get; set; }
+
+    public string? Category { get; set; }
+
+    public int? Likes { get; set; }
+
+    public DateTime? PostedUtc { get; set; }
+
+    public DateTime? DetailFetchedUtc { get; set; }
+
     public DateTime CreatedUtc { get; set; }
 
     public DateTime? UpdatedUtc { get; set; }
