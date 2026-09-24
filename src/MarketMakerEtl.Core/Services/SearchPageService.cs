@@ -31,18 +31,18 @@ public sealed class SearchPageService : ISearchPageService
     public async Task<IReadOnlyList<ListingSummary>> Collect(
         string searchTerm,
         Marketplace marketplace,
-        IReadOnlySet<string> knownListingIds,
+        IReadOnlySet<string> knownSoldListingIds,
         CancellationToken ct)
     {
         var merged = new Dictionary<string, ListingSummary>(StringComparer.Ordinal);
         var urls = SelectUrlService(marketplace);
         var parser = SelectParser(marketplace);
 
-        await CollectDirection(searchTerm, sold: false, urls, parser, merged, knownListingIds, ct);
+        await CollectDirection(searchTerm, sold: false, urls, parser, merged, knownSoldListingIds, ct);
 
         if (_options.CollectSold)
         {
-            await CollectDirection(searchTerm, sold: true, urls, parser, merged, knownListingIds, ct);
+            await CollectDirection(searchTerm, sold: true, urls, parser, merged, knownSoldListingIds, ct);
         }
 
         return merged.Values.ToList();
@@ -64,14 +64,14 @@ public sealed class SearchPageService : ISearchPageService
         IEbaySearchUrlService urls,
         ISearchPageParser parser,
         Dictionary<string, ListingSummary> merged,
-        IReadOnlySet<string> knownListingIds,
+        IReadOnlySet<string> knownSoldListingIds,
         CancellationToken ct)
     {
         if (urls is IPriceBandSearchUrlService bandUrls)
         {
             var collector = new MercariPriceBandCollector(
                 _client, bandUrls, parser, _options.MaxBandsPerDirection, _logger);
-            await collector.Collect(searchTerm, sold, merged, knownListingIds, ct);
+            await collector.Collect(searchTerm, sold, merged, knownSoldListingIds, ct);
             return;
         }
 

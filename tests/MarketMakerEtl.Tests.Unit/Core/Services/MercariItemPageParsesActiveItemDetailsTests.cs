@@ -55,7 +55,7 @@ public partial class MercariItemPageParserTests
             Assert.That(listing.Condition, Is.EqualTo("Good"));
             Assert.That(listing.Brand, Is.EqualTo("PlayStation"));
             Assert.That(listing.Seller, Is.EqualTo("Nerd Mom Electronics"));
-            Assert.That(listing.Description, Is.EqualTo(ActiveItemDescription));
+            Assert.That(listing.Description!.ReplaceLineEndings("\n"), Is.EqualTo(ActiveItemDescription.ReplaceLineEndings("\n")));
             Assert.That(listing.ImageUrls, Is.EqualTo(ActiveItemImageUrls));
             Assert.That(listing.PrimaryImageUrl, Is.EqualTo(ActiveItemImageUrls[0]));
             Assert.That(listing.ShippingCost, Is.EqualTo(0m));

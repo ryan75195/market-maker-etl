@@ -8,7 +8,7 @@ internal sealed record PriceBandCollectionSummary(
     int BandsFetched,
     int? TotalReported,
     bool CapHit,
-    bool StoppedForKnownListings);
+    int BandsPrunedForKnownListings);
 
 internal sealed class MercariPriceBandCollector
 {
@@ -39,16 +39,16 @@ internal sealed class MercariPriceBandCollector
         string searchTerm,
         bool sold,
         Dictionary<string, ListingSummary> merged,
-        IReadOnlySet<string> knownListingIds,
+        IReadOnlySet<string> knownSoldListingIds,
         CancellationToken ct)
     {
         var bands = new Queue<PriceBand>();
         bands.Enqueue(PriceBand.Unfiltered);
 
-        var stopOnKnownListings = sold && knownListingIds.Count > 0;
+        var pruneKnownBands = sold && knownSoldListingIds.Count > 0;
         var fetched = 0;
         var capHit = false;
-        var stoppedForKnownListings = false;
+        var bandsPruned = 0;
         int? totalReported = null;
 
         while (bands.Count > 0)
@@ -64,12 +64,12 @@ internal sealed class MercariPriceBandCollector
             fetched++;
             totalReported ??= result.TotalCount;
 
-            var newListingCount = MergeAndCountNew(result.Listings, merged, knownListingIds);
+            var newListingCount = MergeAndCountNew(result.Listings, merged, knownSoldListingIds);
 
-            if (stopOnKnownListings && newListingCount == 0)
+            if (pruneKnownBands && newListingCount == 0)
             {
-                stoppedForKnownListings = true;
-                break;
+                bandsPruned++;
+                continue;
             }
 
             if (ShouldSplit(result, band))
@@ -81,9 +81,9 @@ internal sealed class MercariPriceBandCollector
             }
         }
 
-        LogOutcome(searchTerm, sold, fetched, merged.Count, totalReported, capHit, stoppedForKnownListings);
+        LogOutcome(searchTerm, sold, fetched, merged.Count, totalReported, capHit, bandsPruned);
 
-        return new PriceBandCollectionSummary(fetched, totalReported, capHit, stoppedForKnownListings);
+        return new PriceBandCollectionSummary(fetched, totalReported, capHit, bandsPruned);
     }
 
     private async Task<SearchPageResult> FetchBand(string searchTerm, bool sold, PriceBand band, CancellationToken ct)
@@ -96,13 +96,13 @@ internal sealed class MercariPriceBandCollector
     private static int MergeAndCountNew(
         IReadOnlyList<ListingSummary> listings,
         Dictionary<string, ListingSummary> merged,
-        IReadOnlySet<string> knownListingIds)
+        IReadOnlySet<string> knownSoldListingIds)
     {
         var newCount = 0;
 
         foreach (var listing in listings)
         {
-            if (!knownListingIds.Contains(listing.ListingId))
+            if (!knownSoldListingIds.Contains(listing.ListingId))
             {
                 newCount++;
             }
@@ -124,7 +124,7 @@ internal sealed class MercariPriceBandCollector
         int collected,
         int? totalReported,
         bool capHit,
-        bool stoppedForKnownListings)
+        int bandsPruned)
     {
         var direction = sold ? "sold" : "active";
 
@@ -135,11 +135,11 @@ internal sealed class MercariPriceBandCollector
                 searchTerm, direction, _maxBandsPerDirection, fetched);
         }
 
-        if (stoppedForKnownListings)
+        if (bandsPruned > 0)
         {
             _logger.LogInformation(
-                "Mercari sold band search for '{SearchTerm}' stopped after {Fetched} fetches because a band yielded no new listings.",
-                searchTerm, fetched);
+                "Mercari sold band search for '{SearchTerm}' pruned {BandsPruned} band(s) that yielded no new listings.",
+                searchTerm, bandsPruned);
         }
 
         _logger.LogInformation(

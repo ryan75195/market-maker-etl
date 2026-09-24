@@ -50,7 +50,7 @@ public class MercariPriceBandCollectorTests
     }
 
     [Test]
-    public async Task Should_stop_collecting_sold_bands_once_a_band_yields_only_known_listings()
+    public async Task Should_prune_only_the_band_that_yields_no_new_listings()
     {
         var known = new ListingSummary("m1", "Known", 1m, "USD", "https://x/m1", false, null, null, null);
         var collector = BuildCollector(maxBandsPerDirection: 10, new SearchPageResult([known], 1));
@@ -62,7 +62,34 @@ public class MercariPriceBandCollectorTests
         Assert.Multiple(() =>
         {
             Assert.That(summary.BandsFetched, Is.EqualTo(1));
-            Assert.That(summary.StoppedForKnownListings, Is.True);
+            Assert.That(summary.BandsPrunedForKnownListings, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task Should_only_prune_the_all_known_sibling_band_and_keep_walking_the_rest_of_the_queue()
+    {
+        var known = new ListingSummary("mKnown", "Known", 1m, "USD", "https://x/mKnown", false, null, null, null);
+        var newInRightBand = new ListingSummary("mR0", "New", 1m, "USD", "https://x/mR0", false, null, null, null);
+        var grandchildLeft = new ListingSummary("mG1", "New", 1m, "USD", "https://x/mG1", false, null, null, null);
+        var grandchildRight = new ListingSummary("mG2", "New", 1m, "USD", "https://x/mG2", false, null, null, null);
+        var collector = BuildCollector(
+            maxBandsPerDirection: 10,
+            new SearchPageResult([newInRightBand], 200),
+            new SearchPageResult([known], 1),
+            new SearchPageResult([newInRightBand], 150),
+            new SearchPageResult([grandchildLeft], 1),
+            new SearchPageResult([grandchildRight], 1));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(
+            SearchTerm, sold: true, merged, new HashSet<string> { "mKnown" }, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.BandsFetched, Is.EqualTo(5));
+            Assert.That(summary.BandsPrunedForKnownListings, Is.EqualTo(1));
+            Assert.That(merged.Keys, Is.EquivalentTo(new[] { "mKnown", "mR0", "mG1", "mG2" }));
         });
     }
 
@@ -79,7 +106,7 @@ public class MercariPriceBandCollectorTests
         Assert.Multiple(() =>
         {
             Assert.That(summary.BandsFetched, Is.EqualTo(1));
-            Assert.That(summary.StoppedForKnownListings, Is.False);
+            Assert.That(summary.BandsPrunedForKnownListings, Is.EqualTo(0));
             Assert.That(merged, Contains.Key("m1"));
         });
     }
@@ -95,7 +122,7 @@ public class MercariPriceBandCollectorTests
         Assert.Multiple(() =>
         {
             Assert.That(summary.BandsFetched, Is.EqualTo(1));
-            Assert.That(summary.StoppedForKnownListings, Is.False);
+            Assert.That(summary.BandsPrunedForKnownListings, Is.EqualTo(0));
         });
     }
 

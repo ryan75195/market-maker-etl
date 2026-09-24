@@ -46,7 +46,7 @@ public class ScrapeRunServiceTests
     }
 
     [Test]
-    public async Task Should_pass_the_jobs_existing_listing_ids_as_known_listings()
+    public async Task Should_pass_the_jobs_existing_sold_listing_ids_as_known_sold_listings()
     {
         var search = Substitute.For<ISearchPageService>();
         search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
@@ -62,6 +62,26 @@ public class ScrapeRunServiceTests
             "ps5",
             Marketplace.Ebay,
             Arg.Is<IReadOnlySet<string>>(known => known.Contains("999999999999")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_not_treat_a_previously_active_listing_as_known_when_it_has_not_been_recorded_as_sold()
+    {
+        var search = Substitute.For<ISearchPageService>();
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        var store = Substitute.For<IScrapeStore>();
+        store.GetListings(2, Arg.Any<CancellationToken>()).Returns(
+            [new ListingSummary("777777777777", "Still active", 1m, "GBP", "https://x/itm/7", false, null, null, null)]);
+        var service = new ScrapeRunService(search, store);
+
+        await service.Run(Work, CancellationToken.None);
+
+        await search.Received(1).Collect(
+            "ps5",
+            Marketplace.Ebay,
+            Arg.Is<IReadOnlySet<string>>(known => !known.Contains("777777777777")),
             Arg.Any<CancellationToken>());
     }
 }

@@ -8,6 +8,6 @@ public interface ISearchPageService
     Task<IReadOnlyList<ListingSummary>> Collect(
         string searchTerm,
         Marketplace marketplace,
-        IReadOnlySet<string> knownListingIds,
+        IReadOnlySet<string> knownSoldListingIds,
         CancellationToken ct);
 }
