@@ -60,7 +60,7 @@ public sealed class ScrapeRunService : IScrapeRunService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            await _store.FailRun(work.RunId, ex.Message, ct);
+            await _store.FailRun(work.RunId, ExceptionIssueMessageFormatter.Describe(ex), ct);
         }
     }
 }

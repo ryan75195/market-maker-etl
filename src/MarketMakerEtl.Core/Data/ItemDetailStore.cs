@@ -55,7 +55,7 @@ public sealed class ItemDetailStore : IItemDetailStore
 
         listing.DetailFetchedUtc = DateTime.UtcNow;
         listing.UpdatedUtc = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
+        await SqliteBusyRetry.ExecuteAsync(() => db.SaveChangesAsync(ct), ct);
     }
 
     public async Task MarkDetailFetchFailed(int listingEntityId, int maxAttempts, CancellationToken ct)
@@ -76,7 +76,7 @@ public sealed class ItemDetailStore : IItemDetailStore
         }
 
         listing.UpdatedUtc = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
+        await SqliteBusyRetry.ExecuteAsync(() => db.SaveChangesAsync(ct), ct);
     }
 
     private static void ApplyDetailFields(ListingEntity listing, ItemPageListing detail)

@@ -88,6 +88,37 @@ public class ScrapeRunServiceTests
     }
 
     [Test]
+    public async Task Should_fail_the_run_with_the_innermost_exception_message_when_the_wrapper_hides_the_cause()
+    {
+        var search = Substitute.For<ISearchPageService>();
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new SearchCollectionResult(
+                [new ListingSummary("111111111111", "PS5", 1m, "GBP", "https://x/itm/1", false, null, null, null)],
+                TotalReportedBySearch: 1,
+                Issues: []));
+        var store = Substitute.For<IScrapeStore>();
+        store.GetListings(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new List<ListingSummary>());
+        store.UpsertListings(Arg.Any<int>(), Arg.Any<IReadOnlyList<ListingSummary>>(), Arg.Any<CancellationToken>())
+            .Returns(new ListingUpsertSummary(1, 0, 0, 0));
+        var innermost = new Microsoft.Data.Sqlite.SqliteException("SQLite Error 5: 'database is locked'.", 5);
+        var outer = new Microsoft.EntityFrameworkCore.DbUpdateException(
+            "An error occurred while saving the entity changes.", innermost);
+        var detailFetch = Substitute.For<IItemDetailFetchService>();
+        detailFetch.FetchDetails(2, Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<ScrapeRunIssueDetails>>(_ => throw outer);
+        var service = new ScrapeRunService(search, store, detailFetch, Substitute.For<IScrapeRunReportStore>());
+
+        await service.Run(Work, CancellationToken.None);
+
+        await store.Received(1).FailRun(
+            1,
+            Arg.Is<string>(message =>
+                message.Contains("SQLite Error 5: 'database is locked'.")
+                && message.Contains(nameof(Microsoft.Data.Sqlite.SqliteException))),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task Should_record_a_detail_fetch_issue_and_count_it_as_a_failed_listing()
     {
         var search = Substitute.For<ISearchPageService>();

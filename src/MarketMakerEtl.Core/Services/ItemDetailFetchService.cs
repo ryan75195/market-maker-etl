@@ -86,7 +86,8 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await _store.MarkDetailFetchFailed(target.Id, _options.MaxDetailFetchAttempts, ct);
-            return new ScrapeRunIssueDetails(target.ListingId, FetchFailedIssueType, ex.Message, DetailPhase, null);
+            return new ScrapeRunIssueDetails(
+                target.ListingId, FetchFailedIssueType, ExceptionIssueMessageFormatter.Describe(ex), DetailPhase, null);
         }
     }
 

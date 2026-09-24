@@ -3,6 +3,7 @@ using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -64,6 +65,31 @@ public class ItemDetailFetchServiceTests
 
         Assert.DoesNotThrowAsync(() => service.FetchDetails(JobId, CancellationToken.None));
         await store.Received(1).MarkDetailFetchFailed(Target.Id, Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_record_the_innermost_exception_message_and_type_when_the_save_fails()
+    {
+        var store = Substitute.For<IItemDetailStore>();
+        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([Target]);
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Target.Url!, Arg.Any<CancellationToken>()).Returns("<html/>");
+        var parser = BuildParser(Marketplace.Mercari, BuildPage());
+        var innermost = new Microsoft.Data.Sqlite.SqliteException("SQLite Error 5: 'database is locked'.", 5);
+        var outer = new DbUpdateException("An error occurred while saving the entity changes.", innermost);
+        store.ApplyItemDetail(Target.Id, Arg.Any<ItemPageListing>(), Arg.Any<CancellationToken>())
+            .Returns<Task>(_ => throw outer);
+        var service = new ItemDetailFetchService(store, client, [parser], Options());
+
+        var issues = await service.FetchDetails(JobId, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(issues, Has.Count.EqualTo(1));
+            Assert.That(issues[0].ErrorMessage, Does.Contain("SQLite Error 5: 'database is locked'."));
+            Assert.That(issues[0].ErrorMessage, Does.Contain(nameof(Microsoft.Data.Sqlite.SqliteException)));
+        });
     }
 
     [Test]
