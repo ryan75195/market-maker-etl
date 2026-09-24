@@ -75,6 +75,27 @@ public class HttpScrapeClientTests
         Assert.That(names, Is.EqualTo(new[] { "Urls", "SessionReference" }));
     }
 
+    [Test]
+    public async Task Should_not_send_session_reference_for_mercari_fetches()
+    {
+        var handler = new StubScrapeHandler(BlobUri);
+        var content = Substitute.For<IScrapeContentStore>();
+        content.GetHtml(BlobUri, Arg.Any<CancellationToken>()).Returns("<html></html>");
+        var options = new ScrapeClientOptions(
+            "http://scraper.test",
+            "key",
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(1),
+            "operator-session-token");
+
+        await new HttpScrapeClient(new HttpClient(handler), options, content, NullLogger<HttpScrapeClient>.Instance)
+            .GetPageHtml("https://www.mercari.com/us/item/m12345/", CancellationToken.None);
+
+        using var document = JsonDocument.Parse(handler.NewJobBody!);
+        var names = document.RootElement.EnumerateObject().Select(property => property.Name).ToList();
+        Assert.That(names, Is.EqualTo(new[] { "Urls" }));
+    }
+
     private static HttpScrapeClient CreateClient(HttpMessageHandler handler, IScrapeContentStore content) =>
         new(new HttpClient(handler), Options, content, NullLogger<HttpScrapeClient>.Instance);
 

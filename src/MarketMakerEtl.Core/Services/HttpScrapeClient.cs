@@ -44,13 +44,19 @@ public sealed class HttpScrapeClient : IScrapeClient
 
     private async Task<string> StartJob(string url, CancellationToken ct)
     {
-        var request = new ScrapeJobRequest([url], _options.SessionReference);
+        var request = new ScrapeJobRequest([url], SessionReferenceFor(url));
         var response = await _http.PostAsJsonAsync(BuildUri("api/NewJob"), request, JsonOptions, ct);
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadFromJsonAsync<ScrapeJobResponse>(JsonOptions, ct);
         return body?.JobId ?? throw new InvalidOperationException("Scraper returned no job id");
     }
+
+    private string? SessionReferenceFor(string url) => IsMercariUrl(url) ? null : _options.SessionReference;
+
+    private static bool IsMercariUrl(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var parsed) &&
+        parsed.Host.EndsWith("mercari.com", StringComparison.OrdinalIgnoreCase);
 
     private async Task WaitForTerminal(string jobId, CancellationToken ct)
     {
