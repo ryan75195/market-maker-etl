@@ -50,7 +50,7 @@ public class ParsedListingAbsentFieldsRemainAbsentTests
     [Test]
     public async Task Should_store_absent_fields_as_absent_rather_than_guessing()
     {
-        var parsed = new EbaySearchParser().Parse(CardMissingImageAndBuyingFormat).Single();
+        var parsed = new EbaySearchParser().Parse(CardMissingImageAndBuyingFormat).Listings.Single();
 
         var store = CreateStore();
         var jobId = await store.EnsureJob("switch", CancellationToken.None);

@@ -1,11 +1,13 @@
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -109,13 +111,14 @@ public class ResultCardsWithoutListingsFailRunPerMarketplaceTests
         var parser = Substitute.For<ISearchPageParser>();
         parser.Marketplace.Returns(marketplace);
         parser.ContainsListingMarkup(Arg.Any<string>()).Returns(containsListingMarkup);
-        parser.Parse(Arg.Any<string>()).Returns([]);
+        parser.Parse(Arg.Any<string>()).Returns(new SearchPageResult([], null));
 
         var search = new SearchPageService(
             client,
             [urls],
             [parser],
-            new ScrapeOptions(MaxPages: 1, CollectSold: false));
+            new ScrapeOptions(MaxPages: 1, CollectSold: false),
+            NullLogger<SearchPageService>.Instance);
         return new ScrapeRunService(search, store);
     }
 }

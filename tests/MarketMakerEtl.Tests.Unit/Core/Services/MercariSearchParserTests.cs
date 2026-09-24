@@ -35,7 +35,7 @@ public class MercariSearchParserTests
     [Test]
     public void Should_read_price_and_sold_state_from_the_tile_wrapping_a_captured_card()
     {
-        var summaries = new MercariSearchParser().Parse(CapturedRenderedCards);
+        var summaries = new MercariSearchParser().Parse(CapturedRenderedCards).Listings;
 
         Assert.Multiple(() =>
         {
@@ -55,7 +55,7 @@ public class MercariSearchParserTests
     [Test]
     public void Should_parse_one_listing_per_result_card()
     {
-        var summaries = new MercariSearchParser().Parse(ResultsPage);
+        var summaries = new MercariSearchParser().Parse(ResultsPage).Listings;
 
         Assert.Multiple(() =>
         {
@@ -74,7 +74,7 @@ public class MercariSearchParserTests
     [Test]
     public void Should_preserve_the_full_listing_id_including_its_leading_letter()
     {
-        var summaries = new MercariSearchParser().Parse(ResultsPage);
+        var summaries = new MercariSearchParser().Parse(ResultsPage).Listings;
 
         Assert.Multiple(() =>
         {
@@ -86,7 +86,7 @@ public class MercariSearchParserTests
     [Test]
     public void Should_mark_a_card_that_is_in_transaction_as_sold()
     {
-        var summaries = new MercariSearchParser().Parse(ResultsPage);
+        var summaries = new MercariSearchParser().Parse(ResultsPage).Listings;
 
         Assert.Multiple(() =>
         {
@@ -98,7 +98,7 @@ public class MercariSearchParserTests
     [Test]
     public void Should_leave_price_absent_when_a_card_has_no_price()
     {
-        var summaries = new MercariSearchParser().Parse(CardWithoutPrice);
+        var summaries = new MercariSearchParser().Parse(CardWithoutPrice).Listings;
 
         Assert.Multiple(() =>
         {

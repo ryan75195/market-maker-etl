@@ -16,9 +16,10 @@ public class ScrapeRunServiceTests
     public async Task Should_persist_listings_and_complete_the_run()
     {
         var search = Substitute.For<ISearchPageService>();
-        search.Collect("ps5", Marketplace.Ebay, Arg.Any<CancellationToken>())
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns([new ListingSummary("111111111111", "PS5", 1m, "GBP", "https://x/itm/1", false, null, null, null)]);
         var store = Substitute.For<IScrapeStore>();
+        store.GetListings(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new List<ListingSummary>());
         var service = new ScrapeRunService(search, store);
 
         await service.Run(Work, CancellationToken.None);
@@ -32,14 +33,55 @@ public class ScrapeRunServiceTests
     public async Task Should_fail_the_run_when_collection_throws()
     {
         var search = Substitute.For<ISearchPageService>();
-        search.Collect("ps5", Marketplace.Ebay, Arg.Any<CancellationToken>())
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns<IReadOnlyList<ListingSummary>>(_ => throw new InvalidOperationException("scraper down"));
         var store = Substitute.For<IScrapeStore>();
+        store.GetListings(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new List<ListingSummary>());
         var service = new ScrapeRunService(search, store);
 
         await service.Run(Work, CancellationToken.None);
 
         await store.Received(1).FailRun(1, "scraper down", Arg.Any<CancellationToken>());
         await store.DidNotReceive().CompleteRun(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_pass_the_jobs_existing_sold_listing_ids_as_known_sold_listings()
+    {
+        var search = Substitute.For<ISearchPageService>();
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        var store = Substitute.For<IScrapeStore>();
+        store.GetListings(2, Arg.Any<CancellationToken>()).Returns(
+            [new ListingSummary("999999999999", "Existing", 1m, "GBP", "https://x/itm/9", true, null, null, null)]);
+        var service = new ScrapeRunService(search, store);
+
+        await service.Run(Work, CancellationToken.None);
+
+        await search.Received(1).Collect(
+            "ps5",
+            Marketplace.Ebay,
+            Arg.Is<IReadOnlySet<string>>(known => known.Contains("999999999999")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_not_treat_a_previously_active_listing_as_known_when_it_has_not_been_recorded_as_sold()
+    {
+        var search = Substitute.For<ISearchPageService>();
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        var store = Substitute.For<IScrapeStore>();
+        store.GetListings(2, Arg.Any<CancellationToken>()).Returns(
+            [new ListingSummary("777777777777", "Still active", 1m, "GBP", "https://x/itm/7", false, null, null, null)]);
+        var service = new ScrapeRunService(search, store);
+
+        await service.Run(Work, CancellationToken.None);
+
+        await search.Received(1).Collect(
+            "ps5",
+            Marketplace.Ebay,
+            Arg.Is<IReadOnlySet<string>>(known => !known.Contains("777777777777")),
+            Arg.Any<CancellationToken>());
     }
 }

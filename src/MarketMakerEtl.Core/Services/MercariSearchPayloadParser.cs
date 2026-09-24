@@ -11,14 +11,15 @@ internal static class MercariSearchPayloadParser
     public static bool IsPayload(string content) =>
         content.AsSpan().TrimStart().StartsWith("{", StringComparison.Ordinal);
 
-    public static IReadOnlyList<ListingSummary> Parse(string payload)
+    public static SearchPageResult Parse(string payload)
     {
         using var document = JsonDocument.Parse(payload);
+        var totalCount = ReadTotalCount(document.RootElement);
         var summaries = new List<ListingSummary>();
 
         if (!TryGetItems(document.RootElement, out var items))
         {
-            return summaries;
+            return new SearchPageResult(summaries, totalCount);
         }
 
         foreach (var item in items.EnumerateArray())
@@ -31,7 +32,7 @@ internal static class MercariSearchPayloadParser
             }
         }
 
-        return summaries;
+        return new SearchPageResult(summaries, totalCount);
     }
 
     public static bool IsEmptyResultSet(string payload)
@@ -39,6 +40,15 @@ internal static class MercariSearchPayloadParser
         using var document = JsonDocument.Parse(payload);
         return TryGetItems(document.RootElement, out var items) && items.GetArrayLength() == 0;
     }
+
+    private static int? ReadTotalCount(JsonElement root) =>
+        TryGetObject(root, "data", out var data)
+        && TryGetObject(data, "search", out var search)
+        && search.TryGetProperty("count", out var count)
+        && count.ValueKind == JsonValueKind.Number
+        && count.TryGetInt32(out var value)
+            ? value
+            : null;
 
     private static bool TryGetItems(JsonElement root, out JsonElement items)
     {

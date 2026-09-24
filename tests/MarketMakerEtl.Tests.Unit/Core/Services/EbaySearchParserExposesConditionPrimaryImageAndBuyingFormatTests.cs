@@ -21,7 +21,7 @@ public class EbaySearchParserExposesConditionPrimaryImageAndBuyingFormatTests
     [Test]
     public void Should_expose_condition_primary_image_and_buying_format_from_a_card()
     {
-        var summaries = new EbaySearchParser().Parse(CardWithAttributes);
+        var summaries = new EbaySearchParser().Parse(CardWithAttributes).Listings;
 
         var summary = summaries.Single();
         Assert.Multiple(() =>

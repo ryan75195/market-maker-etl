@@ -48,7 +48,7 @@ public class BuyingFormatReadFromCardFormatMarkerTests
     [Test]
     public void Should_read_buying_format_when_the_card_shows_a_buy_it_now_marker()
     {
-        var summaries = new EbaySearchParser().Parse(CardShowingBuyItNow);
+        var summaries = new EbaySearchParser().Parse(CardShowingBuyItNow).Listings;
 
         Assert.That(summaries.Single().BuyingFormat, Is.EqualTo("Buy It Now"));
     }
@@ -56,7 +56,7 @@ public class BuyingFormatReadFromCardFormatMarkerTests
     [Test]
     public void Should_read_buying_format_when_the_card_shows_an_auction_marker()
     {
-        var summaries = new EbaySearchParser().Parse(CardShowingAuction);
+        var summaries = new EbaySearchParser().Parse(CardShowingAuction).Listings;
 
         Assert.That(summaries.Single().BuyingFormat, Is.EqualTo("Auction"));
     }

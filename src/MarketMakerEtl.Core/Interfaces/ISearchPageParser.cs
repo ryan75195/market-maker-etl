@@ -9,5 +9,5 @@ public interface ISearchPageParser
 
     bool ContainsListingMarkup(string html);
 
-    IReadOnlyList<ListingSummary> Parse(string html);
+    SearchPageResult Parse(string html);
 }

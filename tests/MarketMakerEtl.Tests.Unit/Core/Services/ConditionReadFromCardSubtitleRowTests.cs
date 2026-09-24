@@ -25,7 +25,7 @@ public class ConditionReadFromCardSubtitleRowTests
     [Test]
     public void Should_read_condition_from_the_card_subtitle_row()
     {
-        var summaries = new EbaySearchParser().Parse(CardWithConditionInSubtitleRow);
+        var summaries = new EbaySearchParser().Parse(CardWithConditionInSubtitleRow).Listings;
 
         Assert.That(summaries.Single().Condition, Is.EqualTo("Pre-owned"));
     }

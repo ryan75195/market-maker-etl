@@ -4,8 +4,10 @@ using MarketMakerEtl.Core.Models.Marketplaces;
 
 namespace MarketMakerEtl.Core.Services;
 
-public sealed class MercariSearchUrlService : IEbaySearchUrlService
+public sealed class MercariSearchUrlService : IEbaySearchUrlService, IPriceBandSearchUrlService
 {
+    private const decimal CentsPerDollar = 100m;
+
     private readonly string _searchBase = "https://www.mercari.com/search/";
 
     public Marketplace Marketplace => Marketplace.Mercari;
@@ -14,6 +16,9 @@ public sealed class MercariSearchUrlService : IEbaySearchUrlService
 
     public string BuildSearch(string searchTerm, bool sold, int page) =>
         BuildSearch(new MercariSearchRequest(searchTerm, sold));
+
+    public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice) =>
+        BuildSearch(new MercariSearchRequest(searchTerm, sold, MinPrice: minPrice, MaxPrice: maxPrice));
 
     public string BuildSearch(MercariSearchRequest request)
     {
@@ -41,5 +46,8 @@ public sealed class MercariSearchUrlService : IEbaySearchUrlService
     }
 
     private static string? FormatPrice(decimal? price) =>
-        price?.ToString(CultureInfo.InvariantCulture);
+        price is null
+            ? null
+            : Math.Round(price.Value * CentsPerDollar, MidpointRounding.AwayFromZero)
+                .ToString(CultureInfo.InvariantCulture);
 }

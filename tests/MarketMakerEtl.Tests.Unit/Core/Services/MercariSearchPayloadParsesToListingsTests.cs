@@ -23,7 +23,7 @@ public class MercariSearchPayloadParsesToListingsTests
     [Test]
     public void Should_parse_every_item_of_a_captured_search_payload()
     {
-        var summaries = new MercariSearchParser().Parse(CapturedPayload);
+        var summaries = new MercariSearchParser().Parse(CapturedPayload).Listings;
 
         Assert.That(
             summaries.Select(summary => summary.ListingId),
@@ -31,9 +31,17 @@ public class MercariSearchPayloadParsesToListingsTests
     }
 
     [Test]
+    public void Should_expose_the_reported_total_count_from_the_payload()
+    {
+        var result = new MercariSearchParser().Parse(CapturedPayload);
+
+        Assert.That(result.TotalCount, Is.EqualTo(20783));
+    }
+
+    [Test]
     public void Should_read_listing_attributes_from_a_payload_item()
     {
-        var summary = new MercariSearchParser().Parse(CapturedPayload)[0];
+        var summary = new MercariSearchParser().Parse(CapturedPayload).Listings[0];
 
         Assert.Multiple(() =>
         {
@@ -52,7 +60,7 @@ public class MercariSearchPayloadParsesToListingsTests
     [Test]
     public void Should_mark_a_payload_item_in_transaction_as_sold()
     {
-        var summaries = new MercariSearchParser().Parse(CapturedPayload);
+        var summaries = new MercariSearchParser().Parse(CapturedPayload).Listings;
 
         Assert.Multiple(() =>
         {
@@ -69,7 +77,7 @@ public class MercariSearchPayloadParsesToListingsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(parser.Parse(EmptyResultPayload), Is.Empty);
+            Assert.That(parser.Parse(EmptyResultPayload).Listings, Is.Empty);
             Assert.That(parser.ContainsListingMarkup(EmptyResultPayload), Is.False);
         });
     }
@@ -82,7 +90,7 @@ public class MercariSearchPayloadParsesToListingsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(parser.Parse(payload), Is.Empty);
+            Assert.That(parser.Parse(payload).Listings, Is.Empty);
             Assert.That(parser.ContainsListingMarkup(payload), Is.True);
         });
     }

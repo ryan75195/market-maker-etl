@@ -5,6 +5,7 @@ using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
@@ -83,7 +84,8 @@ public class EmptySearchResultsCompleteTheRunTests
                 client,
                 [new EbaySearchUrlService()],
                 [new EbaySearchParser()],
-                new ScrapeOptions(MaxPages: 3, CollectSold: false)),
+                new ScrapeOptions(MaxPages: 3, CollectSold: false),
+                NullLogger<SearchPageService>.Instance),
             store);
 
     private sealed class SinglePageScrapeClient(string html) : IScrapeClient
