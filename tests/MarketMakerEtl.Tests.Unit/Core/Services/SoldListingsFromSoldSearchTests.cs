@@ -103,7 +103,8 @@ public class SoldListingsFromSoldSearchTests
                 [new EbaySearchParser()],
                 new ScrapeOptions(MaxPages: 1, CollectSold: true),
                 NullLogger<SearchPageService>.Instance),
-            store);
+            store,
+            new NoOpItemDetailFetchService());
 
     private sealed class SoldSearchScrapeClient(string soldPage, string activePage) : IScrapeClient
     {

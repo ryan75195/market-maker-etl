@@ -28,7 +28,7 @@ public class SearchUsesTheMarketplaceImplementationTests
         var search = BuildService(client, [ebayUrls, mercariUrls], [ebayParser, mercariParser]);
         var store = Substitute.For<IScrapeStore>();
         store.GetListings(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new List<ListingSummary>());
-        var runs = new ScrapeRunService(search, store);
+        var runs = new ScrapeRunService(search, store, Substitute.For<IItemDetailFetchService>());
         var work = new ScrapeRunWork(RunId: 1, JobId: 2, SearchTerm: SearchTerm, Marketplace.Mercari);
 
         await runs.Run(work, CancellationToken.None);

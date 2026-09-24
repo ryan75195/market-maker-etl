@@ -22,6 +22,9 @@ public static class ServiceCollectionExtensions
     private const string DefaultDatabaseFileName = "marketmakeretl.db";
     private const int DefaultTickMinutes = 5;
     private const int DefaultRefreshIntervalHours = 24;
+    private const int DefaultMaxConcurrentDetailFetches = 4;
+    private const int DefaultMaxDetailFetchesPerRun = 50;
+    private const int DefaultMaxDetailFetchAttempts = 3;
 
     private static readonly TimeSpan DefaultFetchTimeout = TimeSpan.FromMinutes(5);
 
@@ -50,6 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(BuildScrapeOptions(configuration));
         services.AddSingleton(BuildScheduleOptions(configuration));
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(BuildDetailFetchOptions(configuration));
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite(BuildDatabaseConnectionString(configuration)));
 
@@ -66,7 +70,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IScrapeStore, ScrapeStore>();
         services.AddSingleton<IJobStore, JobStore>();
         services.AddSingleton<ICategoryStore, CategoryStore>();
+        services.AddSingleton<IItemDetailStore, ItemDetailStore>();
         services.AddSingleton<ISearchPageService, SearchPageService>();
+        services.AddSingleton<IItemDetailFetchService, ItemDetailFetchService>();
         services.AddSingleton<IScrapeRunService, ScrapeRunService>();
         services.AddSingleton<IListingRefreshService, ListingRefreshService>();
         services.AddSingleton<ISchedulerStateStore, SchedulerStateStore>();
@@ -98,6 +104,12 @@ public static class ServiceCollectionExtensions
         new(
             ReadInt(configuration, "Schedule:TickMinutes", DefaultTickMinutes),
             ReadInt(configuration, "Schedule:RefreshIntervalHours", DefaultRefreshIntervalHours));
+
+    private static DetailFetchOptions BuildDetailFetchOptions(IConfiguration? configuration) =>
+        new(
+            ReadInt(configuration, "Scrape:MaxConcurrentDetailFetches", DefaultMaxConcurrentDetailFetches),
+            ReadInt(configuration, "Scrape:MaxDetailFetchesPerRun", DefaultMaxDetailFetchesPerRun),
+            ReadInt(configuration, "Scrape:MaxDetailFetchAttempts", DefaultMaxDetailFetchAttempts));
 
     private static string BuildDatabaseConnectionString(IConfiguration? configuration)
     {

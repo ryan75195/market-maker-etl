@@ -56,6 +56,8 @@ public sealed class ListingEntity
 
     public DateTime? DetailFetchedUtc { get; set; }
 
+    public int DetailFetchAttempts { get; set; }
+
     public DateTime CreatedUtc { get; set; }
 
     public DateTime? UpdatedUtc { get; set; }

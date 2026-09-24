@@ -6,6 +6,7 @@ using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Integration;
 
@@ -79,7 +80,8 @@ public class RunPipelineRecordsFailureReasonTests
                 [new EbaySearchParser()],
                 new ScrapeOptions(MaxPages: 1, CollectSold: false),
                 NullLogger<SearchPageService>.Instance),
-            store);
+            store,
+            Substitute.For<IItemDetailFetchService>());
 
     private sealed class FailingScrapeClient(string reason) : IScrapeClient
     {

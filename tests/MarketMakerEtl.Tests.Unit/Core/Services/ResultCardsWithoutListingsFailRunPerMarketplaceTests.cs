@@ -119,6 +119,6 @@ public class ResultCardsWithoutListingsFailRunPerMarketplaceTests
             [parser],
             new ScrapeOptions(MaxPages: 1, CollectSold: false),
             NullLogger<SearchPageService>.Instance);
-        return new ScrapeRunService(search, store);
+        return new ScrapeRunService(search, store, Substitute.For<IItemDetailFetchService>());
     }
 }
