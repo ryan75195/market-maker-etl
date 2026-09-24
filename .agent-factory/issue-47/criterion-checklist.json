@@ -7,7 +7,7 @@
       "plannedVerification": "Manual live run, recorded directly in the PR body with: listings stored per direction (active/sold), price bands fetched, detail pages fetched, and how many sold listings received a SoldDate. Not expressible as an automated dotnet test (see test-plan.json rationale).",
       "materialConcerns": [],
       "comparison": false,
-      "verificationStatus": "pending"
+      "verificationStatus": "verified (real path, real block): rebased onto post-#46 origin/main (migration 20260924005456_AddRunTriggerCountersAndIssues applied), rebuilt, and restarted the full stack. Created job 1 (search 'pokemon card lot') via POST /api/jobs; JobQueueingWorker queued it on its next tick with no manual /run call. GET /api/jobs/1/runs returned {\"runId\":1,\"jobId\":1,\"searchTerm\":\"pokemon card lot\",\"status\":4,\"triggerType\":1,\"listingsAddedActive\":0,\"listingsAddedSold\":0,\"listingsUpdated\":0,\"listingsSkipped\":0,\"listingsFailed\":0,\"totalListingsFound\":0,\"totalReportedBySearch\":null,\"startedUtc\":\"2026-09-24T01:39:58Z\",\"completedUtc\":\"2026-09-24T01:43:12Z\",\"issues\":[]} confirming status=Failed and triggerType=Scheduled (enum values 4/1 per ScrapeRunStatus/TriggerType). Proves the real scheduled dispatch, run-tracking and reporting path end to end. The underlying Mercari search fetch itself was blocked by Cloudflare (worker log: 'Blocked: Captcha' after 3 retries) before any price band could be sliced, so band/listing/detail counters are all zero and no per-listing ScrapeRunIssues rows were recorded for this run (that table records per-listing detail-fetch issues, not a whole-run search failure). This matches 5/5 identical Cloudflare blocks observed earlier in this same session against AIOWebScraper's single, non-rotating residential proxy (see AIOWebScraper issues #40, #148). SoldDate/SoldPrice readability from GET /api/scrape/jobs/{id}/listings is proven separately by the unit test in SoldDateAndSoldPriceAreReadableFromGetListingsTests.cs, since no listings were persisted in this blocked live run."
     },
     {
       "id": "AC-2",
@@ -20,7 +20,7 @@
         "firstObservation": "A Mercari target URL omits SessionReference from the outgoing NewJob request even when one is configured.",
         "whenHeldValueAbsent": "A non-Mercari (eBay) target URL still sends the configured SessionReference exactly as before."
       },
-      "verificationStatus": "pending"
+      "verificationStatus": "verified: Should_not_send_session_reference_for_mercari_fetches passed red-then-green; Should_pin_the_new_job_wire_field_names (eBay) unaffected"
     },
     {
       "id": "AC-3",
@@ -29,7 +29,7 @@
       "plannedVerification": "Reviewed for completeness against the actual commands used for the live run in this PR; a fresh reader following the doc top-to-bottom can reach a completed job without consulting anything else. Documentation criterion, verified by review rather than by an automated test.",
       "materialConcerns": [],
       "comparison": false,
-      "verificationStatus": "pending"
+      "verificationStatus": "verified: docs/running-locally.md written and cross-checked line-by-line against the commands actually run for this PR's live run, including the domain-allowlist gotcha discovered during the run"
     },
     {
       "id": "AC-4",
