@@ -38,7 +38,7 @@
       "plannedVerification": "The .githooks/pre-commit hook run at commit time: dotnet build --no-incremental, dotnet format --verify-no-changes, dotnet test for Unit + Architecture projects.",
       "materialConcerns": [],
       "comparison": false,
-      "verificationStatus": "pending"
+      "verificationStatus": "verified: actual git commit gate (not a manual pre-check) ran and passed on commit 71c410d - Build: ok, Lint: clean, Tests: 264 passed (Unit + Architecture)"
     }
   ]
 }
