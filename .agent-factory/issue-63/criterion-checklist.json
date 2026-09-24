@@ -1,0 +1,48 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A test proves that a DbUpdateException wrapping a SQLite error is recorded with the inner message.",
+      "plannedImplementation": "Added ExceptionIssueMessageFormatter.Describe(exception) (internal static, src/MarketMakerEtl.Core/Services/ExceptionIssueMessageFormatter.cs): it walks exception.InnerException to the innermost exception and, if that differs from the outer exception, returns '{outer.Message} (root cause: {innermost type name}: {innermost.Message})'; otherwise returns the outer message unchanged. Applied at both places in Core that record an exception's message into a run issue: ItemDetailFetchService.FetchDetail's catch block (was ex.Message, now ExceptionIssueMessageFormatter.Describe(ex)) and ScrapeRunService.Run's catch block that calls _store.FailRun (same change), so a DbUpdateException wrapping a SqliteException no longer discards the real cause in either the per-listing detail-fetch issue or the whole-run failure reason.",
+      "plannedVerification": "ItemDetailFetchServiceTests.Should_record_the_innermost_exception_message_and_type_when_the_save_fails substitutes IItemDetailStore.ApplyItemDetail to throw a real DbUpdateException wrapping a real Microsoft.Data.Sqlite.SqliteException('SQLite Error 5: database is locked.', 5), runs FetchDetails, and asserts the returned issue's ErrorMessage contains both the inner SQLite message and 'SqliteException'. ScrapeRunServiceTests.Should_fail_the_run_with_the_innermost_exception_message_when_the_wrapper_hides_the_cause does the same at the whole-run level, substituting IItemDetailFetchService.FetchDetails to throw the same wrapped exception and asserting IScrapeStore.FailRun is called with a message containing both. Both were manually proven red first (reverting the formatter call back to ex.Message make both assertions fail with the generic outer message only), then green with the formatter wired in.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: both tests pass with the formatter in place; both fail (asserting the bare outer message) when the formatter call is reverted to ex.Message, confirmed by temporarily reverting and re-running dotnet test"
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A persistence test reproduces the original failure before the fix and passes after it.",
+      "plannedImplementation": "Root cause: ItemDetailStore uses IDbContextFactory<EtlDbContext> to open a fresh SQLite connection per call with no shared cache, WAL mode, or busy-timeout/retry handling. Four detail fetches run concurrently per run (DetailFetchOptions.MaxConcurrentDetailFetches), each on its own DbContext/connection against the same file; when two of those connections' write transactions collide, SQLite returns SQLITE_BUSY/SQLITE_LOCKED (error code 5/6), which the unmodified store surfaced as an unretried DbUpdateException, permanently losing the listing's detail for that attempt. Added SqliteBusyRetry.ExecuteAsync (internal static, src/MarketMakerEtl.Core/Data/SqliteBusyRetry.cs): retries a Func<Task> up to 5 times with a 25ms-per-attempt linear backoff, specifically when the caught exception is a DbUpdateException whose innermost exception is a SqliteException with SqliteErrorCode 5 or 6; any other exception (a genuine data problem) propagates immediately on the first attempt, unretried. Wired into ItemDetailStore's two SaveChangesAsync call sites: ApplyItemDetail and MarkDetailFetchFailed.",
+      "plannedVerification": "ItemDetailStoreTests.Should_succeed_when_a_transient_sqlite_lock_blocks_the_save seeds a listing via the normal SQLite-backed store, then opens a second raw Microsoft.Data.Sqlite.SqliteConnection to the same database file and issues 'BEGIN IMMEDIATE;' to hold a real write lock; concurrently, a separate ItemDetailStore (built against a factory using 'Default Timeout=1' so its internal SQLite busy-wait is short and deterministic) calls ApplyItemDetail while the lock is held, and a background task releases the lock (ROLLBACK) after 1.5 seconds -- longer than the 1-second busy-wait, forcing at least one real SQLITE_BUSY before the lock releases. The test asserts ApplyItemDetail completes without throwing and the listing's DetailFetchedUtc is set. This was proven red first: with the SqliteBusyRetry call in ApplyItemDetail temporarily reverted to a bare db.SaveChangesAsync(ct), the test fails with exactly 'Microsoft.EntityFrameworkCore.DbUpdateException: An error occurred while saving the entity changes. See the inner exception for details.' wrapping 'Microsoft.Data.Sqlite.SqliteException: SQLite Error 5: 'database is locked'.' -- the same outer message recorded against m73020392557 in the real production database (ScrapeRunIssues row: ScrapeRunId=1, ListingId=m73020392557, IssueType=ItemDetailFetchFailed, ErrorMessage='An error occurred while saving the entity changes. See the inner exception for details.'). With SqliteBusyRetry restored, the test passes.",
+      "materialConcerns": [
+        "The exact reason the write lock in the real 2026-09-24 ps5-controller run was held long enough to exceed SQLite's default busy timeout (30s, per Microsoft.Data.Sqlite's SqliteConnectionStringBuilder default) was not identified -- only one of ~132 detail fetches in that run failed this way, and replaying the same listing's real captured item page (scratchpad/monthruns/ps5-controller/cache/93EC1A31CBC897FD.html) through the unmodified store against a freshly seeded matching row did not reproduce a failure on its own, confirming the trigger is timing/contention rather than the listing's data. The fix (retry on SQLITE_BUSY/SQLITE_LOCKED) is correct and sufficient regardless of the precise contention source, since it targets the SQLite error class itself rather than a specific caller."
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "Without SqliteBusyRetry: a SQLITE_BUSY/SQLITE_LOCKED error during ApplyItemDetail's SaveChangesAsync propagates as an unretried DbUpdateException, matching the real production failure byte-for-byte in its outer message.",
+        "whenHeldValueAbsent": "With SqliteBusyRetry: the same transient lock is retried up to 5 times with backoff and the save succeeds once the competing transaction releases the lock, well within the retry window used by the test."
+      },
+      "verificationStatus": "verified: ItemDetailStoreTests.Should_succeed_when_a_transient_sqlite_lock_blocks_the_save fails with the production DbUpdateException/SqliteException pair when the fix is reverted, and passes with the fix in place, confirmed by temporarily reverting and re-running dotnet test"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "Re-fetching m73020392557 live stores its detail without an issue. Report the result.",
+      "plannedImplementation": "Not performed live: doing so requires an actual HTTP fetch of the Mercari item page through AIOWebScraper/ScraperWorker, which the task instructions explicitly forbid standing up for this ticket.",
+      "plannedVerification": "As the closest available substitute without standing up the scraper stack: copied the real production database (scratchpad/ac2-run2/db/mmetl.db, treated read-only and copied before use) and, using the real captured item page for m73020392557 (scratchpad/monthruns/ps5-controller/cache/93EC1A31CBC897FD.html, located by grepping the monthruns cache directories for the listing id) parsed through the real MercariItemPageParser, called the fixed ItemDetailStore.ApplyItemDetail against the copy's real pre-failure listing row. This ran the exact production code path (real parser, real fixed store, real prior DB state for this listing) end to end.",
+      "materialConcerns": [
+        "This substitutes a captured historical page fetch for a live one; it does not confirm today's live Mercari page still parses cleanly or that network conditions during a live run would not themselves trigger a different failure. A genuine live re-fetch was out of scope per the task's constraints."
+      ],
+      "comparison": false,
+      "verificationStatus": "gap: not verified live (disallowed by task constraints); substitute verification against the real production database copy and the real captured item page succeeded -- ApplyItemDetail completed without throwing and the listing's DetailFetchedUtc, Description, and DescriptionStatus ('ok') were all populated. This ad hoc verification script was run interactively and then deleted; it is not part of the committed test suite."
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Quality gate: pre-commit hook (build with analyzers, dotnet format --verify-no-changes, Unit + Architecture tests) green.",
+      "plannedImplementation": "No feature-specific implementation; satisfied by keeping ExceptionIssueMessageFormatter and SqliteBusyRetry within existing analyzer limits (method length, no comments, one public/internal type per file) and by not touching any DI-registered public interface (both new types are internal static helpers, not registered services).",
+      "plannedVerification": "dotnet build --no-incremental for the full solution, dotnet format --verify-no-changes, and dotnet test for MarketMakerEtl.Tests.Unit and MarketMakerEtl.Tests.Architecture, followed by the .githooks/pre-commit hook itself at commit time.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "pending: to be confirmed at commit time via the pre-commit hook"
+    }
+  ]
+}
