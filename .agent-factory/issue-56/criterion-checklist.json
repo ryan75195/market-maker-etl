@@ -1,0 +1,70 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "With a stubbed scraper modelling a catalogue concentrated below $100, fetching N bands collects strictly more unique listings than the current unfiltered bisection does with the same N (unit test on the collector).",
+      "plannedImplementation": "PriceBand.SeedBands() returns nine fixed geometric bands ($0-5, 5.01-10, 10.01-20, 20.01-50, 50.01-100, 100.01-200, 200.01-500, 500.01-1000, 1000.01+). MercariPriceBandCollector.Collect seeds a new PriceBandQueue with these instead of PriceBand.Unfiltered, so the collector's very first fetches land directly in the price ranges where a real Mercari catalogue actually has listings, instead of spending fetches bisecting an assumed $0-$100,000 range down toward them.",
+      "plannedVerification": "MercariPriceBandCollectorTests.Should_collect_more_unique_listings_than_the_old_unfiltered_bisection_under_the_same_band_budget builds a 870-item stubbed catalogue (IScrapeClient/IPriceBandSearchUrlService/ISearchPageParser test doubles: CatalogueUrlService encodes min/max into the fake URL, CatalogueParser filters the catalogue by that range, caps the returned page at 100 items, and reports the band's true count) concentrated below $100 (60/40/150/300/250 items across the five sub-$100 buckets, tapering to 30/15/5/20 above). It runs the real MercariPriceBandCollector (geometric seeding) and a hand-written FIFO/PriceBand.Unfiltered baseline (reproducing the pre-#56 algorithm with the still-present PriceBand.Unfiltered/CanSplit/Split primitives) against the identical catalogue and a 12-band budget, and asserts the geometric collector's unique count is strictly greater.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "The old unfiltered-bisection baseline, given a 12-band budget against the stubbed catalogue, collects 118 unique listings: ~100 from the globally-cheapest items returned by every 'low' band it ever fetches (since every band from $0/null down still contains and returns the same cheapest 100 items), plus a handful of genuinely new items picked up from the sparse high-price 'leaf' bands produced along the way.",
+        "whenHeldValueAbsent": "The new geometric-seeding collector, given the same 12-band budget against the same catalogue, collects 570 unique listings: the nine seed fetches alone (9 of the 12 bands) already return 470 unique items spread across the actual price distribution, and the remaining 3 fetches (spent on the highest-reported-count child bands first) add another 100."
+      },
+      "verificationStatus": "verified",
+      "evidence": "dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~Should_collect_more_unique_listings_than_the_old_unfiltered_bisection_under_the_same_band_budget: Passed. Numbers confirmed by temporarily forcing an assertion failure to read the exact values: geometric=570, bisection=118 (570 > 118, a 4.8x improvement under an identical 12-band budget)."
+    },
+    {
+      "id": "AC-2",
+      "criterion": "No band is fetched whose range lies entirely inside a band already fetched with a count under 100.",
+      "plannedImplementation": "MercariPriceBandCollector only calls PriceBandQueue.EnqueueChildren(band, count) from inside the ShouldSplit(result, band) branch, which requires ReportedCount(result) >= MinimumCountRequiringSplit (100). A band whose reported count is under 100 therefore structurally never has children enqueued, so no sub-range of it is ever fetched.",
+      "plannedVerification": "MercariPriceBandCollectorTests.Should_never_split_a_seed_band_that_reported_fewer_than_the_split_threshold scripts all nine seed bands with distinct counts all under 100 (10,20,...,90) and asserts BandsFetched stays at exactly 9 (the seed count) with CapHit false, proving no descendant fetch occurred for any of them.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~MercariPriceBandCollectorTests: Should_never_split_a_seed_band_that_reported_fewer_than_the_split_threshold passed (BandsFetched=9, CapHit=False)."
+    },
+    {
+      "id": "AC-3",
+      "criterion": "The existing collector, PriceBand and pruning tests still pass or are updated with rationale.",
+      "plannedImplementation": "Seeding nine bands instead of one root changes fetch counts and ordering, so five pre-existing MercariPriceBandCollectorTests needed updated expectations (documented per-test below); PriceBandTests gained four new tests for SeedBands() alongside its five unchanged existing tests.",
+      "plannedVerification": "Should_collect_every_listing_across_leaves_exactly_once_when_splitting_price_bands: rationale unchanged (dedupe-across-leaves), only the scripted sequence grew from 3 to 11 fetches (8 empty seeds + 1 splitting seed + its 2 leaf children) since a single seed now stands in for the old lone root. Should_prune_every_seed_band_that_yields_only_known_listings (renamed from Should_prune_only_the_band_that_yields_no_new_listings): with nine bands queued upfront instead of one, pruning a band no longer empties the queue by itself, so the rationale changed from 'BandsFetched=1' to 'every one of the 9 seeds gets fetched and pruned independently' (BandsFetched=9, BandsPrunedForKnownListings=9) -- this is the correct, intended behaviour: pruning stops a band's own descendants, never its unprocessed siblings. Should_only_prune_the_all_known_sibling_band_and_keep_walking_the_rest_of_the_queue: same structure as before (one band splits into an all-known left child (pruned) and a new-item right child that itself splits into two new grandchildren) but re-hosted so the splitting band is a seed (the 9th) instead of the sole root, with the other 8 seeds contributing 8 more pruned (empty) fetches; BandsFetched grew from 5 to 13 and BandsPrunedForKnownListings from 1 to 9 accordingly, same underlying assertion (only the all-known sibling is pruned, its new sibling keeps being walked/split). Should_not_stop_early_for_active_bands_even_when_listings_are_already_known and Should_not_treat_a_genuinely_empty_first_run_as_an_early_stop_for_known_listings: rationale unchanged (pruning never applies when sold=false, or when the known set is empty on a first run); BandsFetched changed from 1 to 9 because all nine seeds now get fetched instead of just the one former root.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet test tests/MarketMakerEtl.Tests.Unit --filter 'FullyQualifiedName~MercariPriceBandCollectorTests|FullyQualifiedName~PriceBandTests': 19/19 passed (13 collector tests incl. 4 new, 9 PriceBand tests incl. 4 new for SeedBands()). dotnet test --filter 'FullyQualifiedName~SearchPageServiceTests|FullyQualifiedName~ScrapeRunServiceTests': 12/12 passed unmodified, confirming the #46 cap-hit/no-results issue wiring and the #45 known-sold pruning plumbing were unaffected."
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Repo quality gate green: .githooks/pre-commit (build with all analyzers at error severity, dotnet format --verify-no-changes, Unit + Architecture tests).",
+      "plannedImplementation": "No dedicated implementation; satisfied by the cumulative changes passing the existing pre-commit hook.",
+      "plannedVerification": "The commit that lands this change only succeeds once .githooks/pre-commit's build, dotnet format --verify-no-changes and dotnet test (Unit + Architecture) all pass; the PR pastes the final gate summary.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet build MarketMakerEtl.slnx --no-incremental: Build succeeded, 0 Warning(s), 0 Error(s). dotnet format MarketMakerEtl.slnx --verify-no-changes: exit 0, no violations. dotnet test tests/MarketMakerEtl.Tests.Unit: Passed, 250/250. dotnet test tests/MarketMakerEtl.Tests.Architecture: Passed, 25/25. Final confirmation comes from the actual `git commit` succeeding through .githooks/pre-commit unmodified."
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Scope item 2: prefer splitting bands whose reported count is highest (priority queue ordered by count).",
+      "plannedImplementation": "PriceBandQueue wraps a PriorityQueue<PriceBand, (int Rank, long Sequence)>. Seed bands enqueue at rank int.MinValue (always dequeued before any split-derived band, since seeding must establish a baseline read of the whole price line first). A band's children enqueue at rank = -(that band's own reported count), so a band reporting 300 is preferred over one reporting 150 the next time the queue has a choice; the Sequence component breaks ties in insertion order for determinism.",
+      "plannedVerification": "MercariPriceBandCollectorTests.Should_prefer_splitting_the_band_with_the_highest_reported_count scripts two seeds needing a split (counts 150 and 300) and a band budget that allows only one more fetch after the nine seeds; asserts the single extra fetch resolves to a child of the 300-count band (via a uniquely-tagged listing 'dLow'), proving the higher-count band's descendants were preferred over the lower-count one's.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~MercariPriceBandCollectorTests: Should_prefer_splitting_the_band_with_the_highest_reported_count passed (BandsFetched=10, CapHit=True, merged={\"dLow\"})."
+    },
+    {
+      "id": "AC-6",
+      "criterion": "Scope item 3: record TotalReported from the sum of the seed-band counts, so the cap-hit issue still reports how much was missed.",
+      "plannedImplementation": "AccumulateReportedTotal adds a fetched band's TotalCount into the running total only when the fetched band is one of the nine original seed bands (tracked via PriceBandQueue.IsSeedBand, a HashSet<PriceBand> membership check) and only when TotalCount is non-null, so a band whose descendants get split does not have its refined sub-counts double-added on top of its own original count, and TotalReported stays null (not 0) if every seed reports a null total -- preserving the existing SearchYieldedNoResults null-total semantics in SearchPageService.AddNoResultsIssue.",
+      "plannedVerification": "MercariPriceBandCollectorTests.Should_record_total_reported_as_the_sum_of_the_seed_band_counts scripts all nine seeds with distinct counts (5,10,...,45, summing to 225) and asserts summary.TotalReported == 225.",
+      "materialConcerns": [
+        "heuristic: summing only the nine seed counts (not an unfiltered count) means TotalReported is an estimate that is exact only when every seed band is actually fetched; if the cap is hit mid-seeding, TotalReported reflects only the seeds fetched so far, which is the best information available and matches the ticket's 'or from the sum of the seed-band counts' wording"
+      ],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~MercariPriceBandCollectorTests: Should_record_total_reported_as_the_sum_of_the_seed_band_counts passed (TotalReported=225). SearchPageServiceTests.Should_record_an_issue_when_a_price_band_search_yields_no_results_and_no_total and Should_not_record_a_no_results_issue_when_a_real_total_is_reported both pass unmodified, confirming the null-vs-zero distinction AddNoResultsIssue depends on survived the change."
+    }
+  ]
+}

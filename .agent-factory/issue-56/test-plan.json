@@ -1,0 +1,32 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~MercariPriceBandCollectorTests|FullyQualifiedName~PriceBandTests|FullyQualifiedName~SearchPageServiceTests|FullyQualifiedName~ScrapeRunServiceTests\"",
+  "rationale": "PriceBand gains SeedBands(), a fixed geometric partition of the price line ($0-5, 5.01-10, 10.01-20, 20.01-50, 50.01-100, 100.01-200, 200.01-500, 500.01-1000, 1000.01+). MercariPriceBandCollector.Collect seeds a new internal PriceBandQueue (a priority queue keyed by (rank, insertion sequence)) with these nine bands instead of a single PriceBand.Unfiltered root, replacing the FIFO Queue<PriceBand>. Seed bands are enqueued with the most extreme rank (int.MinValue) so all nine are always fetched before any split-derived child, establishing a baseline read of where the catalogue's density actually is. When a band's reported count reaches the existing 100-item split threshold, its two children are enqueued with rank = -(that band's own reported count), so the queue always prefers to fetch descendants of the currently-densest known band next (scope item 2, 'prefer splitting bands whose reported count is highest'). TotalReported changes from 'the first band's reported total' (meaningless in a multi-seed world) to the running sum of only the nine seed bands' own reported counts (children's counts are not summed, since they refine a seed's total rather than add to it) via AccumulateReportedTotal, staying null only if every seed reports a null total, preserving the existing null-total semantics AddNoResultsIssue depends on. AC-1 (the primary ticket acceptance test) is Should_collect_more_unique_listings_than_the_old_unfiltered_bisection_under_the_same_band_budget: a self-contained stubbed IScrapeClient/IPriceBandSearchUrlService/ISearchPageParser triad (CatalogueUrlService/CatalogueParser/PassthroughScrapeClient) models a 870-item catalogue concentrated below $100 (60/40/150/300/250 items in the five sub-$100 buckets, tapering to 30/15/5/20 above), capping every fetch's returned page at 100 items while still reporting the band's true count -- exactly Mercari's real behaviour. The test runs the real MercariPriceBandCollector (geometric seeding) and a hand-written FIFO/PriceBand.Unfiltered baseline (reproducing the pre-#56 algorithm using the still-present PriceBand.Unfiltered/CanSplit/Split primitives, since the production BFS loop this baseline mirrors no longer exists after #56) against the identical catalogue and an identical 12-band budget, and asserts the geometric collector's unique count is strictly greater. AC-2 ('no band is fetched whose range lies entirely inside a band already fetched with a count under 100') is proven structurally: MercariPriceBandCollector only ever calls PriceBandQueue.EnqueueChildren from inside the ShouldSplit(result, band) branch, which requires the just-fetched band's own reported count to be >= 100, so a sub-100 band's range can never spawn a child; Should_never_split_a_seed_band_that_reported_fewer_than_the_split_threshold pins this by scripting all nine seeds below 100 and asserting BandsFetched stays at exactly 9 (the seed count, no descendants). AC-3 (repo gate) and the existing collector/PriceBand/pruning tests updated with rationale are covered below.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Services/PriceBand.cs",
+    "src/MarketMakerEtl.Core/Services/MercariPriceBandCollector.cs"
+  ],
+  "implementationPaths": [
+    "src/MarketMakerEtl.Core/Services/PriceBand.cs",
+    "src/MarketMakerEtl.Core/Services/MercariPriceBandCollector.cs"
+  ],
+  "declaredRedTests": [
+    "Should_collect_more_unique_listings_than_the_old_unfiltered_bisection_under_the_same_band_budget",
+    "Should_never_split_a_seed_band_that_reported_fewer_than_the_split_threshold",
+    "Should_record_total_reported_as_the_sum_of_the_seed_band_counts",
+    "Should_prefer_splitting_the_band_with_the_highest_reported_count",
+    "Should_collect_every_listing_across_leaves_exactly_once_when_splitting_price_bands",
+    "Should_prune_every_seed_band_that_yields_only_known_listings",
+    "Should_only_prune_the_all_known_sibling_band_and_keep_walking_the_rest_of_the_queue",
+    "Should_not_stop_early_for_active_bands_even_when_listings_are_already_known",
+    "Should_not_treat_a_genuinely_empty_first_run_as_an_early_stop_for_known_listings",
+    "Should_seed_nine_geometric_bands",
+    "Should_start_the_first_seed_band_at_zero_and_leave_the_last_open_ended",
+    "Should_keep_adjacent_seed_bands_exactly_one_cent_apart",
+    "Should_cover_the_range_below_one_hundred_dollars_within_the_first_five_seed_bands"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Services/PriceBand.cs": "AC-1",
+    "src/MarketMakerEtl.Core/Services/MercariPriceBandCollector.cs": "AC-1,AC-2,AC-3"
+  }
+}
