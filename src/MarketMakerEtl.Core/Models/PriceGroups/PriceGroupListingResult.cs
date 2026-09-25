@@ -6,4 +6,5 @@ public sealed record PriceGroupListingResult(
     string? Url,
     decimal? Price,
     DateTime? SoldDate,
+    bool SoldDateIsEstimated,
     decimal? DeltaFromSoldMedian);

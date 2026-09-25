@@ -139,31 +139,36 @@ public sealed class PriceGroupQueryService : IPriceGroupQueryService
     }
 
     private static bool IsSoldWithinWindow(PriceGroupListingCandidate candidate, DateTime soldCutoff) =>
-        candidate.IsSold && candidate.SoldPrice.HasValue && candidate.SoldDate >= soldCutoff;
+        candidate.IsSold && candidate.SoldPrice.HasValue && candidate.EffectiveSoldDate >= soldCutoff;
 
     private static List<PriceGroupListingResult> BuildSoldResults(
         IReadOnlyList<PriceGroupListingCandidate> matching, DateTime soldCutoff, decimal? soldMedian) =>
         matching
             .Where(c => IsSoldWithinWindow(c, soldCutoff))
-            .Select(c => ToResult(c, c.SoldPrice, c.SoldDate, soldMedian))
-            .OrderByDescending(r => r.SoldDate)
+            .OrderByDescending(c => c.EffectiveSoldDate)
+            .Select(c => ToResult(c, c.SoldPrice, c.SoldDate, c.SoldDate is null, soldMedian))
             .ToList();
 
     private static List<PriceGroupListingResult> BuildActiveResults(
         IReadOnlyList<PriceGroupListingCandidate> matching, decimal? soldMedian) =>
         matching
             .Where(c => !c.IsSold && c.Price.HasValue)
-            .Select(c => ToResult(c, c.Price, null, soldMedian))
+            .Select(c => ToResult(c, c.Price, null, false, soldMedian))
             .OrderBy(r => r.DeltaFromSoldMedian ?? decimal.MaxValue)
             .ToList();
 
     private static PriceGroupListingResult ToResult(
-        PriceGroupListingCandidate candidate, decimal? price, DateTime? soldDate, decimal? soldMedian) =>
+        PriceGroupListingCandidate candidate,
+        decimal? price,
+        DateTime? soldDate,
+        bool soldDateIsEstimated,
+        decimal? soldMedian) =>
         new(
             candidate.ListingId,
             candidate.Title,
             candidate.Url,
             price,
             soldDate,
+            soldDateIsEstimated,
             price.HasValue && soldMedian.HasValue ? price - soldMedian : null);
 }

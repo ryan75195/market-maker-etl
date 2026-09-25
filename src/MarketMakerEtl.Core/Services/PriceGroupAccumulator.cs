@@ -19,7 +19,7 @@ internal sealed class PriceGroupAccumulator
     {
         _currency ??= candidate.Currency;
 
-        if (candidate.IsSold && candidate.SoldPrice.HasValue && candidate.SoldDate >= soldCutoff)
+        if (candidate.IsSold && candidate.SoldPrice.HasValue && candidate.EffectiveSoldDate >= soldCutoff)
         {
             _soldPrices.Add(candidate.SoldPrice.Value);
         }

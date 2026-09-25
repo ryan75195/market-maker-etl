@@ -109,6 +109,52 @@ public class PriceGroupQueryServiceTests
     }
 
     [Test]
+    public async Task Should_use_updated_utc_as_the_sold_date_when_sold_date_is_missing()
+    {
+        var candidates = new List<PriceGroupListingCandidate>
+        {
+            BuildCandidate(1, "white", isSold: true, soldPrice: 100m, effectiveSoldDaysAgo: 3),
+            BuildCandidate(2, "white", isSold: true, soldPrice: 500m, effectiveSoldDaysAgo: 60)
+        };
+        var service = BuildService(candidates);
+
+        var groups = await service.GetPriceGroups(
+            new PriceGroupQuery(1, EmptyWhere, ["colour"], 30, false, 1), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(groups, Has.Count.EqualTo(1));
+            Assert.That(groups[0].SoldCount, Is.EqualTo(1));
+            Assert.That(groups[0].SoldMedian, Is.EqualTo(100m));
+        });
+    }
+
+    [Test]
+    public async Task Should_mark_sold_date_as_estimated_when_the_real_sold_date_is_missing()
+    {
+        var where = new Dictionary<string, string> { ["colour"] = "white" };
+        var candidates = new List<PriceGroupListingCandidate>
+        {
+            BuildCandidate(1, "white", isSold: true, soldPrice: 100m, soldDaysAgo: 1),
+            BuildCandidate(2, "white", isSold: true, soldPrice: 120m, effectiveSoldDaysAgo: 2)
+        };
+        var service = BuildService(candidates);
+
+        var listings = await service.GetGroupListings(
+            new PriceGroupListingsQuery(1, where, PriceGroupListingStatus.Sold, 50, 30, false),
+            CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            var withRealDate = listings.Single(l => l.ListingId == 1);
+            var withEstimatedDate = listings.Single(l => l.ListingId == 2);
+            Assert.That(withRealDate.SoldDateIsEstimated, Is.False);
+            Assert.That(withEstimatedDate.SoldDate, Is.Null);
+            Assert.That(withEstimatedDate.SoldDateIsEstimated, Is.True);
+        });
+    }
+
+    [Test]
     public async Task Should_hide_groups_with_fewer_sold_listings_than_min_sold()
     {
         var candidates = new List<PriceGroupListingCandidate>
@@ -165,11 +211,15 @@ public class PriceGroupQueryServiceTests
         bool isSold,
         decimal? soldPrice = null,
         int? soldDaysAgo = null,
+        int? effectiveSoldDaysAgo = null,
         decimal? price = null,
         bool isApplicable = true,
         bool needsReview = false,
-        int taxonomyVersionId = 1) =>
-        new(
+        int taxonomyVersionId = 1)
+    {
+        var soldDate = soldDaysAgo.HasValue ? Now.UtcDateTime.AddDays(-soldDaysAgo.Value) : (DateTime?)null;
+        var effectiveSoldDate = Now.UtcDateTime.AddDays(-(effectiveSoldDaysAgo ?? soldDaysAgo ?? 0));
+        return new(
             listingId,
             $"Listing {listingId}",
             $"https://example.test/{listingId}",
@@ -177,6 +227,8 @@ public class PriceGroupQueryServiceTests
             isSold,
             price,
             soldPrice,
-            soldDaysAgo.HasValue ? Now.UtcDateTime.AddDays(-soldDaysAgo.Value) : null,
+            soldDate,
+            effectiveSoldDate,
             [new PriceGroupAnswer("colour", colour, isApplicable, needsReview, taxonomyVersionId)]);
+    }
 }

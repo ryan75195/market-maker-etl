@@ -9,4 +9,5 @@ public sealed record PriceGroupListingCandidate(
     decimal? Price,
     decimal? SoldPrice,
     DateTime? SoldDate,
+    DateTime EffectiveSoldDate,
     IReadOnlyList<PriceGroupAnswer> Answers);

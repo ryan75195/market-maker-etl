@@ -72,6 +72,7 @@ public sealed class PriceGroupListingStore : IPriceGroupListingStore
             listing.Price,
             listing.SoldPrice,
             listing.SoldDate,
+            listing.SoldDate ?? listing.UpdatedUtc ?? listing.CreatedUtc,
             rows.Select(BuildAnswer).ToList());
 
     private PriceGroupAnswer BuildAnswer(ListingClassificationEntity row) =>
