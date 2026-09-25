@@ -100,6 +100,7 @@ internal static class ListingUpserter
         if (listing.IsSold)
         {
             entity.SoldPrice ??= listing.Price;
+            entity.SoldDate ??= listing.SoldDate;
         }
 
         AddHistoryRow(
@@ -117,6 +118,7 @@ internal static class ListingUpserter
 
         ApplyCoreSearchFields(existing, listing);
         ApplyEnrichmentFields(existing, listing);
+        ApplySoldDate(existing, listing);
         existing.UpdatedUtc = DateTime.UtcNow;
 
         if (becameSold)
@@ -183,6 +185,14 @@ internal static class ListingUpserter
         if (listing.Price is not null)
         {
             entity.Price = listing.Price;
+        }
+    }
+
+    private static void ApplySoldDate(ListingEntity entity, ListingSummary listing)
+    {
+        if (listing.IsSold)
+        {
+            entity.SoldDate ??= listing.SoldDate;
         }
     }
 
