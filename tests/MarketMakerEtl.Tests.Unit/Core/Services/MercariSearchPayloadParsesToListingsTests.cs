@@ -24,6 +24,9 @@ public class MercariSearchPayloadParsesToListingsTests
     private static readonly string CapturedPayload = File.ReadAllText(
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Mercari", "search-payload.json"));
 
+    private static readonly string CapturedActiveFilteredPayload = File.ReadAllText(
+        Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Mercari", "search-payload-active-filtered.json"));
+
     [Test]
     public void Should_parse_every_item_of_a_captured_search_payload()
     {
@@ -128,5 +131,21 @@ public class MercariSearchPayloadParsesToListingsTests
     public void Should_report_listings_present_for_a_captured_payload()
     {
         Assert.That(new MercariSearchParser().ContainsListingMarkup(CapturedPayload), Is.True);
+    }
+
+    [Test]
+    public void Should_contain_only_on_sale_items_in_a_captured_active_filtered_response()
+    {
+        var summaries = new MercariSearchParser().Parse(CapturedActiveFilteredPayload).Listings;
+
+        Assert.That(summaries.Select(summary => summary.IsSold), Is.All.False);
+    }
+
+    [Test]
+    public void Should_expose_the_reduced_reported_total_from_a_captured_active_filtered_response()
+    {
+        var result = new MercariSearchParser().Parse(CapturedActiveFilteredPayload);
+
+        Assert.That(result.TotalCount, Is.EqualTo(8095));
     }
 }

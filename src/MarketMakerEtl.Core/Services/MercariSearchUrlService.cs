@@ -27,7 +27,7 @@ public sealed class MercariSearchUrlService : IEbaySearchUrlService, IPriceBandS
             $"keyword={Uri.EscapeDataString(request.SearchTerm)}"
         };
 
-        AddIfPresent(query, "itemStatuses", request.Sold ? "2" : null);
+        AddIfPresent(query, "itemStatuses", request.Sold ? "2" : "1");
         AddIfPresent(query, "brandIds", request.BrandId);
         AddIfPresent(query, "categoryIds", request.CategoryId);
         AddIfPresent(query, "itemConditions", request.Condition);
