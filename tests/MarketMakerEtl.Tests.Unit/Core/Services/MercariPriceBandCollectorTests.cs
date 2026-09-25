@@ -430,6 +430,44 @@ public class MercariPriceBandCollectorTests
     }
 
     [Test]
+    public async Task Should_overlap_search_fetches_up_to_the_configured_limit_and_match_a_concurrency_one_runs_listings()
+    {
+        var catalogue = BuildCatalogueConcentratedBelowOneHundredDollars();
+        const int bandBudget = 60;
+        const int concurrencyLimit = 3;
+
+        var trackingClient = new ConcurrencyTrackingScrapeClient(TimeSpan.FromMilliseconds(20));
+        var concurrentCollector = new MercariPriceBandCollector(
+            trackingClient,
+            new CatalogueUrlService(),
+            new CatalogueParser(catalogue),
+            new MercariCollectionSettings(bandBudget, Backfill: null, SearchConcurrency: concurrencyLimit),
+            NullLogger.Instance);
+        var concurrentMerged = new Dictionary<string, ListingSummary>();
+        var concurrentSummary = await concurrentCollector.Collect(
+            SearchTerm, sold: true, concurrentMerged, new HashSet<string>(), CancellationToken.None);
+
+        var sequentialCollector = new MercariPriceBandCollector(
+            new PassthroughScrapeClient(),
+            new CatalogueUrlService(),
+            new CatalogueParser(catalogue),
+            new MercariCollectionSettings(bandBudget, Backfill: null),
+            NullLogger.Instance);
+        var sequentialMerged = new Dictionary<string, ListingSummary>();
+        var sequentialSummary = await sequentialCollector.Collect(
+            SearchTerm, sold: true, sequentialMerged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(concurrentSummary.CapHit, Is.False);
+            Assert.That(sequentialSummary.CapHit, Is.False);
+            Assert.That(trackingClient.MaxObservedConcurrency, Is.GreaterThan(1));
+            Assert.That(trackingClient.MaxObservedConcurrency, Is.LessThanOrEqualTo(concurrencyLimit));
+            Assert.That(concurrentMerged.Keys, Is.EquivalentTo(sequentialMerged.Keys));
+        });
+    }
+
+    [Test]
     public async Task Should_keep_collected_results_and_record_no_search_page_failure_when_challenge_pages_recover_before_success()
     {
         var listing = new ListingSummary("m1", "M1", 1m, "USD", "https://x/m1", false, null, null, null);
@@ -698,6 +736,42 @@ public class MercariPriceBandCollectorTests
     private sealed class PassthroughScrapeClient : IScrapeClient
     {
         public Task<string> GetPageHtml(string url, CancellationToken ct) => Task.FromResult(url);
+    }
+
+    private sealed class ConcurrencyTrackingScrapeClient : IScrapeClient
+    {
+        private readonly TimeSpan _delay;
+        private int _current;
+        private int _max;
+
+        internal ConcurrencyTrackingScrapeClient(TimeSpan delay) => _delay = delay;
+
+        internal int MaxObservedConcurrency => Volatile.Read(ref _max);
+
+        public async Task<string> GetPageHtml(string url, CancellationToken ct)
+        {
+            var current = Interlocked.Increment(ref _current);
+            RecordMax(current);
+
+            await Task.Delay(_delay, ct);
+
+            Interlocked.Decrement(ref _current);
+            return url;
+        }
+
+        private void RecordMax(int current)
+        {
+            int observedMax;
+            do
+            {
+                observedMax = Volatile.Read(ref _max);
+                if (current <= observedMax)
+                {
+                    return;
+                }
+            }
+            while (Interlocked.CompareExchange(ref _max, current, observedMax) != observedMax);
+        }
     }
 
     private sealed class CatalogueUrlService : IPriceBandSearchUrlService
