@@ -1,0 +1,60 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A unit test pins the active search URL with the on-sale filter.",
+      "plannedImplementation": "MercariSearchUrlService.BuildSearch now calls AddIfPresent(query, \"itemStatuses\", request.Sold ? \"2\" : \"1\") unconditionally instead of only adding the parameter for the sold direction, so both BuildSearch(searchTerm, sold, page) and the banded IPriceBandSearchUrlService.BuildSearch overload send itemStatuses=1 for every active-direction search.",
+      "plannedVerification": "MercariSearchUrlServiceTests.Should_restrict_active_searches_to_on_sale_items (plain search) and Should_build_a_banded_active_search_url_restricted_to_on_sale_items (banded search, the shape MercariPriceBandCollector actually issues) both assert the built URL contains itemStatuses=1.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~MercariSearchUrlServiceTests: 6/6 passed, including both new tests."
+    },
+    {
+      "id": "AC-2",
+      "criterion": "Evidence of the live comparison is recorded in the PR: the count with and without the filter, and the status values seen.",
+      "plannedImplementation": "Live fetches were issued directly against the AIOWebScraper Functions API (api/NewJob -> api/GetStatus -> api/GetResults, matching HttpScrapeClient's own call sequence) from the sanctioned S:\\scraper checkout (off-screen browser patch applied, routing:allowedDomains emptied, confirmed via the ScraperWorker startup log line '0 allowed domains ... domain filtering DISABLED'), for 'ps5 controller' with no itemStatuses filter, itemStatuses=1, and itemStatuses=2, both unfiltered/whole-catalogue and against a narrow price band (minPrice=20.01, maxPrice=50) matching MercariPriceBandCollector's own banded search shape. The captured itemStatuses=1 response was also trimmed into a real-data fixture (search-payload-active-filtered.json) pinned by a unit test (see AC-1's implementation and the payload test in AC-4's scope).",
+      "plannedVerification": "Recorded directly in the PR body's live-evidence table; not machine-verified beyond the fixture-pinned test in AC-1/AC-4 covering the itemStatuses=1 shape.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "Unfiltered active search for 'ps5 controller': data.search.count=17958, page-1 item statuses {on_sale: 94, trading: 6} (of 100). Banded (minPrice=20.01, maxPrice=50), unfiltered: count=4421, {on_sale: 94, trading: 6}.",
+        "whenHeldValueAbsent": "itemStatuses=1 for the same search: count=8095, page-1 item statuses 100/100 on_sale, and the server echoed criteria.itemStatuses=[1] in its own response. itemStatuses=2 (the pre-existing sold filter, unchanged by this issue): count=9864, {trading: 98, sold_out: 2}. 8095 + 9864 = 17959, matching the unfiltered count within live count drift (fetches were made minutes apart). Banded (minPrice=20.01, maxPrice=50), itemStatuses=1: count=1664, 100/100 on_sale."
+      },
+      "verificationStatus": "verified",
+      "evidence": "Nine live fetches through the real Mercari search endpoint via the local scraper stack (Azurite + AIOWebScraper Functions host + ScraperWorker, off-screen Chromium confirmed via Get-CimInstance Win32_Process showing --window-position=-32000,-32000 on every launched chrome.exe), read back from Azurite's on-disk blob store (the Functions API itself requires SAS/account-key auth for blob reads, which HttpScrapeClient's BlobScrapeContentStore performs but a manual curl does not, so the raw azurite-data/__blobstorage__ extent files were read directly using their recorded byte offsets from __azurite_db_blob__.json). One of the nine fetches (the first unfiltered attempt) landed on a Cloudflare 'Just a moment...' challenge page and was retried once successfully, consistent with docs/running-locally.md's ~1-in-3 rate. All processes started for this (azurite, func, ScraperWorker, and every Chromium/node child they spawned) were stopped afterward and confirmed absent via Get-Process/Get-CimInstance; the S: drive substitution was removed with subst S: /D."
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A live run of 'ps5 controller' (Scrape:MaxBandsPerDirection=40) collects active listings with zero sold or trading statuses among those stored as active, and the active reported total drops to roughly the on-sale count.",
+      "plannedImplementation": "Not implemented by this agent. Per explicit coordinator instruction, a full ETL job run (MarketMakerEtl.Api + MarketMakerEtl.Etl against the real scraper stack) was deliberately not started in this session -- the coordinator will run it themselves afterward, since it also exercises the #150 HTML-card search path (scope item 3) that this session's manual endpoint-level fetches could not force (all nine live captures in this session came back as JSON payloads, never rendered HTML cards).",
+      "plannedVerification": "Deferred to the coordinator's own live run of a job created via POST /api/jobs, watched through GET /api/jobs/{id}/runs, with Scrape:MaxBandsPerDirection=40.",
+      "materialConcerns": [
+        "The AIOWebScraper#150 HTML-card path for active search (scope item 3) was not exercised in this session; the code that would handle it (MercariSearchParser.ParseRenderedCards, reading the same data-itemstatus attribute regardless of which itemStatuses value produced the page) is unchanged by this issue and is covered by the pre-existing MercariSearchParserTests, but confirming it behaves correctly on a real itemStatuses=1 HTML-card response specifically requires the coordinator's live run."
+      ],
+      "comparison": false,
+      "verificationStatus": "pending coordinator live check",
+      "evidence": ""
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Quality gate: pre-commit hook (build with analyzers, dotnet format --verify-no-changes, Unit + Architecture tests) green.",
+      "plannedImplementation": "No dedicated implementation; satisfied by the cumulative changes passing the existing pre-commit hook.",
+      "plannedVerification": "The commit that lands this change only succeeds once .githooks/pre-commit's build, dotnet format --verify-no-changes and dotnet test (Unit + Architecture) all pass.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet build MarketMakerEtl.slnx --no-incremental: Build succeeded, 0 Warning(s), 0 Error(s). dotnet format MarketMakerEtl.slnx --verify-no-changes: exit 0, no violations. dotnet test tests/MarketMakerEtl.Tests.Unit --no-build: Passed, 298/298. dotnet test tests/MarketMakerEtl.Tests.Architecture --no-build: Passed, 25/25 (one NamingConventionTests violation from an initial test-method name containing 'itemStatuses' in mixed case was caught and renamed to snake_case before the final run). Final confirmation is the actual pre-commit hook run at commit time."
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Constraint: keep #59's sold-direction override -- sold-direction results still win over active copies.",
+      "plannedImplementation": "No change to MercariPriceBandCollector.MergeAndCountNew or the merge dictionary logic; the sold direction's MergeAndCountNew(... forceSold: true) call, which overwrites merged[listingId] with IsSold=true regardless of what the active direction previously stored, is untouched.",
+      "plannedVerification": "Pre-existing MercariPriceBandCollectorTests covering the sold-direction override (e.g. the test asserting merged[\"m1\"].IsSold flips from False after the active pass to True after the sold pass) pass unmodified.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~MercariPriceBandCollectorTests: all pre-existing tests pass unmodified (no test in this file was changed by this issue)."
+    }
+  ]
+}

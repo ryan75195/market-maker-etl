@@ -1,0 +1,187 @@
+{
+  "data": {
+    "search": {
+      "pageTitle": null,
+      "localeTitle": null,
+      "page": {
+        "offset": 50,
+        "soldItemsOffset": -1,
+        "promotedItemsOffset": 50,
+        "__typename": "SearchPage"
+      },
+      "count": 8095,
+      "itemsList": [
+        {
+          "id": "m61061097686",
+          "name": "PS5 Controller EMPTY BOX!",
+          "status": "on_sale",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m61061097686_1.jpg?1780489737",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m61061097686_1.jpg?1780489737&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 285772484,
+            "sellerId": 285772484,
+            "__typename": "PublicUser"
+          },
+          "price": 665,
+          "originalPrice": 700,
+          "itemDecorationCircle": null,
+          "itemDecorationRectangle": null,
+          "promoteType": 1,
+          "promoteExpireTime": 1788010089,
+          "authenticItemStatus": null,
+          "countrySource": 1,
+          "brand": {
+            "id": 5058,
+            "name": "PlayStation",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": null,
+          "__typename": "Item",
+          "me": {
+            "isItemLiked": null,
+            "userId": null,
+            "__typename": "ItemMe"
+          },
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 7,
+              "level": 0,
+              "name": "Electronics",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 84,
+              "level": 1,
+              "name": "Video games & consoles",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 798,
+              "level": 2,
+              "name": "Accessories",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 3,
+            "name": "Good",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 798,
+            "name": "Accessories",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "Accessories",
+          "categoryId": 798,
+          "searchFinalScore": 173.75830078125
+        },
+        {
+          "id": "m31224133612",
+          "name": "Sony PlayStation 5 Console Disc Edition with PS5 controller w/ TMR Joysticks",
+          "status": "on_sale",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m31224133612_1.jpg?1790239744",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m31224133612_1.jpg?1790239744&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 271830413,
+            "sellerId": 271830413,
+            "__typename": "PublicUser"
+          },
+          "price": 44000,
+          "originalPrice": 44000,
+          "itemDecorationCircle": null,
+          "itemDecorationRectangle": null,
+          "promoteType": 0,
+          "promoteExpireTime": 0,
+          "authenticItemStatus": null,
+          "countrySource": 1,
+          "brand": {
+            "id": 5937,
+            "name": "Sony",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": null,
+          "__typename": "Item",
+          "me": {
+            "isItemLiked": null,
+            "userId": null,
+            "__typename": "ItemMe"
+          },
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 7,
+              "level": 0,
+              "name": "Electronics",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 84,
+              "level": 1,
+              "name": "Video games & consoles",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 797,
+              "level": 2,
+              "name": "Consoles",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 3,
+            "name": "Good",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 797,
+            "name": "Consoles",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "Consoles",
+          "categoryId": 797,
+          "searchFinalScore": 292.8180847167969
+        }
+      ],
+      "criteria": {
+        "query": "ps5 controller",
+        "itemStatuses": [
+          1
+        ],
+        "maxPrice": 0,
+        "minPrice": 0,
+        "__typename": "SearchCriteria"
+      },
+      "__typename": "SearchResponse"
+    }
+  }
+}
