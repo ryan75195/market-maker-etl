@@ -23,6 +23,14 @@ public class MercariSearchUrlServiceTests
     }
 
     [Test]
+    public void Should_restrict_active_searches_to_on_sale_items()
+    {
+        var url = Service.BuildSearch("playstation 5", sold: false, page: 1);
+
+        Assert.That(url, Does.Contain("itemStatuses=1"));
+    }
+
+    [Test]
     public void Should_restrict_to_sold_items_when_sold_listings_are_requested()
     {
         var url = Service.BuildSearch("playstation 5", sold: true, page: 1);
@@ -90,6 +98,23 @@ public class MercariSearchUrlServiceTests
             Assert.That(url, Does.StartWith("https://www.mercari.com/search/?"));
             Assert.That(url, Does.Contain("keyword=playstation%205"));
             Assert.That(url, Does.Contain("itemStatuses=2"));
+            Assert.That(url, Does.Contain("minPrice=100"));
+            Assert.That(url, Does.Contain("maxPrice=200"));
+        });
+    }
+
+    [Test]
+    public void Should_build_a_banded_active_search_url_restricted_to_on_sale_items()
+    {
+        IPriceBandSearchUrlService bandService = Service;
+
+        var url = bandService.BuildSearch("playstation 5", sold: false, minPrice: 1.00m, maxPrice: 2.00m);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(url, Does.StartWith("https://www.mercari.com/search/?"));
+            Assert.That(url, Does.Contain("keyword=playstation%205"));
+            Assert.That(url, Does.Contain("itemStatuses=1"));
             Assert.That(url, Does.Contain("minPrice=100"));
             Assert.That(url, Does.Contain("maxPrice=200"));
         });
