@@ -3,6 +3,7 @@ using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Models.Scraper;
+using Microsoft.Extensions.Logging;
 
 namespace MarketMakerEtl.Core.Services;
 
@@ -16,17 +17,20 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
     private readonly IScrapeClient _client;
     private readonly IEnumerable<IItemPageParser> _parsers;
     private readonly DetailFetchOptions _options;
+    private readonly ILogger<ItemDetailFetchService> _logger;
 
     public ItemDetailFetchService(
         IItemDetailStore store,
         IScrapeClient client,
         IEnumerable<IItemPageParser> parsers,
-        DetailFetchOptions options)
+        DetailFetchOptions options,
+        ILogger<ItemDetailFetchService> logger)
     {
         _store = store;
         _client = client;
         _parsers = parsers;
         _options = options;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<ScrapeRunIssueDetails>> FetchDetails(int jobId, CancellationToken ct)
@@ -42,6 +46,37 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
         using var gate = new SemaphoreSlim(Math.Max(1, _options.MaxConcurrentDetailFetches));
         var results = await Task.WhenAll(targets.Select(target => FetchOne(target, gate, ct)));
         return results.Where(issue => issue is not null).Select(issue => issue!).ToList();
+    }
+
+    public async Task ApplyBackfilledDetails(
+        int jobId, IReadOnlyDictionary<string, ItemPageListing> detailsByListingId, CancellationToken ct)
+    {
+        if (detailsByListingId.Count == 0)
+        {
+            return;
+        }
+
+        var entityIds = await _store.GetListingEntityIds(jobId, detailsByListingId.Keys.ToList(), ct);
+
+        foreach (var (listingId, entityId) in entityIds)
+        {
+            await ApplyBackfilledDetail(listingId, entityId, detailsByListingId[listingId], ct);
+        }
+    }
+
+    private async Task ApplyBackfilledDetail(string listingId, int entityId, ItemPageListing detail, CancellationToken ct)
+    {
+        try
+        {
+            await _store.ApplyItemDetail(entityId, detail, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to apply backfilled item detail for listing {ListingId}; it will be refetched during the detail phase.",
+                listingId);
+        }
     }
 
     private async Task<ScrapeRunIssueDetails?> FetchOne(ListingDetailTarget target, SemaphoreSlim gate, CancellationToken ct)

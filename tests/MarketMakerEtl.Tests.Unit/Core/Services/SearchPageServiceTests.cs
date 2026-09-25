@@ -110,6 +110,59 @@ public class SearchPageServiceTests
     }
 
     [Test]
+    public async Task Should_expose_backfill_resolved_item_pages_for_the_run_to_persist()
+    {
+        const string itemUrl = "https://x/itm/backfill-1";
+        var listing = new ListingSummary("backfill-1", "Sold Item", 10m, "USD", itemUrl, false, null, null, null);
+
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("<html/>");
+
+        var urls = Substitute.For<IEbaySearchUrlService, IPriceBandSearchUrlService>();
+        urls.Marketplace.Returns(Marketplace.Mercari);
+        ((IPriceBandSearchUrlService)urls)
+            .BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
+            .Returns("https://search");
+
+        var parser = Substitute.For<ISearchPageParser>();
+        parser.Marketplace.Returns(Marketplace.Mercari);
+        parser.Parse(Arg.Any<string>()).Returns(new SearchPageResult([listing], 1));
+
+        var detail = new ItemPageListing(
+            ListingId: null,
+            Title: null,
+            Price: null,
+            Currency: null,
+            Condition: null,
+            BuyingFormat: null,
+            Status: "Sold",
+            SoldPrice: null,
+            SoldDate: DateTime.UtcNow.AddDays(-1).ToString("O"),
+            Seller: null,
+            PrimaryImageUrl: null);
+        var itemParser = Substitute.For<IItemPageParser>();
+        itemParser.Marketplace.Returns(Marketplace.Mercari);
+        itemParser.Parse(Arg.Any<string>()).Returns(detail);
+
+        var adapters = new MarketplaceAdapters([(IEbaySearchUrlService)urls], [parser], [itemParser]);
+        var service = new SearchPageService(
+            client,
+            adapters,
+            new ScrapeOptions(MaxPages: 1, CollectSold: true, MaxBandsPerDirection: 9, SoldBackfillDays: 30),
+            TimeProvider.System,
+            NullLogger<SearchPageService>.Instance);
+
+        var result = await service.Collect("pokemon card lot", Marketplace.Mercari, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.BackfilledDetails, Is.Not.Null);
+            Assert.That(result.BackfilledDetails, Contains.Key("backfill-1"));
+            Assert.That(result.BackfilledDetails!["backfill-1"], Is.EqualTo(detail));
+        });
+    }
+
+    [Test]
     public async Task Should_record_a_search_page_failed_issue_when_a_band_persistently_fails_to_fetch()
     {
         var callCount = 0;

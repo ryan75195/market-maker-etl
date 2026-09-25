@@ -60,7 +60,11 @@ public class RunPipelineRecordsDetailFetchIssueTests
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         var client = new BlockedItemPageScrapeClient(KnownSearchPage, ItemUrl);
         var detailFetch = new ItemDetailFetchService(
-            new ItemDetailStore(factory), client, [new EbayItemPageParserService()], new DetailFetchOptions(4, 50, 1));
+            new ItemDetailStore(factory),
+            client,
+            [new EbayItemPageParserService()],
+            new DetailFetchOptions(4, 50, 1),
+            NullLogger<ItemDetailFetchService>.Instance);
         var runs = new ScrapeRunService(
             new SearchPageService(
                 client,

@@ -1,0 +1,56 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~SoldBackfillPlannerTests|FullyQualifiedName~SearchPageServiceTests|FullyQualifiedName~ScrapeRunServiceTests|FullyQualifiedName~ItemDetailStoreTests|FullyQualifiedName~ItemDetailFetchServiceTests|FullyQualifiedName~BackfilledSoldDetailsSkipTheDetailPhaseTests\"",
+  "rationale": "SoldBackfillPlanner.FetchDetail already fetches and parses each unique sold-listing item page exactly once per run (its _dateCache/_itemPageFetches guard from #59/#62), but ResolveDate only kept the parsed date and discarded the rest of the ItemPageListing, so ItemDetailFetchService.FetchDetails refetched the same item pages after the search phase. The fix threads the already-parsed ItemPageListing through to the same persistence path the detail phase uses (ItemDetailStore.ApplyItemDetail), then relies on ApplyItemDetail's own DetailFetchedUtc stamp -- the same column ItemDetailStore.GetListingsNeedingDetail filters on -- to make the detail phase skip those listings, with no new selection logic. SoldBackfillPlanner gained a ConcurrentDictionary<string, ItemPageListing> ResolvedDetails, populated in ResolveDate only when FetchDetail returns a successfully parsed page (so parse failures/unresolved items are never added and stay eligible for the normal detail phase); it is bounded by the existing Scrape:MaxBackfillItemPageFetches fetch budget since one entry is added per unique successfully-fetched listing. PriceBandCollectionSummary gained a BackfillDetails field populated from backfill?.ResolvedDetails after the concurrent band pool (Task.WhenAll in PriceBandWorkerPool.RunAsync) has fully drained, so there is no concurrent read/write race with #62's concurrent bands. SearchPageService.Collect propagates this as SearchCollectionResult.BackfilledDetails. IItemDetailStore gained GetListingEntityIds(jobId, listingIds, ct), a plain lookup query (no writes) resolving the search phase's already-upserted listing rows to their entity ids. IItemDetailFetchService gained ApplyBackfilledDetails(jobId, detailsByListingId, ct), implemented by resolving entity ids through that lookup and then calling the existing IItemDetailStore.ApplyItemDetail(entityId, detail, ct) for each match -- the exact same method ItemDetailFetchService.FetchDetail already calls for freshly-fetched pages, so description, sale date, segmentation fields, the seller upsert, and gzip raw JSON are applied identically and no parallel save path was written. ScrapeRunService.Run calls this once, right after UpsertListings persists the search-phase listing rows and before FetchDetails runs, so GetListingsNeedingDetail's DetailFetchedUtc filter already excludes the backfilled listings by the time the detail phase queries for targets.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Services/SoldBackfillPlanner.cs",
+    "src/MarketMakerEtl.Core/Services/MercariPriceBandCollector.cs",
+    "src/MarketMakerEtl.Core/Services/SearchPageService.cs",
+    "src/MarketMakerEtl.Core/Models/Runs/SearchCollectionResult.cs",
+    "src/MarketMakerEtl.Core/Interfaces/IItemDetailStore.cs",
+    "src/MarketMakerEtl.Core/Data/ItemDetailStore.cs",
+    "src/MarketMakerEtl.Core/Interfaces/IItemDetailFetchService.cs",
+    "src/MarketMakerEtl.Core/Services/ItemDetailFetchService.cs",
+    "src/MarketMakerEtl.Core/Services/ScrapeRunService.cs"
+  ],
+  "implementationPaths": [
+    "src/MarketMakerEtl.Core/Services/SoldBackfillPlanner.cs",
+    "src/MarketMakerEtl.Core/Services/MercariPriceBandCollector.cs",
+    "src/MarketMakerEtl.Core/Services/SearchPageService.cs",
+    "src/MarketMakerEtl.Core/Models/Runs/SearchCollectionResult.cs",
+    "src/MarketMakerEtl.Core/Interfaces/IItemDetailStore.cs",
+    "src/MarketMakerEtl.Core/Data/ItemDetailStore.cs",
+    "src/MarketMakerEtl.Core/Interfaces/IItemDetailFetchService.cs",
+    "src/MarketMakerEtl.Core/Services/ItemDetailFetchService.cs",
+    "src/MarketMakerEtl.Core/Services/ScrapeRunService.cs",
+    "tests/MarketMakerEtl.Tests.Unit/Core/Services/SoldBackfillPlannerTests.cs",
+    "tests/MarketMakerEtl.Tests.Unit/Core/Services/SearchPageServiceTests.cs",
+    "tests/MarketMakerEtl.Tests.Unit/Core/Services/ScrapeRunServiceTests.cs",
+    "tests/MarketMakerEtl.Tests.Unit/Core/Data/ItemDetailStoreTests.cs",
+    "tests/MarketMakerEtl.Tests.Unit/Core/Services/ItemDetailFetchServiceTests.cs",
+    "tests/MarketMakerEtl.Tests.Unit/Core/Services/NoOpItemDetailFetchService.cs",
+    "tests/MarketMakerEtl.Tests.Unit/Core/Services/BackfilledSoldDetailsSkipTheDetailPhaseTests.cs"
+  ],
+  "declaredRedTests": [
+    "SoldBackfillPlannerTests.Should_retain_the_parsed_detail_for_every_successfully_resolved_listing",
+    "SoldBackfillPlannerTests.Should_not_retain_a_detail_for_a_listing_whose_page_never_parses",
+    "SearchPageServiceTests.Should_expose_backfill_resolved_item_pages_for_the_run_to_persist",
+    "ScrapeRunServiceTests.Should_apply_backfilled_details_before_fetching_the_remaining_detail_targets",
+    "ScrapeRunServiceTests.Should_not_call_apply_backfilled_details_when_the_search_found_nothing_to_backfill",
+    "ItemDetailStoreTests.Should_map_listing_ids_to_entity_ids_for_only_the_matching_job_and_requested_ids",
+    "ItemDetailFetchServiceTests.Should_apply_a_backfilled_detail_through_the_same_apply_item_detail_path",
+    "ItemDetailFetchServiceTests.Should_do_nothing_when_there_are_no_backfilled_details_to_apply",
+    "BackfilledSoldDetailsSkipTheDetailPhaseTests.Should_persist_a_backfilled_sold_listing_through_item_detail_store_and_skip_it_in_the_detail_phase"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Services/SoldBackfillPlanner.cs": "scope-1,AC-1",
+    "src/MarketMakerEtl.Core/Services/MercariPriceBandCollector.cs": "scope-1",
+    "src/MarketMakerEtl.Core/Services/SearchPageService.cs": "scope-1",
+    "src/MarketMakerEtl.Core/Models/Runs/SearchCollectionResult.cs": "scope-1",
+    "src/MarketMakerEtl.Core/Interfaces/IItemDetailStore.cs": "scope-2",
+    "src/MarketMakerEtl.Core/Data/ItemDetailStore.cs": "scope-2,AC-2",
+    "src/MarketMakerEtl.Core/Interfaces/IItemDetailFetchService.cs": "scope-2",
+    "src/MarketMakerEtl.Core/Services/ItemDetailFetchService.cs": "scope-2,AC-1,AC-2",
+    "src/MarketMakerEtl.Core/Services/ScrapeRunService.cs": "scope-2,AC-1,AC-2"
+  }
+}

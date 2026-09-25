@@ -49,6 +49,7 @@ public sealed class SearchPageService : ISearchPageService
         SearchRunIssueFactory.AddSearchPageFailedIssues(issues, searchTerm, sold: false, activeSummary);
 
         var backfillFetches = 0;
+        IReadOnlyDictionary<string, ItemPageListing>? backfilledDetails = null;
 
         if (_options.CollectSold)
         {
@@ -62,9 +63,11 @@ public sealed class SearchPageService : ISearchPageService
             SearchRunIssueFactory.AddBackfillBudgetExhaustedIssue(issues, searchTerm, soldSummary);
             SearchRunIssueFactory.AddSearchPageFailedIssues(issues, searchTerm, sold: true, soldSummary);
             backfillFetches = soldSummary?.ItemPageFetchesUsed ?? 0;
+            backfilledDetails = soldSummary?.BackfillDetails;
         }
 
-        return new SearchCollectionResult(merged.Values.ToList(), activeSummary?.TotalReported, issues, backfillFetches);
+        return new SearchCollectionResult(
+            merged.Values.ToList(), activeSummary?.TotalReported, issues, backfillFetches, backfilledDetails);
     }
 
     private IEbaySearchUrlService SelectUrlService(Marketplace marketplace) =>

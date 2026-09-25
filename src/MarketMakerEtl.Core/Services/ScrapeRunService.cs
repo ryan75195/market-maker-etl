@@ -1,4 +1,5 @@
 using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Runs;
 
 namespace MarketMakerEtl.Core.Services;
@@ -36,6 +37,7 @@ public sealed class ScrapeRunService : IScrapeRunService
             var searchCompletedUtc = DateTime.UtcNow;
 
             var upsertSummary = await _store.UpsertListings(work.JobId, result.Listings, ct);
+            await ApplyBackfilledDetails(work.JobId, result.BackfilledDetails, ct);
 
             var detailIssues = await _detailFetch.FetchDetails(work.JobId, ct);
             var detailCompletedUtc = DateTime.UtcNow;
@@ -62,6 +64,15 @@ public sealed class ScrapeRunService : IScrapeRunService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await _store.FailRun(work.RunId, ExceptionIssueMessageFormatter.Describe(ex), ct);
+        }
+    }
+
+    private async Task ApplyBackfilledDetails(
+        int jobId, IReadOnlyDictionary<string, ItemPageListing>? backfilledDetails, CancellationToken ct)
+    {
+        if (backfilledDetails is { Count: > 0 })
+        {
+            await _detailFetch.ApplyBackfilledDetails(jobId, backfilledDetails, ct);
         }
     }
 }

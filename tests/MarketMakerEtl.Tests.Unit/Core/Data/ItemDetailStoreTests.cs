@@ -228,6 +228,26 @@ public class ItemDetailStoreTests
     }
 
     [Test]
+    public async Task Should_map_listing_ids_to_entity_ids_for_only_the_matching_job_and_requested_ids()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var otherJobId = await SeedJob();
+        var matchingId = await SeedListing(jobId, "entity-id-match", detailFetched: false);
+        await SeedListing(jobId, "entity-id-not-requested", detailFetched: false);
+        await SeedListing(otherJobId, "entity-id-other-job", detailFetched: false);
+
+        var entityIds = await store.GetListingEntityIds(
+            jobId, ["entity-id-match", "entity-id-other-job", "missing-id"], CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(entityIds, Has.Count.EqualTo(1));
+            Assert.That(entityIds["entity-id-match"], Is.EqualTo(matchingId));
+        });
+    }
+
+    [Test]
     public async Task Should_add_exactly_one_sold_row_when_an_active_listing_is_revealed_sold_by_the_item_page()
     {
         var store = CreateStore();

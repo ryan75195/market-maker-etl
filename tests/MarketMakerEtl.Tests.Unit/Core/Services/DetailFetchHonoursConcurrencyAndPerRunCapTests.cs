@@ -7,6 +7,7 @@ using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -57,7 +58,11 @@ public class DetailFetchHonoursConcurrencyAndPerRunCapTests
         var client = Substitute.For<IScrapeClient>();
         client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("<html/>");
         var service = new ItemDetailFetchService(
-            new ItemDetailStore(factory), client, [parser], new DetailFetchOptions(4, 2, 3));
+            new ItemDetailStore(factory),
+            client,
+            [parser],
+            new DetailFetchOptions(4, 2, 3),
+            NullLogger<ItemDetailFetchService>.Instance);
 
         await service.FetchDetails(jobId, CancellationToken.None);
 

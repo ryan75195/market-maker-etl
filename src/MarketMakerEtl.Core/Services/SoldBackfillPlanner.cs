@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
 
@@ -49,6 +50,7 @@ internal sealed class SoldBackfillPlanner
     private readonly TimeProvider _timeProvider;
     private readonly Dictionary<string, Task<DateLookup>> _dateCache = new(StringComparer.Ordinal);
     private readonly object _cacheLock = new();
+    private readonly ConcurrentDictionary<string, ItemPageListing> _resolvedDetails = new(StringComparer.Ordinal);
     private int _itemPageFetches;
 
     internal SoldBackfillPlanner(
@@ -70,6 +72,8 @@ internal sealed class SoldBackfillPlanner
     internal int ItemPageFetchesUsed => Volatile.Read(ref _itemPageFetches);
 
     internal bool BudgetExhausted => Volatile.Read(ref _itemPageFetches) >= _maxItemPageFetches;
+
+    internal IReadOnlyDictionary<string, ItemPageListing> ResolvedDetails => _resolvedDetails;
 
     internal async Task<SoldBackfillDecision> Resolve(
         SearchPageResult page, bool canSplit, CancellationToken ct, int concurrency = 1)
@@ -210,6 +214,7 @@ internal sealed class SoldBackfillPlanner
             var detail = await FetchDetail(listing.Url, ct);
             if (detail is not null)
             {
+                _resolvedDetails[listing.ListingId] = detail;
                 return DateLookup.Resolved(ResolveSoldDate(detail));
             }
         }
