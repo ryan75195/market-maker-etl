@@ -81,6 +81,7 @@ def make_client(models_dir: Path):
         seeds_by_name: Dict[str, List[FakeSeedPredictor]],
         api_key: Optional[str] = None,
         device: str = "cpu",
+        batch_size: int = 16,
     ) -> TestClient:
         for name, seeds in seeds_by_name.items():
             _touch_model_dir(models_dir, name, len(seeds))
@@ -89,7 +90,7 @@ def make_client(models_dir: Path):
             return Ensemble(name=name, seeds=seeds_by_name[name], device=device_)
 
         registry = ModelRegistry(models_dir=models_dir, device=device, loader=loader)
-        app = create_app(registry=registry, api_key=api_key)
+        app = create_app(registry=registry, api_key=api_key, batch_size=batch_size)
         return TestClient(app)
 
     return _make_client

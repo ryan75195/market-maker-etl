@@ -30,7 +30,8 @@ public sealed class ListingClassificationService : IListingClassificationService
         _options = options;
     }
 
-    public async Task<ClassificationTickResult> ClassifyPending(CancellationToken ct)
+    public async Task<ClassificationTickResult> ClassifyPending(
+        Action<ClassificationBatchFailure> onBatchFailure, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(_options.BaseUrl))
         {
@@ -41,10 +42,11 @@ public sealed class ListingClassificationService : IListingClassificationService
             .Where(job => job.ProductFamilyId.HasValue)
             .ToList();
 
-        return await ClassifyJobs(jobs, ct);
+        return await ClassifyJobs(jobs, onBatchFailure, ct);
     }
 
-    private async Task<ClassificationTickResult> ClassifyJobs(IReadOnlyList<JobView> jobs, CancellationToken ct)
+    private async Task<ClassificationTickResult> ClassifyJobs(
+        IReadOnlyList<JobView> jobs, Action<ClassificationBatchFailure> onBatchFailure, CancellationToken ct)
     {
         var jobsProcessed = 0;
         var listingsSelected = 0;
@@ -60,7 +62,7 @@ public sealed class ListingClassificationService : IListingClassificationService
             }
 
             ct.ThrowIfCancellationRequested();
-            var outcome = await ClassifyJob(job, remainingBudget, ct);
+            var outcome = await ClassifyJob(job, remainingBudget, onBatchFailure, ct);
             if (outcome is null)
             {
                 continue;
@@ -71,12 +73,18 @@ public sealed class ListingClassificationService : IListingClassificationService
             listingsClassified += outcome.Classified;
             remainingBudget -= outcome.Selected;
             failures.AddRange(outcome.Failures);
+
+            if (outcome.Stopped)
+            {
+                break;
+            }
         }
 
         return new ClassificationTickResult(jobsProcessed, listingsSelected, listingsClassified, failures);
     }
 
-    private async Task<JobClassificationOutcome?> ClassifyJob(JobView job, int budget, CancellationToken ct)
+    private async Task<JobClassificationOutcome?> ClassifyJob(
+        JobView job, int budget, Action<ClassificationBatchFailure> onBatchFailure, CancellationToken ct)
     {
         var family = await _families.GetFamily(job.ProductFamilyId!.Value, ct);
         if (family?.LatestTaxonomyVersion is null)
@@ -90,29 +98,41 @@ public sealed class ListingClassificationService : IListingClassificationService
 
         if (targets.Count == 0)
         {
-            return new JobClassificationOutcome(0, 0, []);
+            return new JobClassificationOutcome(0, 0, [], false);
         }
 
         var classified = 0;
         var failures = new List<ClassificationBatchFailure>();
+        var stopped = false;
 
         foreach (var batch in Chunk(targets, _options.BatchSize))
         {
             ct.ThrowIfCancellationRequested();
-            classified += await ClassifyBatch(
-                job.Id, family.ModelName, family.LatestTaxonomyVersion.Id, taxonomy, batch, failures, ct);
+            var outcome = await ClassifyBatch(
+                job.Id, family.ModelName, family.LatestTaxonomyVersion.Id, taxonomy, batch, onBatchFailure, ct);
+            classified += outcome.Classified;
+            if (outcome.Failure is not null)
+            {
+                failures.Add(outcome.Failure);
+            }
+
+            if (outcome.StopTick)
+            {
+                stopped = true;
+                break;
+            }
         }
 
-        return new JobClassificationOutcome(targets.Count, classified, failures);
+        return new JobClassificationOutcome(targets.Count, classified, failures, stopped);
     }
 
-    private async Task<int> ClassifyBatch(
+    private async Task<BatchClassificationOutcome> ClassifyBatch(
         int jobId,
         string modelName,
         int taxonomyVersionId,
         TaxonomyDocument taxonomy,
         IReadOnlyList<ListingClassificationTarget> batch,
-        List<ClassificationBatchFailure> failures,
+        Action<ClassificationBatchFailure> onBatchFailure,
         CancellationToken ct)
     {
         try
@@ -124,12 +144,19 @@ public sealed class ListingClassificationService : IListingClassificationService
                 ?? new Dictionary<int, IReadOnlyDictionary<string, string>>();
             var batchItems = BuildBatchItems(taxonomy, taxonomyVersionId, batch, response, humanChoicesByListing);
             await _classifications.UpsertBatch(batchItems, ct);
-            return batch.Count;
+            return new BatchClassificationOutcome(batch.Count, null, false);
+        }
+        catch (ListingClassifierException ex) when (ex.IsTimeout)
+        {
+            var failure = new ClassificationBatchFailure(jobId, batch.Count, ex.Message);
+            onBatchFailure(failure);
+            return new BatchClassificationOutcome(0, failure, true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            failures.Add(new ClassificationBatchFailure(jobId, batch.Count, ex.Message));
-            return 0;
+            var failure = new ClassificationBatchFailure(jobId, batch.Count, ex.Message);
+            onBatchFailure(failure);
+            return new BatchClassificationOutcome(0, failure, false);
         }
     }
 
@@ -196,5 +223,8 @@ public sealed class ListingClassificationService : IListingClassificationService
     }
 
     private sealed record JobClassificationOutcome(
-        int Selected, int Classified, IReadOnlyList<ClassificationBatchFailure> Failures);
+        int Selected, int Classified, IReadOnlyList<ClassificationBatchFailure> Failures, bool Stopped);
+
+    private sealed record BatchClassificationOutcome(
+        int Classified, ClassificationBatchFailure? Failure, bool StopTick);
 }

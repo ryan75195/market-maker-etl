@@ -4,5 +4,5 @@ namespace MarketMakerEtl.Core.Interfaces;
 
 public interface IListingClassificationService
 {
-    Task<ClassificationTickResult> ClassifyPending(CancellationToken ct);
+    Task<ClassificationTickResult> ClassifyPending(Action<ClassificationBatchFailure> onBatchFailure, CancellationToken ct);
 }

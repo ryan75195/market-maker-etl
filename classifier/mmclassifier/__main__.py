@@ -20,7 +20,7 @@ def main() -> None:
     )
     registry.preload(settings.preload)
 
-    app = create_app(registry=registry, api_key=settings.api_key)
+    app = create_app(registry=registry, api_key=settings.api_key, batch_size=settings.batch_size)
     uvicorn.run(app, host=settings.host, port=settings.port)
 
 

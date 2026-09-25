@@ -23,6 +23,7 @@ class Settings:
     preload: List[str]
     host: str
     port: int
+    batch_size: int
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -40,4 +41,5 @@ class Settings:
             preload=preload,
             host=os.environ.get("CLASSIFIER_HOST", "0.0.0.0"),
             port=int(os.environ.get("CLASSIFIER_PORT", "8765")),
+            batch_size=int(os.environ.get("CLASSIFIER_BATCH_SIZE", "16")),
         )
