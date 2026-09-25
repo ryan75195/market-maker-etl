@@ -5,6 +5,7 @@ using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
@@ -51,7 +52,11 @@ public class SoldListingFromSearchGetsSoldDateAndHistoryFromDetailFetchTests
         var html = ReadFixture("item-sold-m44688360101.html");
         var client = new StubScrapeClient(new Dictionary<string, string> { [ListingUrl] = html });
         var service = new ItemDetailFetchService(
-            new ItemDetailStore(factory), client, [new MercariItemPageParser()], new DetailFetchOptions(4, 50, 3));
+            new ItemDetailStore(factory),
+            client,
+            [new MercariItemPageParser()],
+            new DetailFetchOptions(4, 50, 3),
+            NullLogger<ItemDetailFetchService>.Instance);
 
         await service.FetchDetails(jobId, CancellationToken.None);
 

@@ -4,6 +4,7 @@ using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -26,7 +27,7 @@ public class ItemDetailFetchServiceTests
         client.GetPageHtml(Target.Url!, Arg.Any<CancellationToken>()).Returns("<html/>");
         var page = BuildPage();
         var parser = BuildParser(Marketplace.Mercari, page);
-        var service = new ItemDetailFetchService(store, client, [parser], Options());
+        var service = new ItemDetailFetchService(store, client, [parser], Options(), NullLogger<ItemDetailFetchService>.Instance);
 
         await service.FetchDetails(JobId, CancellationToken.None);
 
@@ -43,7 +44,7 @@ public class ItemDetailFetchServiceTests
         var client = Substitute.For<IScrapeClient>();
         client.GetPageHtml(Target.Url!, Arg.Any<CancellationToken>()).Returns("<html/>");
         var parser = BuildParser(Marketplace.Mercari, page: null);
-        var service = new ItemDetailFetchService(store, client, [parser], Options());
+        var service = new ItemDetailFetchService(store, client, [parser], Options(), NullLogger<ItemDetailFetchService>.Instance);
 
         await service.FetchDetails(JobId, CancellationToken.None);
 
@@ -61,7 +62,7 @@ public class ItemDetailFetchServiceTests
         client.GetPageHtml(Target.Url!, Arg.Any<CancellationToken>())
             .Returns<string>(_ => throw new InvalidOperationException("blocked"));
         var parser = BuildParser(Marketplace.Mercari, BuildPage());
-        var service = new ItemDetailFetchService(store, client, [parser], Options());
+        var service = new ItemDetailFetchService(store, client, [parser], Options(), NullLogger<ItemDetailFetchService>.Instance);
 
         Assert.DoesNotThrowAsync(() => service.FetchDetails(JobId, CancellationToken.None));
         await store.Received(1).MarkDetailFetchFailed(Target.Id, Arg.Any<int>(), Arg.Any<CancellationToken>());
@@ -80,7 +81,7 @@ public class ItemDetailFetchServiceTests
         var outer = new DbUpdateException("An error occurred while saving the entity changes.", innermost);
         store.ApplyItemDetail(Target.Id, Arg.Any<ItemPageListing>(), Arg.Any<CancellationToken>())
             .Returns<Task>(_ => throw outer);
-        var service = new ItemDetailFetchService(store, client, [parser], Options());
+        var service = new ItemDetailFetchService(store, client, [parser], Options(), NullLogger<ItemDetailFetchService>.Instance);
 
         var issues = await service.FetchDetails(JobId, CancellationToken.None);
 
@@ -100,7 +101,7 @@ public class ItemDetailFetchServiceTests
             .Returns([Target]);
         var client = Substitute.For<IScrapeClient>();
         var parser = BuildParser(Marketplace.Ebay, BuildPage());
-        var service = new ItemDetailFetchService(store, client, [parser], Options());
+        var service = new ItemDetailFetchService(store, client, [parser], Options(), NullLogger<ItemDetailFetchService>.Instance);
 
         await service.FetchDetails(JobId, CancellationToken.None);
 
@@ -115,7 +116,7 @@ public class ItemDetailFetchServiceTests
         store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([]);
         var client = Substitute.For<IScrapeClient>();
-        var service = new ItemDetailFetchService(store, client, [], Options());
+        var service = new ItemDetailFetchService(store, client, [], Options(), NullLogger<ItemDetailFetchService>.Instance);
 
         await service.FetchDetails(JobId, CancellationToken.None);
 
@@ -130,7 +131,7 @@ public class ItemDetailFetchServiceTests
         store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([]);
         var options = new DetailFetchOptions(MaxConcurrentDetailFetches: 4, MaxDetailFetchesPerRun: 17, MaxDetailFetchAttempts: 3);
-        var service = new ItemDetailFetchService(store, Substitute.For<IScrapeClient>(), [], options);
+        var service = new ItemDetailFetchService(store, Substitute.For<IScrapeClient>(), [], options, NullLogger<ItemDetailFetchService>.Instance);
 
         await service.FetchDetails(JobId, CancellationToken.None);
 
@@ -149,7 +150,7 @@ public class ItemDetailFetchServiceTests
         var client = new ConcurrencyTrackingScrapeClient(TimeSpan.FromMilliseconds(150));
         var parser = BuildParser(Marketplace.Mercari, BuildPage());
         var options = new DetailFetchOptions(MaxConcurrentDetailFetches: 3, MaxDetailFetchesPerRun: 50, MaxDetailFetchAttempts: 3);
-        var service = new ItemDetailFetchService(store, client, [parser], options);
+        var service = new ItemDetailFetchService(store, client, [parser], options, NullLogger<ItemDetailFetchService>.Instance);
 
         await service.FetchDetails(JobId, CancellationToken.None);
 
@@ -167,7 +168,7 @@ public class ItemDetailFetchServiceTests
         var detail = BuildPage();
         store.GetListingEntityIds(JobId, Arg.Is<IReadOnlyCollection<string>>(ids => ids.Contains("listing-1")), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<string, int>(StringComparer.Ordinal) { ["listing-1"] = 1 });
-        var service = new ItemDetailFetchService(store, Substitute.For<IScrapeClient>(), [], Options());
+        var service = new ItemDetailFetchService(store, Substitute.For<IScrapeClient>(), [], Options(), NullLogger<ItemDetailFetchService>.Instance);
 
         await service.ApplyBackfilledDetails(
             JobId, new Dictionary<string, ItemPageListing>(StringComparer.Ordinal) { ["listing-1"] = detail }, CancellationToken.None);
@@ -179,7 +180,7 @@ public class ItemDetailFetchServiceTests
     public async Task Should_do_nothing_when_there_are_no_backfilled_details_to_apply()
     {
         var store = Substitute.For<IItemDetailStore>();
-        var service = new ItemDetailFetchService(store, Substitute.For<IScrapeClient>(), [], Options());
+        var service = new ItemDetailFetchService(store, Substitute.For<IScrapeClient>(), [], Options(), NullLogger<ItemDetailFetchService>.Instance);
 
         await service.ApplyBackfilledDetails(
             JobId, new Dictionary<string, ItemPageListing>(StringComparer.Ordinal), CancellationToken.None);
@@ -187,6 +188,47 @@ public class ItemDetailFetchServiceTests
         await store.DidNotReceive().GetListingEntityIds(
             Arg.Any<int>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
         await store.DidNotReceive().ApplyItemDetail(Arg.Any<int>(), Arg.Any<ItemPageListing>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_apply_the_remaining_backfilled_details_when_one_listing_fails_to_apply()
+    {
+        var store = Substitute.For<IItemDetailStore>();
+        var failingDetail = BuildPage();
+        var okDetail = BuildPage();
+        store.GetListingEntityIds(JobId, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, int>(StringComparer.Ordinal) { ["listing-1"] = 1, ["listing-2"] = 2 });
+        store.ApplyItemDetail(1, failingDetail, Arg.Any<CancellationToken>())
+            .Returns<Task>(_ => throw new InvalidOperationException("blocked"));
+        var service = new ItemDetailFetchService(store, Substitute.For<IScrapeClient>(), [], Options(), NullLogger<ItemDetailFetchService>.Instance);
+
+        Assert.DoesNotThrowAsync(() => service.ApplyBackfilledDetails(
+            JobId,
+            new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+            {
+                ["listing-1"] = failingDetail,
+                ["listing-2"] = okDetail,
+            },
+            CancellationToken.None));
+
+        await store.Received(1).ApplyItemDetail(2, okDetail, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public void Should_let_cancellation_propagate_out_of_apply_backfilled_details()
+    {
+        var store = Substitute.For<IItemDetailStore>();
+        var detail = BuildPage();
+        store.GetListingEntityIds(JobId, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, int>(StringComparer.Ordinal) { ["listing-1"] = 1 });
+        store.ApplyItemDetail(1, detail, Arg.Any<CancellationToken>())
+            .Returns<Task>(_ => throw new OperationCanceledException());
+        var service = new ItemDetailFetchService(store, Substitute.For<IScrapeClient>(), [], Options(), NullLogger<ItemDetailFetchService>.Instance);
+
+        var thrown = Assert.ThrowsAsync<OperationCanceledException>(() => service.ApplyBackfilledDetails(
+            JobId, new Dictionary<string, ItemPageListing>(StringComparer.Ordinal) { ["listing-1"] = detail }, CancellationToken.None));
+
+        Assert.That(thrown, Is.Not.Null.And.TypeOf<OperationCanceledException>());
     }
 
     private static ItemPageListing BuildPage() =>

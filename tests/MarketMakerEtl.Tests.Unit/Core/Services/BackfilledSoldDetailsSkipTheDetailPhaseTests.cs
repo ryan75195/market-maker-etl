@@ -7,6 +7,7 @@ using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
@@ -54,7 +55,12 @@ public class BackfilledSoldDetailsSkipTheDetailPhaseTests
         var itemParser = new MercariItemPageParser();
         var store = new ScrapeStore(factory, new ScrapeRunStateService());
         var itemDetailStore = new ItemDetailStore(factory);
-        var detailFetch = new ItemDetailFetchService(itemDetailStore, client, [itemParser], new DetailFetchOptions(4, 50, 3));
+        var detailFetch = new ItemDetailFetchService(
+            itemDetailStore,
+            client,
+            [itemParser],
+            new DetailFetchOptions(4, 50, 3),
+            NullLogger<ItemDetailFetchService>.Instance);
         var search = new BackfillSimulatingSearchPageService(client, itemParser);
         var runs = new ScrapeRunService(search, store, detailFetch, new ScrapeRunReportStore(factory));
 

@@ -6,6 +6,7 @@ using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -49,7 +50,11 @@ public class AlreadyDetailedListingIsNotRefetchedByLaterRunsTests
         var listingEntityId = await SeedAlreadyDetailedListing(factory, jobId);
         var client = Substitute.For<IScrapeClient>();
         var service = new ItemDetailFetchService(
-            new ItemDetailStore(factory), client, [new MercariItemPageParser()], new DetailFetchOptions(4, 50, 3));
+            new ItemDetailStore(factory),
+            client,
+            [new MercariItemPageParser()],
+            new DetailFetchOptions(4, 50, 3),
+            NullLogger<ItemDetailFetchService>.Instance);
 
         await service.FetchDetails(jobId, CancellationToken.None);
         await service.FetchDetails(jobId, CancellationToken.None);

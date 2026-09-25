@@ -6,6 +6,7 @@ using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
@@ -54,7 +55,11 @@ public class FailedItemFetchMarksListingFailedWithoutFailingTheRunTests
             failingUrl: BlockedUrl,
             pages: new Dictionary<string, string> { [OkUrl] = ReadFixture("item-active-m71344610988.html") });
         var service = new ItemDetailFetchService(
-            new ItemDetailStore(factory), client, [new MercariItemPageParser()], new DetailFetchOptions(4, 50, 1));
+            new ItemDetailStore(factory),
+            client,
+            [new MercariItemPageParser()],
+            new DetailFetchOptions(4, 50, 1),
+            NullLogger<ItemDetailFetchService>.Instance);
 
         Assert.DoesNotThrowAsync(() => service.FetchDetails(jobId, CancellationToken.None));
 
