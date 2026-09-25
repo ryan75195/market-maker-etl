@@ -24,6 +24,29 @@ public class ListingClassificationServiceTests
         }
         """;
 
+    private const string GatedTaxonomyJson = """
+        {
+         "family": "ps5-controller",
+         "version": 1,
+         "questions": {
+          "item_type": {
+           "instructions": "What is this?",
+           "criteria": { "console": "A console.", "dualsense_standard": "A DualSense controller." }
+          },
+          "edition": {
+           "instructions": "Which edition?",
+           "criteria": { "standard_colour": "Standard.", "limited_edition": "Limited." },
+           "askWhen": [ { "question": "item_type", "anyOf": ["dualsense_standard"] } ]
+          },
+          "colour": {
+           "instructions": "Which colour?",
+           "criteria": { "white": "White.", "midnight_black": "Black." },
+           "askWhen": [ { "question": "item_type", "anyOf": ["dualsense_standard"] } ]
+          }
+         }
+        }
+        """;
+
     private static ClassifierOptions Options(string baseUrl = "http://classifier.test") =>
         new(baseUrl, 64, 5, 2000, 120);
 
@@ -87,6 +110,46 @@ public class ListingClassificationServiceTests
                 batch.Count == 1 &&
                 batch[0].ListingEntityId == 42 &&
                 batch[0].Rows.Single().Choice == "console"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_treat_a_human_choice_as_authoritative_for_gating_dependent_questions()
+    {
+        var jobs = Substitute.For<IJobStore>();
+        var families = Substitute.For<IProductFamilyStore>();
+        var classifications = Substitute.For<IListingClassificationStore>();
+        var client = Substitute.For<IListingClassifierClient>();
+
+        jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1)]);
+        families.GetFamily(1, Arg.Any<CancellationToken>()).Returns(BuildPs5Family());
+        var target = new ListingClassificationTarget(42, "Sony DualSense", null, null, null, null, null);
+        classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
+            .Returns([target]);
+        classifications.GetHumanChoices(
+                Arg.Is<IReadOnlyList<int>>(ids => ids.Contains(42)), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, IReadOnlyDictionary<string, string>>
+            {
+                [42] = new Dictionary<string, string> { ["item_type"] = "console" }
+            });
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ClassifyResponse(
+                "ps5-controller",
+                3,
+                [new ClassifyResult(new Dictionary<string, ClassifyAnswer>
+                {
+                    ["item_type"] = new("dualsense_standard", 0.9, 1.0, new Dictionary<string, double> { ["dualsense_standard"] = 0.9 }),
+                    ["edition"] = new("standard_colour", 0.9, 1.0, new Dictionary<string, double> { ["standard_colour"] = 0.9 }),
+                    ["colour"] = new("white", 0.9, 1.0, new Dictionary<string, double> { ["white"] = 0.9 })
+                })]));
+
+        var service = new ListingClassificationService(jobs, families, classifications, client, Options());
+        await service.ClassifyPending(CancellationToken.None);
+
+        await classifications.Received(1).UpsertBatch(
+            Arg.Is<IReadOnlyList<ListingClassificationBatchItem>>(batch =>
+                !batch[0].Rows.Single(r => r.Question == "edition").IsApplicable &&
+                !batch[0].Rows.Single(r => r.Question == "colour").IsApplicable),
             Arg.Any<CancellationToken>());
     }
 
@@ -165,4 +228,13 @@ public class ListingClassificationServiceTests
             "ps5-controller",
             DateTime.UtcNow,
             new TaxonomyVersionView(100, 1, 1, TaxonomyJson, DateTime.UtcNow));
+
+    private static ProductFamilyView BuildPs5Family() =>
+        new(
+            1,
+            "ps5-controller",
+            "PS5 Controller",
+            "ps5-controller",
+            DateTime.UtcNow,
+            new TaxonomyVersionView(100, 1, 1, GatedTaxonomyJson, DateTime.UtcNow));
 }

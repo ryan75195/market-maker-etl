@@ -96,6 +96,43 @@ public class ListingClassificationStoreTests
     }
 
     [Test]
+    public async Task Should_not_reselect_a_listing_whose_only_stale_row_is_human_owned()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var oldVersionId = await SeedTaxonomyVersion();
+        var latestVersionId = await SeedTaxonomyVersion();
+        var classifiedUtc = DateTime.UtcNow;
+        var listingId = await SeedListing(jobId, "human-row-on-old-version", classifiedUtc.AddDays(-1));
+        await SeedClassificationRow(listingId, latestVersionId, "item_type", ClassificationSource.Model, classifiedUtc);
+        await SeedClassificationRow(listingId, oldVersionId, "colour", ClassificationSource.Human, classifiedUtc, "white");
+
+        var targets = await store.GetListingsNeedingClassification(jobId, latestVersionId, 10, CancellationToken.None);
+
+        Assert.That(targets.Select(t => t.ListingEntityId), Does.Not.Contain(listingId));
+    }
+
+    [Test]
+    public async Task Should_return_human_choices_grouped_by_listing()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var taxonomyVersionId = await SeedTaxonomyVersion();
+        var humanListingId = await SeedListing(jobId, "human-choices", null);
+        var modelOnlyListingId = await SeedListing(jobId, "model-only-choices", null);
+        await SeedClassificationRow(humanListingId, taxonomyVersionId, "item_type", ClassificationSource.Human, DateTime.UtcNow, "console");
+        await SeedClassificationRow(modelOnlyListingId, taxonomyVersionId, "item_type", ClassificationSource.Model, DateTime.UtcNow);
+
+        var humanChoices = await store.GetHumanChoices([humanListingId, modelOnlyListingId], CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(humanChoices.ContainsKey(modelOnlyListingId), Is.False);
+            Assert.That(humanChoices[humanListingId]["item_type"], Is.EqualTo("console"));
+        });
+    }
+
+    [Test]
     public async Task Should_not_overwrite_a_human_row_when_upserting_model_answers()
     {
         var store = CreateStore();

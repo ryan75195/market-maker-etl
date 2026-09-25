@@ -102,6 +102,59 @@ public class TaxonomyAnswerResolverTests
         Assert.That(AnswerFor(answers, "colour").ResolvedChoice, Is.EqualTo("not_stated"));
     }
 
+    [Test]
+    public void Should_make_a_question_not_applicable_when_its_dependency_chain_breaks_two_levels_up()
+    {
+        var document = new TaxonomyDocument("chain-test", 1,
+        [
+            new TaxonomyQuestion(
+                "a", "Is A?", new Dictionary<string, string> { ["yes"] = "Yes.", ["no"] = "No." }, [], null),
+            new TaxonomyQuestion(
+                "b",
+                "Is B?",
+                new Dictionary<string, string> { ["b1"] = "B1.", ["b2"] = "B2." },
+                [new TaxonomyAskWhenClause("a", ["yes"])],
+                null),
+            new TaxonomyQuestion(
+                "c",
+                "Is C?",
+                new Dictionary<string, string> { ["c1"] = "C1.", ["c2"] = "C2." },
+                [new TaxonomyAskWhenClause("b", ["b1"])],
+                null)
+        ]);
+        var choices = new Dictionary<string, string> { ["a"] = "no", ["b"] = "b1", ["c"] = "c1" };
+
+        var answers = TaxonomyAnswerResolver.Resolve(document, choices);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AnswerFor(answers, "b").IsApplicable, Is.False);
+            Assert.That(AnswerFor(answers, "c").IsApplicable, Is.False);
+        });
+    }
+
+    [Test]
+    public void Should_let_a_human_override_drive_gating_for_dependent_questions()
+    {
+        var document = new TaxonomyDocument("chain-test", 1,
+        [
+            new TaxonomyQuestion(
+                "a", "Is A?", new Dictionary<string, string> { ["yes"] = "Yes.", ["no"] = "No." }, [], null),
+            new TaxonomyQuestion(
+                "b",
+                "Is B?",
+                new Dictionary<string, string> { ["b1"] = "B1.", ["b2"] = "B2." },
+                [new TaxonomyAskWhenClause("a", ["yes"])],
+                null)
+        ]);
+        var modelChoices = new Dictionary<string, string> { ["a"] = "yes", ["b"] = "b1" };
+        var humanChoices = new Dictionary<string, string> { ["a"] = "no" };
+
+        var answers = TaxonomyAnswerResolver.Resolve(document, modelChoices, humanChoices);
+
+        Assert.That(AnswerFor(answers, "b").IsApplicable, Is.False);
+    }
+
     private static ResolvedTaxonomyAnswer AnswerFor(IReadOnlyList<ResolvedTaxonomyAnswer> answers, string question) =>
         answers.Single(a => a.Question == question);
 

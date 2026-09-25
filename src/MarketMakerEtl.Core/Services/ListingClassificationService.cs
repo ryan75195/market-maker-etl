@@ -120,7 +120,10 @@ public sealed class ListingClassificationService : IListingClassificationService
         {
             var request = BuildRequest(modelName, taxonomy, batch);
             var response = await _client.Classify(request, ct);
-            var batchItems = BuildBatchItems(taxonomy, taxonomyVersionId, batch, response);
+            var humanChoicesByListing = await _classifications.GetHumanChoices(
+                batch.Select(target => target.ListingEntityId).ToList(), ct)
+                ?? new Dictionary<int, IReadOnlyDictionary<string, string>>();
+            var batchItems = BuildBatchItems(taxonomy, taxonomyVersionId, batch, response, humanChoicesByListing);
             await _classifications.UpsertBatch(batchItems, ct);
             return batch.Count;
         }
@@ -162,23 +165,30 @@ public sealed class ListingClassificationService : IListingClassificationService
         TaxonomyDocument taxonomy,
         int taxonomyVersionId,
         IReadOnlyList<ListingClassificationTarget> batch,
-        ClassifyResponse response)
+        ClassifyResponse response,
+        IReadOnlyDictionary<int, IReadOnlyDictionary<string, string>> humanChoicesByListing)
     {
         var items = new List<ListingClassificationBatchItem>(batch.Count);
 
         for (var index = 0; index < batch.Count; index++)
         {
-            items.Add(BuildBatchItem(taxonomy, taxonomyVersionId, batch[index], response.Results[index]));
+            var target = batch[index];
+            humanChoicesByListing.TryGetValue(target.ListingEntityId, out var humanChoices);
+            items.Add(BuildBatchItem(taxonomy, taxonomyVersionId, target, response.Results[index], humanChoices));
         }
 
         return items;
     }
 
     private static ListingClassificationBatchItem BuildBatchItem(
-        TaxonomyDocument taxonomy, int taxonomyVersionId, ListingClassificationTarget target, ClassifyResult result)
+        TaxonomyDocument taxonomy,
+        int taxonomyVersionId,
+        ListingClassificationTarget target,
+        ClassifyResult result,
+        IReadOnlyDictionary<string, string>? humanChoices)
     {
         var choices = result.Answers.ToDictionary(answer => answer.Key, answer => answer.Value.Choice);
-        var resolved = TaxonomyAnswerResolver.Resolve(taxonomy, choices);
+        var resolved = TaxonomyAnswerResolver.Resolve(taxonomy, choices, humanChoices);
         var rows = resolved.Select(answer => BuildRow(answer, result.Answers[answer.Question])).ToList();
 
         return new ListingClassificationBatchItem(target.ListingEntityId, taxonomyVersionId, rows);

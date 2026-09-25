@@ -30,7 +30,9 @@ public sealed class ListingClassificationStore : IListingClassificationStore
                 Listing = l,
                 ClassificationCount = db.ListingClassifications.Count(c => c.ListingEntityId == l.Id),
                 HasStaleVersion = db.ListingClassifications.Any(c =>
-                    c.ListingEntityId == l.Id && c.TaxonomyVersionId != latestTaxonomyVersionId),
+                    c.ListingEntityId == l.Id &&
+                    c.Source == ClassificationSource.Model &&
+                    c.TaxonomyVersionId != latestTaxonomyVersionId),
                 MaxClassifiedUtc = db.ListingClassifications
                     .Where(c => c.ListingEntityId == l.Id)
                     .Select(c => (DateTime?)c.ClassifiedUtc)
@@ -95,6 +97,27 @@ public sealed class ListingClassificationStore : IListingClassificationStore
             .FirstOrDefaultAsync(ct);
 
         return new ListingClassificationView(listingEntityId, version, rows.Select(MapToAnswerView).ToList());
+    }
+
+    public async Task<IReadOnlyDictionary<int, IReadOnlyDictionary<string, string>>> GetHumanChoices(
+        IReadOnlyList<int> listingEntityIds, CancellationToken ct)
+    {
+        if (listingEntityIds.Count == 0)
+        {
+            return new Dictionary<int, IReadOnlyDictionary<string, string>>();
+        }
+
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var rows = await db.ListingClassifications
+            .Where(c => listingEntityIds.Contains(c.ListingEntityId) && c.Source == ClassificationSource.Human)
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(r => r.ListingEntityId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyDictionary<string, string>)g.ToDictionary(
+                    r => r.Question, r => r.Choice, StringComparer.Ordinal));
     }
 
     private static void ApplyRow(
