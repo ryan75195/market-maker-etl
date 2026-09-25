@@ -8,7 +8,11 @@ namespace MarketMakerEtl.Tests.Architecture;
 [TestFixture]
 public class CodeStructureTests
 {
-    private static readonly HashSet<string> AllowedArrayReturns = [];
+    private static readonly HashSet<string> AllowedArrayReturns =
+    [
+        "get_SearchItemJsonGzip",
+        "get_ItemDetailJsonGzip"
+    ];
 
     private static readonly Regex PublicTypePattern = new(
         @"^\s*public\s+(?:(?:static|sealed|abstract|partial|readonly)\s+)*(?:record\s+(?:struct|class)\s+|(?:class|record|struct|enum|interface)\s+)(\w+)",

@@ -125,25 +125,7 @@ public sealed class ScrapeStore : IScrapeStore
             .OrderBy(l => l.Id)
             .ToListAsync(ct);
 
-        return listings
-            .Select(l => new ListingSummary(
-                l.ListingId,
-                l.Title,
-                l.Price,
-                l.Currency,
-                l.Url,
-                l.IsSold,
-                l.Condition,
-                l.PrimaryImageUrl,
-                l.BuyingFormat,
-                l.Brand,
-                l.OriginalPrice,
-                l.Category,
-                l.Likes,
-                ListingImageUrlsJson.Deserialize(l.ImageUrls),
-                l.SoldPrice,
-                l.SoldDate))
-            .ToList();
+        return listings.Select(ListingSummaryMapper.Build).ToList();
     }
 
     public async Task<IReadOnlyList<ListingRefreshTarget>> GetActiveListings(CancellationToken ct)

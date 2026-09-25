@@ -16,4 +16,14 @@ public sealed record ListingSummary(
     int? Likes = null,
     IReadOnlyList<string>? ImageUrls = null,
     decimal? SoldPrice = null,
-    DateTime? SoldDate = null);
+    DateTime? SoldDate = null,
+    int? CategoryId = null,
+    MercariCategoryHierarchy? CategoryHierarchy = null,
+    int? BrandId = null,
+    int? ConditionId = null,
+    string? SizeName = null,
+    string? ColorName = null,
+    string? ShippingPayer = null,
+    long? SellerId = null,
+    IReadOnlyDictionary<string, string>? Attributes = null,
+    string? RawJson = null);

@@ -1,0 +1,88 @@
+{
+  "data": {
+    "search": {
+      "count": 20783,
+      "itemsList": [
+        {
+          "id": "m26134884694",
+          "name": "Pulse 3D",
+          "status": "trading",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m26134884694_1.jpg?1763883482",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m26134884694_1.jpg?1763883482&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 713602239,
+            "sellerId": 713602239,
+            "__typename": "PublicUser"
+          },
+          "price": 10172,
+          "originalPrice": 12000,
+          "brand": {
+            "id": 5937,
+            "name": "Sony",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": null,
+          "__typename": "Item",
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 7,
+              "level": 0,
+              "name": "Electronics",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 84,
+              "level": 1,
+              "name": "Video games & consoles",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 798,
+              "level": 2,
+              "name": "Accessories",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 798,
+            "name": "Accessories",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [
+            {
+              "facetName": "Model",
+              "value": "PULSE 3D Wireless Gaming Headset",
+              "__typename": "ItemCustomFacet"
+            },
+            {
+              "facetName": "Platform",
+              "value": "PlayStation 5",
+              "__typename": "ItemCustomFacet"
+            }
+          ],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "Accessories",
+          "categoryId": 798
+        }
+      ]
+    }
+  }
+}

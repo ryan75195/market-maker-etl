@@ -1,0 +1,145 @@
+{
+  "data": {
+    "search": {
+      "count": 8421,
+      "itemsList": [
+        {
+          "id": "m80477245182",
+          "name": "Pokemon Trading Cards Lot",
+          "status": "on_sale",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m80477245182_1.jpg?1790206852",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m80477245182_1.jpg?1790206852&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 812047966,
+            "sellerId": 812047966,
+            "__typename": "PublicUser"
+          },
+          "price": 4500,
+          "originalPrice": 4500,
+          "brand": {
+            "id": 5074,
+            "name": "Pokemon",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": null,
+          "__typename": "Item",
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 1611,
+              "level": 0,
+              "name": "Toys & Collectibles",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 1780,
+              "level": 1,
+              "name": "Trading Cards",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 3509,
+              "level": 2,
+              "name": "Single Cards",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 3509,
+            "name": "Single Cards",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "Single Cards",
+          "categoryId": 3509
+        },
+        {
+          "id": "m83211233472",
+          "name": "Pokemon card lot of 7",
+          "status": "on_sale",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m83211233472_1.jpg?1782522211",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m83211233472_1.jpg?1782522211&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 219143928,
+            "sellerId": 219143928,
+            "__typename": "PublicUser"
+          },
+          "price": 2600,
+          "originalPrice": 3000,
+          "brand": {
+            "id": 5074,
+            "name": "Pokemon",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": null,
+          "__typename": "Item",
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 1611,
+              "level": 0,
+              "name": "Toys & Collectibles",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 1780,
+              "level": 1,
+              "name": "Trading Cards",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 3509,
+              "level": 2,
+              "name": "Single Cards",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 2,
+            "name": "Like new",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 3509,
+            "name": "Single Cards",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "Single Cards",
+          "categoryId": 3509
+        }
+      ]
+    }
+  }
+}

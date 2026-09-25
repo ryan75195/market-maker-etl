@@ -27,6 +27,10 @@ public sealed class EtlDbContext : DbContext
 
     public DbSet<SchedulerStateEntity> SchedulerState => Set<SchedulerStateEntity>();
 
+    public DbSet<SellerEntity> Sellers => Set<SellerEntity>();
+
+    public DbSet<ListingRawDataEntity> ListingRawData => Set<ListingRawDataEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ScrapeJobEntity>(entity =>
@@ -58,6 +62,20 @@ public sealed class EtlDbContext : DbContext
             entity.HasIndex(e => e.ScrapeRunId);
         });
 
+        ConfigureListings(modelBuilder);
+        ConfigureCategories(modelBuilder);
+
+        modelBuilder.Entity<SchedulerStateEntity>(entity =>
+        {
+            entity.ToTable("SchedulerState");
+            entity.HasKey(e => e.Id);
+        });
+
+        ConfigureSellersAndRawData(modelBuilder);
+    }
+
+    private static void ConfigureListings(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<ListingEntity>(entity =>
         {
             entity.ToTable("Listings");
@@ -65,14 +83,26 @@ public sealed class EtlDbContext : DbContext
             entity.Property(e => e.ListingId).IsRequired().HasMaxLength(32);
             entity.HasIndex(e => e.ListingId).IsUnique();
             entity.HasIndex(e => e.ScrapeJobId);
+            entity.HasOne(e => e.RawData)
+                .WithOne()
+                .HasForeignKey<ListingRawDataEntity>(r => r.ListingEntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureSellersAndRawData(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SellerEntity>(entity =>
+        {
+            entity.ToTable("Sellers");
+            entity.HasKey(e => e.SellerId);
         });
 
-        ConfigureCategories(modelBuilder);
-
-        modelBuilder.Entity<SchedulerStateEntity>(entity =>
+        modelBuilder.Entity<ListingRawDataEntity>(entity =>
         {
-            entity.ToTable("SchedulerState");
+            entity.ToTable("ListingRawData");
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.ListingEntityId).IsUnique();
         });
     }
 

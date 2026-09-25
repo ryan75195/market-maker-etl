@@ -81,6 +81,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IJobStore, JobStore>();
         services.AddSingleton<ICategoryStore, CategoryStore>();
         services.AddSingleton<IItemDetailStore, ItemDetailStore>();
+        services.AddSingleton<IListingRawDataStore, ListingRawDataStore>();
         services.AddSingleton<ISearchPageService, SearchPageService>();
         services.AddSingleton<IItemDetailFetchService, ItemDetailFetchService>();
         services.AddSingleton<IScrapeRunService, ScrapeRunService>();

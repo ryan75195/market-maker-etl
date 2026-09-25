@@ -1,0 +1,153 @@
+{
+  "data": {
+    "search": {
+      "count": 5017,
+      "itemsList": [
+        {
+          "id": "m25551005690",
+          "name": "Nike revolution 8- SIZE 6 women's/youth 4.5",
+          "status": "on_sale",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m25551005690_1.jpg?1789817631",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m25551005690_1.jpg?1789817631&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 184965927,
+            "sellerId": 184965927,
+            "__typename": "PublicUser"
+          },
+          "price": 3990,
+          "originalPrice": 4200,
+          "brand": {
+            "id": 4578,
+            "name": "Nike",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": {
+            "id": 139,
+            "name": "4.5",
+            "__typename": "ItemSize"
+          },
+          "__typename": "Item",
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 3,
+              "level": 0,
+              "name": "Kids",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 1875,
+              "level": 1,
+              "name": "Girls shoes",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 1909,
+              "level": 2,
+              "name": "Girls (4+)",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 1909,
+            "name": "Girls (4+)",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "Girls (4+)",
+          "categoryId": 1909
+        },
+        {
+          "id": "m74693959349",
+          "name": "Nike Red and Black Sneakers Size Kids 6",
+          "status": "on_sale",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m74693959349_1.jpg?1788719954",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m74693959349_1.jpg?1788719954&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 549717649,
+            "sellerId": 549717649,
+            "__typename": "PublicUser"
+          },
+          "price": 1710,
+          "originalPrice": 2000,
+          "brand": {
+            "id": 4578,
+            "name": "Nike",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": {
+            "id": 147,
+            "name": "6 (39)",
+            "__typename": "ItemSize"
+          },
+          "__typename": "Item",
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 2,
+              "level": 0,
+              "name": "Men",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 39,
+              "level": 1,
+              "name": "Shoes",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 397,
+              "level": 2,
+              "name": "Athletic",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 2,
+            "name": "Like new",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 397,
+            "name": "Athletic",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "Athletic Shoes for Men",
+          "categoryId": 397
+        }
+      ]
+    }
+  }
+}
