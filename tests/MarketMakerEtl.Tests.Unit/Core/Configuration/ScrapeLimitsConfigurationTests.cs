@@ -60,6 +60,19 @@ public class ScrapeLimitsConfigurationTests
         Assert.That(options.MaxBackfillItemPageFetches, Is.EqualTo(750));
     }
 
+    [Test]
+    public void Should_read_search_concurrency_from_configuration()
+    {
+        var configuration = BuildConfiguration(new Dictionary<string, string?>
+        {
+            ["Scrape:SearchConcurrency"] = "5"
+        });
+
+        var options = ResolveOptions(configuration);
+
+        Assert.That(options.SearchConcurrency, Is.EqualTo(5));
+    }
+
     private static IConfiguration BuildConfiguration(Dictionary<string, string?> values) =>
         new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 

@@ -192,6 +192,7 @@ is environment-variable only):
 | `Scrape:MaxDetailFetchAttempts` | Retry attempts per item detail fetch |
 | `Scrape:SearchPageMaxAttempts` | Max attempts per Mercari/eBay search-page fetch before recording a `SearchPageFailed` issue (Cloudflare challenge pages are retried like any other unrecognised-page failure) |
 | `Scrape:SearchPageRetryBaseDelaySeconds` | Base delay between search-page fetch retries; the actual delay grows with each attempt (about 5s/15s/30s/60s at the default) |
+| `Scrape:SearchConcurrency` | Max Mercari search-band (and sold-backfill item-page) fetches in flight at once per direction (default 3) |
 
 For a short local smoke test, set a low `Schedule:TickMinutes` (e.g. `1`) and
 small `Scrape:MaxBandsPerDirection` / `Scrape:MaxDetailFetchesPerRun` values
