@@ -26,8 +26,7 @@ public sealed class ClassificationWorker : BackgroundService
     {
         try
         {
-            var result = await _classification.ClassifyPending(ct);
-            LogFailures(result);
+            var result = await _classification.ClassifyPending(LogFailure, ct);
             LogSummary(result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -47,16 +46,13 @@ public sealed class ClassificationWorker : BackgroundService
         }
     }
 
-    private void LogFailures(ClassificationTickResult result)
+    private void LogFailure(ClassificationBatchFailure failure)
     {
-        foreach (var failure in result.Failures)
-        {
-            _logger.LogWarning(
-                "Classification batch failed for job {JobId} ({ListingCount} listings): {ErrorMessage}",
-                failure.JobId,
-                failure.ListingCount,
-                failure.ErrorMessage);
-        }
+        _logger.LogWarning(
+            "Classification batch failed for job {JobId} ({ListingCount} listings): {ErrorMessage}",
+            failure.JobId,
+            failure.ListingCount,
+            failure.ErrorMessage);
     }
 
     private void LogSummary(ClassificationTickResult result)

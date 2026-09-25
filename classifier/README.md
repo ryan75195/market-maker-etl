@@ -46,6 +46,7 @@ The server listens on `CLASSIFIER_HOST`/`CLASSIFIER_PORT` (default `0.0.0.0:8765
 | `CLASSIFIER_API_KEY` | *(empty)* | When set, `/v1/classify` and `/v1/systemone` require `Authorization: Bearer <key>`. `/health` is always open. |
 | `CLASSIFIER_HOST` | `0.0.0.0` | Bind host for `python -m mmclassifier`. |
 | `CLASSIFIER_PORT` | `8765` | Bind port for `python -m mmclassifier`. |
+| `CLASSIFIER_BATCH_SIZE` | `16` | Max states collated into one forward pass in `predict_batch`, per seed. Bounds peak GPU memory for a request; lower it if a batch of long states OOMs or spills into shared memory. |
 
 ### Model directory layout
 

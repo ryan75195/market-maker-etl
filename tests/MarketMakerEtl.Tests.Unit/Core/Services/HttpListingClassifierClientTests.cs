@@ -87,17 +87,23 @@ public class HttpListingClassifierClientTests
         var exception = Assert.ThrowsAsync<ListingClassifierException>(async () =>
             await client.Classify(BuildRequest(), CancellationToken.None));
 
-        Assert.That(exception!.Message, Does.Contain("500"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.Message, Does.Contain("500"));
+            Assert.That(exception!.IsTimeout, Is.False);
+        });
     }
 
     [Test]
-    public void Should_throw_a_typed_exception_on_timeout_rather_than_operation_cancelled()
+    public void Should_throw_a_typed_timeout_exception_rather_than_operation_cancelled()
     {
         var handler = new StubClassifierHandler(neverResponds: true);
         var client = new HttpListingClassifierClient(new HttpClient(handler), Options(timeoutSeconds: 1));
 
-        Assert.ThrowsAsync<ListingClassifierException>(async () =>
+        var exception = Assert.ThrowsAsync<ListingClassifierException>(async () =>
             await client.Classify(BuildRequest(), CancellationToken.None));
+
+        Assert.That(exception!.IsTimeout, Is.True);
     }
 
     [Test]

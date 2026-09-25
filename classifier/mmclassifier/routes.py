@@ -31,6 +31,18 @@ def get_inference_lock(request: Request) -> asyncio.Lock:
     return request.app.state.inference_lock
 
 
+def get_batch_size(request: Request) -> int:
+    return request.app.state.batch_size
+
+
+def release_cuda_memory(device: str) -> None:
+    if device != "cuda":
+        return
+    import torch
+
+    torch.cuda.empty_cache()
+
+
 def require_bearer_token(
     request: Request, authorization: Optional[str] = Header(default=None)
 ) -> None:
@@ -84,13 +96,17 @@ def build_router() -> APIRouter:
     async def classify(payload: ClassifyRequest, request: Request) -> ClassifyResponse:
         registry = get_registry(request)
         lock = get_inference_lock(request)
+        batch_size = get_batch_size(request)
 
         questions = {question_id: question.model_dump() for question_id, question in payload.questions.items()}
         check_limits(payload.questions, payload.states)
 
         async with lock:
             ensemble = await run_in_threadpool(get_ensemble_or_404, registry, payload.model)
-            results = await run_in_threadpool(ensemble.predict, payload.states, questions)
+            results = await run_in_threadpool(
+                ensemble.predict, payload.states, questions, batch_size=batch_size
+            )
+            await run_in_threadpool(release_cuda_memory, registry.device)
 
         return ClassifyResponse(model=payload.model, members=ensemble.members, results=results)
 
@@ -102,13 +118,17 @@ def build_router() -> APIRouter:
     async def systemone(payload: SystemOneRequest, request: Request) -> SystemOneResponse:
         registry = get_registry(request)
         lock = get_inference_lock(request)
+        batch_size = get_batch_size(request)
 
         questions = {question_id: question.model_dump() for question_id, question in payload.questions.items()}
         check_limits(payload.questions, [payload.state])
 
         async with lock:
             ensemble = await run_in_threadpool(get_ensemble_or_404, registry, payload.model)
-            [result] = await run_in_threadpool(ensemble.predict, [payload.state], questions)
+            [result] = await run_in_threadpool(
+                ensemble.predict, [payload.state], questions, batch_size=batch_size
+            )
+            await run_in_threadpool(release_cuda_memory, registry.device)
 
         answers = {
             question_id: SystemOneAnswerOut(

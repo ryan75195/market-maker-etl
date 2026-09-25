@@ -30,7 +30,7 @@ public sealed class HttpListingClassifierClient : IListingClassifierClient
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            throw new ListingClassifierException(
+            throw ListingClassifierException.Timeout(
                 $"Classifying against {_options.BaseUrl} timed out after {_options.TimeoutSeconds}s.");
         }
         catch (JsonException ex)

@@ -47,8 +47,12 @@ public class ListingClassificationServiceTests
         }
         """;
 
-    private static ClassifierOptions Options(string baseUrl = "http://classifier.test") =>
-        new(baseUrl, 64, 5, 2000, 120);
+    private static ClassifierOptions Options(string baseUrl = "http://classifier.test", int batchSize = 64) =>
+        new(baseUrl, batchSize, 5, 2000, 120);
+
+    private static void NoOpFailureCallback(ClassificationBatchFailure failure)
+    {
+    }
 
     [Test]
     public async Task Should_do_nothing_when_the_base_url_is_not_configured()
@@ -59,7 +63,7 @@ public class ListingClassificationServiceTests
         var client = Substitute.For<IListingClassifierClient>();
         var service = new ListingClassificationService(jobs, families, classifications, client, Options(baseUrl: ""));
 
-        var result = await service.ClassifyPending(CancellationToken.None);
+        var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -92,7 +96,7 @@ public class ListingClassificationServiceTests
                 })]));
 
         var service = new ListingClassificationService(jobs, families, classifications, client, Options());
-        var result = await service.ClassifyPending(CancellationToken.None);
+        var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         var sentRequest = (ClassifyRequest)client.ReceivedCalls().Single().GetArguments()[0]!;
         Assert.Multiple(() =>
@@ -144,7 +148,7 @@ public class ListingClassificationServiceTests
                 })]));
 
         var service = new ListingClassificationService(jobs, families, classifications, client, Options());
-        await service.ClassifyPending(CancellationToken.None);
+        await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         await classifications.Received(1).UpsertBatch(
             Arg.Is<IReadOnlyList<ListingClassificationBatchItem>>(batch =>
@@ -170,7 +174,7 @@ public class ListingClassificationServiceTests
             .Returns<ClassifyResponse>(_ => throw new ListingClassifierException("classifier is down"));
 
         var service = new ListingClassificationService(jobs, families, classifications, client, Options());
-        var result = await service.ClassifyPending(CancellationToken.None);
+        var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -183,6 +187,95 @@ public class ListingClassificationServiceTests
     }
 
     [Test]
+    public async Task Should_stop_further_batches_and_jobs_after_a_batch_times_out()
+    {
+        var jobs = Substitute.For<IJobStore>();
+        var families = Substitute.For<IProductFamilyStore>();
+        var classifications = Substitute.For<IListingClassificationStore>();
+        var client = Substitute.For<IListingClassifierClient>();
+
+        jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>())
+            .Returns([BuildJob(productFamilyId: 1, id: 10), BuildJob(productFamilyId: 2, id: 20)]);
+        families.GetFamily(1, Arg.Any<CancellationToken>()).Returns(BuildFamily());
+        var targets = new[]
+        {
+            new ListingClassificationTarget(1, "First", null, null, null, null, null),
+            new ListingClassificationTarget(2, "Second", null, null, null, null, null)
+        };
+        classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
+            .Returns(targets);
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+            .Returns<ClassifyResponse>(_ => throw ListingClassifierException.Timeout(
+                "Classifying against http://classifier.test timed out after 120s."));
+
+        var reportedFailures = new List<ClassificationBatchFailure>();
+        var service = new ListingClassificationService(jobs, families, classifications, client, Options(batchSize: 1));
+        var result = await service.ClassifyPending(reportedFailures.Add, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.JobsProcessed, Is.EqualTo(1));
+            Assert.That(result.ListingsSelected, Is.EqualTo(2));
+            Assert.That(result.ListingsClassified, Is.EqualTo(0));
+            Assert.That(result.Failures, Has.Count.EqualTo(1));
+            Assert.That(result.Failures[0].JobId, Is.EqualTo(10));
+            Assert.That(reportedFailures, Has.Count.EqualTo(1));
+            Assert.That(reportedFailures[0].JobId, Is.EqualTo(10));
+        });
+        await client.Received(1).Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>());
+        await families.DidNotReceive().GetFamily(2, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_continue_to_the_next_batch_after_a_non_timeout_failure()
+    {
+        var jobs = Substitute.For<IJobStore>();
+        var families = Substitute.For<IProductFamilyStore>();
+        var classifications = Substitute.For<IListingClassificationStore>();
+        var client = Substitute.For<IListingClassifierClient>();
+
+        jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1, id: 10)]);
+        families.GetFamily(1, Arg.Any<CancellationToken>()).Returns(BuildFamily());
+        var targets = new[]
+        {
+            new ListingClassificationTarget(1, "First", null, null, null, null, null),
+            new ListingClassificationTarget(2, "Second", null, null, null, null, null)
+        };
+        classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
+            .Returns(targets);
+
+        var callCount = 0;
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                throw new ListingClassifierException("Classifier returned 500 Internal Server Error.");
+            }
+
+            return Task.FromResult(new ClassifyResponse(
+                "ps5-controller",
+                3,
+                [new ClassifyResult(new Dictionary<string, ClassifyAnswer>
+                {
+                    ["item_type"] = new("console", 0.95, 1.0, new Dictionary<string, double> { ["console"] = 0.95 })
+                })]));
+        });
+
+        var service = new ListingClassificationService(jobs, families, classifications, client, Options(batchSize: 1));
+        var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.ListingsSelected, Is.EqualTo(2));
+            Assert.That(result.ListingsClassified, Is.EqualTo(1));
+            Assert.That(result.Failures, Has.Count.EqualTo(1));
+            Assert.That(result.Failures[0].ErrorMessage, Does.Contain("500"));
+        });
+        await client.Received(2).Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task Should_skip_jobs_without_a_product_family()
     {
         var jobs = Substitute.For<IJobStore>();
@@ -192,7 +285,7 @@ public class ListingClassificationServiceTests
         jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: null)]);
 
         var service = new ListingClassificationService(jobs, families, classifications, client, Options());
-        var result = await service.ClassifyPending(CancellationToken.None);
+        var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         Assert.That(result.JobsProcessed, Is.EqualTo(0));
         await families.DidNotReceive().GetFamily(Arg.Any<int>(), Arg.Any<CancellationToken>());
@@ -210,15 +303,15 @@ public class ListingClassificationServiceTests
             .Returns(new ProductFamilyView(1, "ps5-controller", "PS5 Controller", "ps5-controller", DateTime.UtcNow, null));
 
         var service = new ListingClassificationService(jobs, families, classifications, client, Options());
-        var result = await service.ClassifyPending(CancellationToken.None);
+        var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         Assert.That(result.JobsProcessed, Is.EqualTo(0));
         await classifications.DidNotReceive().GetListingsNeedingClassification(
             Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
-    private static JobView BuildJob(int? productFamilyId) =>
-        new(10, "ps5 controller", Marketplace.Mercari, null, 24, true, null, null, DateTime.UtcNow, [], productFamilyId);
+    private static JobView BuildJob(int? productFamilyId, int id = 10) =>
+        new(id, "ps5 controller", Marketplace.Mercari, null, 24, true, null, null, DateTime.UtcNow, [], productFamilyId);
 
     private static ProductFamilyView BuildFamily() =>
         new(
