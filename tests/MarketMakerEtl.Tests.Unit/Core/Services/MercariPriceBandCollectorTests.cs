@@ -4,6 +4,7 @@ using MarketMakerEtl.Core.Models.Ebay;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -132,6 +133,24 @@ public class MercariPriceBandCollectorTests
     }
 
     [Test]
+    public async Task Should_force_sold_true_and_replace_a_stale_active_copy_when_merging_the_sold_direction()
+    {
+        var activeCopy = new ListingSummary("m1", "M1", 1m, "USD", "https://x/m1", false, null, null, null);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var activeCollector = BuildCollector(maxBandsPerDirection: 20, new SearchPageResult([activeCopy], 1));
+        await activeCollector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(merged["m1"].IsSold, Is.False);
+
+        var mistaggedSoldDirectionCopy = new ListingSummary("m1", "M1", 1m, "USD", "https://x/m1", false, null, null, null);
+        var soldCollector = BuildCollector(maxBandsPerDirection: 20, new SearchPageResult([mistaggedSoldDirectionCopy], 1));
+        await soldCollector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(merged["m1"].IsSold, Is.True);
+    }
+
+    [Test]
     public async Task Should_not_treat_a_genuinely_empty_first_run_as_an_early_stop_for_known_listings()
     {
         var collector = BuildCollector(maxBandsPerDirection: 20, new SearchPageResult([], 0));
@@ -221,6 +240,181 @@ public class MercariPriceBandCollectorTests
     }
 
     [Test]
+    public async Task Should_not_store_a_split_bands_own_items_when_backfilling()
+    {
+        var newest = BuildListing("s0", "https://x/s0");
+        var oldest = BuildListing("s99", "https://x/s99");
+        var page = new List<ListingSummary> { newest };
+        for (var i = 1; i < 99; i++)
+        {
+            page.Add(BuildListing($"s{i}", $"https://x/s{i}"));
+        }
+
+        page.Add(oldest);
+
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/s0"] = BuildDetail(daysAgo: 1),
+            ["https://x/s99"] = BuildDetail(daysAgo: 1),
+        };
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 1,
+            soldBackfillDays: 30,
+            maxItemPageFetches: 10,
+            detailsByUrl,
+            new SearchPageResult(page, TotalCount: 150));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(merged, Is.Empty);
+            Assert.That(summary.BackfillCutoffUtc, Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public async Task Should_flag_the_backfill_budget_as_exhausted_when_item_page_fetches_run_out()
+    {
+        var newest = BuildListing("g0", "https://x/g0");
+        var oldest = BuildListing("g1", "https://x/g1");
+        var page = new List<ListingSummary> { newest, oldest };
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/g0"] = BuildDetail(daysAgo: 1),
+        };
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 1,
+            soldBackfillDays: 30,
+            maxItemPageFetches: 1,
+            detailsByUrl,
+            new SearchPageResult(page, TotalCount: 2));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(summary.BackfillBudgetExhausted, Is.True);
+    }
+
+    [Test]
+    public async Task Should_use_the_existing_incremental_pruning_path_when_the_job_already_has_sold_listings()
+    {
+        var known = BuildListing("m1", "https://x/m1");
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 20,
+            soldBackfillDays: 30,
+            maxItemPageFetches: 10,
+            new Dictionary<string, ItemPageListing>(StringComparer.Ordinal),
+            new SearchPageResult([known], 1));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(
+            SearchTerm, sold: true, merged, new HashSet<string> { "m1" }, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.BandsFetched, Is.EqualTo(9));
+            Assert.That(summary.BandsPrunedForKnownListings, Is.EqualTo(9));
+            Assert.That(merged.Keys, Is.EquivalentTo(new[] { "m1" }));
+            Assert.That(summary.BackfillCutoffUtc, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task Should_store_only_the_in_window_items_for_a_partial_band_even_with_local_order_inversions_near_the_boundary()
+    {
+        var offsetsInDays = new[] { 1, 5, 3, 7, 9, 11, 17, 19, 21, 23 };
+        var page = new List<ListingSummary>();
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal);
+
+        for (var i = 0; i < offsetsInDays.Length; i++)
+        {
+            var url = $"https://x/b{i}";
+            page.Add(BuildListing($"b{i}", url));
+            detailsByUrl[url] = BuildDetail(offsetsInDays[i]);
+        }
+
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 1,
+            soldBackfillDays: 15,
+            maxItemPageFetches: 20,
+            detailsByUrl,
+            new SearchPageResult(page, TotalCount: page.Count));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        await collector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(
+            merged.Keys,
+            Is.EquivalentTo(new[] { "b0", "b1", "b2", "b3", "b4", "b5" }));
+    }
+
+    [Test]
+    public async Task Should_not_lose_an_in_window_page_when_a_single_old_item_is_out_of_order_at_position_zero()
+    {
+        var outOfOrderOld = BuildListing("old0", "https://x/old0");
+        var page = new List<ListingSummary> { outOfOrderOld };
+        for (var i = 0; i < 9; i++)
+        {
+            page.Add(BuildListing($"n{i}", $"https://x/n{i}"));
+        }
+
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/old0"] = BuildDetail(daysAgo: 90),
+        };
+
+        for (var i = 0; i < 9; i++)
+        {
+            detailsByUrl[$"https://x/n{i}"] = BuildDetail(daysAgo: 1);
+        }
+
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 1,
+            soldBackfillDays: 30,
+            maxItemPageFetches: 20,
+            detailsByUrl,
+            new SearchPageResult(page, TotalCount: page.Count));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        await collector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(merged.Keys, Is.SupersetOf(Enumerable.Range(0, 9).Select(i => $"n{i}")));
+    }
+
+    [Test]
+    public async Task Should_still_treat_a_page_as_entirely_old_when_the_first_three_items_all_resolve_before_the_cutoff()
+    {
+        var page = new List<ListingSummary>
+        {
+            BuildListing("old0", "https://x/old0"),
+            BuildListing("old1", "https://x/old1"),
+            BuildListing("old2", "https://x/old2"),
+            BuildListing("old3", "https://x/old3"),
+        };
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/old0"] = BuildDetail(daysAgo: 90),
+            ["https://x/old1"] = BuildDetail(daysAgo: 91),
+            ["https://x/old2"] = BuildDetail(daysAgo: 92),
+            ["https://x/old3"] = BuildDetail(daysAgo: 93),
+        };
+
+        var collector = BuildBackfillCollector(
+            maxBandsPerDirection: 1,
+            soldBackfillDays: 30,
+            maxItemPageFetches: 20,
+            detailsByUrl,
+            new SearchPageResult(page, TotalCount: page.Count));
+        var merged = new Dictionary<string, ListingSummary>();
+
+        await collector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(merged, Is.Empty);
+    }
+
+    [Test]
     public async Task Should_collect_more_unique_listings_than_the_old_unfiltered_bisection_under_the_same_band_budget()
     {
         var catalogue = BuildCatalogueConcentratedBelowOneHundredDollars();
@@ -235,6 +429,133 @@ public class MercariPriceBandCollectorTests
             $"geometric={geometricCollected} bisection={bisectionCollected}");
     }
 
+    [Test]
+    public async Task Should_keep_collected_results_and_record_no_search_page_failure_when_challenge_pages_recover_before_success()
+    {
+        var listing = new ListingSummary("m1", "M1", 1m, "USD", "https://x/m1", false, null, null, null);
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("<html/>");
+
+        var urls = Substitute.For<IPriceBandSearchUrlService>();
+        urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
+            .Returns("https://search");
+
+        var parseCallCount = 0;
+        var parser = Substitute.For<ISearchPageParser>();
+        parser.Parse(Arg.Any<string>()).Returns(_ =>
+        {
+            parseCallCount++;
+            if (parseCallCount <= 2)
+            {
+                throw new UnrecognisedSearchPageException("Cloudflare challenge page");
+            }
+
+            return parseCallCount == 3 ? new SearchPageResult([listing], 1) : new SearchPageResult([], 0);
+        });
+
+        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageMaxAttempts: 5, SearchPageRetryBaseDelaySeconds: 0);
+        var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(merged.Keys, Is.EquivalentTo(new[] { "m1" }));
+            Assert.That(summary.SearchPageFailures, Is.Null.Or.Empty);
+        });
+    }
+
+    [Test]
+    public async Task Should_store_sibling_results_and_record_one_search_page_failed_issue_with_the_challenge_message_when_a_band_is_persistently_a_challenge_page()
+    {
+        var listing = new ListingSummary("m2", "M2", 1m, "USD", "https://x/m2", false, null, null, null);
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("<html/>");
+
+        var urls = Substitute.For<IPriceBandSearchUrlService>();
+        urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
+            .Returns("https://search");
+
+        var parseCallCount = 0;
+        var parser = Substitute.For<ISearchPageParser>();
+        parser.Parse(Arg.Any<string>()).Returns(_ =>
+        {
+            parseCallCount++;
+            if (parseCallCount <= 3)
+            {
+                throw new UnrecognisedSearchPageException("Cloudflare challenge page");
+            }
+
+            return parseCallCount == 4 ? new SearchPageResult([listing], 1) : new SearchPageResult([], 0);
+        });
+
+        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageMaxAttempts: 3, SearchPageRetryBaseDelaySeconds: 0);
+        var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(merged.Keys, Is.EquivalentTo(new[] { "m2" }));
+            Assert.That(summary.BandsFetched, Is.EqualTo(9));
+            Assert.That(summary.SearchPageFailures, Has.Count.EqualTo(1));
+            Assert.That(summary.SearchPageFailures![0].ErrorMessage, Is.EqualTo("Cloudflare challenge page"));
+        });
+    }
+
+    [Test]
+    public void Should_propagate_cancellation_instead_of_recording_a_search_page_failure()
+    {
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<string>(_ => throw new OperationCanceledException());
+
+        var urls = Substitute.For<IPriceBandSearchUrlService>();
+        urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
+            .Returns("https://search");
+
+        var parser = Substitute.For<ISearchPageParser>();
+
+        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageRetryBaseDelaySeconds: 0);
+        var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None));
+    }
+
+
+
+    [Test]
+    public async Task Should_not_retry_or_record_an_issue_when_a_root_seed_band_is_genuinely_empty()
+    {
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("<html/>");
+
+        var urls = Substitute.For<IPriceBandSearchUrlService>();
+        urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
+            .Returns("https://search");
+
+        var parser = Substitute.For<ISearchPageParser>();
+        parser.Parse(Arg.Any<string>()).Returns(new SearchPageResult([], 0));
+
+        var settings = new MercariCollectionSettings(9, Backfill: null, SearchPageRetryBaseDelaySeconds: 0);
+        var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.BandsFetched, Is.EqualTo(9));
+            Assert.That(summary.SearchPageFailures, Is.Null.Or.Empty);
+        });
+        await client.Received(9).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+
     private static MercariPriceBandCollector BuildCollector(int maxBandsPerDirection, params SearchPageResult[] results)
     {
         var client = Substitute.For<IScrapeClient>();
@@ -247,8 +568,54 @@ public class MercariPriceBandCollectorTests
         var parser = Substitute.For<ISearchPageParser>();
         parser.Parse(Arg.Any<string>()).Returns(results[0], results[1..]);
 
-        return new MercariPriceBandCollector(client, urls, parser, maxBandsPerDirection, NullLogger.Instance);
+        return new MercariPriceBandCollector(
+            client, urls, parser, new MercariCollectionSettings(maxBandsPerDirection, Backfill: null), NullLogger.Instance);
     }
+
+    private static MercariPriceBandCollector BuildBackfillCollector(
+        int maxBandsPerDirection,
+        int soldBackfillDays,
+        int maxItemPageFetches,
+        IReadOnlyDictionary<string, ItemPageListing> detailsByUrl,
+        params SearchPageResult[] results)
+    {
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ci => (string)ci[0]);
+
+        var urls = Substitute.For<IPriceBandSearchUrlService>();
+        urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
+            .Returns("https://search");
+
+        var parser = Substitute.For<ISearchPageParser>();
+        parser.Parse(Arg.Any<string>()).Returns(results[0], results[1..]);
+
+        var itemParser = Substitute.For<IItemPageParser>();
+        itemParser.Parse(Arg.Any<string>())
+            .Returns(ci => detailsByUrl.GetValueOrDefault((string)ci[0]));
+
+        var backfill = new SoldBackfillPlanner(
+            client, itemParser, soldBackfillDays, maxItemPageFetches, new FakeTimeProvider(DateTimeOffset.UtcNow));
+        var settings = new MercariCollectionSettings(maxBandsPerDirection, backfill);
+        return new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
+    }
+
+    private static ListingSummary BuildListing(string id, string url) =>
+        new(id, id, 1m, "USD", url, false, null, null, null);
+
+    private static ItemPageListing BuildDetail(int daysAgo) =>
+        new(
+            ListingId: null,
+            Title: null,
+            Price: null,
+            Currency: null,
+            Condition: null,
+            BuyingFormat: null,
+            Status: "Sold",
+            SoldPrice: null,
+            SoldDate: DateTime.UtcNow.AddDays(-daysAgo).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
+            Seller: null,
+            PrimaryImageUrl: null);
 
     private static async Task<int> CollectWithGeometricSeeding(IReadOnlyList<CatalogueItem> catalogue, int bandBudget)
     {
@@ -256,7 +623,7 @@ public class MercariPriceBandCollectorTests
             new PassthroughScrapeClient(),
             new CatalogueUrlService(),
             new CatalogueParser(catalogue),
-            bandBudget,
+            new MercariCollectionSettings(bandBudget, Backfill: null),
             NullLogger.Instance);
         var merged = new Dictionary<string, ListingSummary>();
 

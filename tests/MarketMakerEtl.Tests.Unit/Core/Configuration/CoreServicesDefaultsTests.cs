@@ -51,6 +51,22 @@ public class CoreServicesDefaultsTests
     }
 
     [Test]
+    public void Should_default_sold_backfill_days_to_thirty()
+    {
+        var options = Resolve<ScrapeOptions>();
+
+        Assert.That(options.SoldBackfillDays, Is.EqualTo(30));
+    }
+
+    [Test]
+    public void Should_default_max_backfill_item_page_fetches_to_four_hundred()
+    {
+        var options = Resolve<ScrapeOptions>();
+
+        Assert.That(options.MaxBackfillItemPageFetches, Is.EqualTo(400));
+    }
+
+    [Test]
     public void Should_apply_database_location_default_when_configuration_is_empty()
     {
         var services = new ServiceCollection();

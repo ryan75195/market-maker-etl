@@ -29,6 +29,15 @@ public class MercariSearchParserTests
         </div>
         """;
 
+    private const string SoldOutCard = """
+        <div data-testid="ItemContainer" data-productid="m92390261763" data-itemprice="5000" data-itemstatus="sold_out" data-brand="Sony">
+          <a href="https://www.mercari.com/us/item/m92390261763/">
+            <img src="https://static.mercdn.net/m92390261763.jpg" alt="Sony DualSense" />
+          </a>
+          <span data-testid="ItemName">Sony DualSense</span>
+        </div>
+        """;
+
     private static readonly string CapturedRenderedCards = File.ReadAllText(
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Mercari", "search-rendered-cards.html"));
 
@@ -96,6 +105,18 @@ public class MercariSearchParserTests
     }
 
     [Test]
+    public void Should_mark_a_card_that_is_sold_out_as_sold()
+    {
+        var summaries = new MercariSearchParser().Parse(SoldOutCard).Listings;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summaries, Has.Count.EqualTo(1));
+            Assert.That(summaries[0].IsSold, Is.True);
+        });
+    }
+
+    [Test]
     public void Should_leave_price_absent_when_a_card_has_no_price()
     {
         var summaries = new MercariSearchParser().Parse(CardWithoutPrice).Listings;
@@ -118,5 +139,34 @@ public class MercariSearchParserTests
             Assert.That(parser.ContainsListingMarkup(ResultsPage), Is.True);
             Assert.That(parser.ContainsListingMarkup("<html><body>No results found</body></html>"), Is.False);
         });
+    }
+
+    [Test]
+    public void Should_throw_with_the_challenge_message_for_a_cloudflare_challenge_page()
+    {
+        const string challengePage = """
+            <html>
+              <head><title>Just a moment...</title></head>
+              <body>
+                <script src="/cdn-cgi/challenge-platform/h/g/orchestrate/jsch/v1"></script>
+              </body>
+            </html>
+            """;
+
+        var exception = Assert.Throws<UnrecognisedSearchPageException>(
+            () => new MercariSearchParser().Parse(challengePage));
+
+        Assert.That(exception!.Message, Is.EqualTo("Cloudflare challenge page"));
+    }
+
+    [Test]
+    public void Should_throw_with_the_page_title_for_an_unrecognised_html_page()
+    {
+        const string page = "<html><head><title>Access Denied</title></head><body>blocked</body></html>";
+
+        var exception = Assert.Throws<UnrecognisedSearchPageException>(
+            () => new MercariSearchParser().Parse(page));
+
+        Assert.That(exception!.Message, Is.EqualTo("Unrecognised search page (title: 'Access Denied')"));
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 
@@ -53,6 +53,7 @@ public class ServiceShapeTests
                 && !t.IsAbstract
                 && !TestHelpers.IsRecord(t)
                 && !TestHelpers.IsDbContext(t)
+                && !typeof(Exception).IsAssignableFrom(t)
                 && t.Namespace?.Contains(".Entities", StringComparison.Ordinal) != true)
             .ToList();
 

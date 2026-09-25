@@ -12,8 +12,13 @@ public sealed class MercariSearchParser : ISearchPageParser
     private const string CardSelector = "div[data-testid=\"ItemContainer\"]";
     private const string TileSelector = "[data-itemstatus], [data-itemprice]";
     private const string TitleSelector = "[data-testid=\"ItemName\"]";
-    private const string SoldStatus = "trading";
+    private const string TradingStatus = "trading";
+    private const string SoldOutStatus = "sold_out";
     private const string CurrencyCode = "USD";
+    private const string ChallengePageTitle = "Just a moment...";
+    private const string ChallengePageMessage = "Cloudflare challenge page";
+    private const string ChallengePlatformMarker = "challenge-platform";
+    private const string CloudflareChallengeMarker = "cf-chl";
 
     private static readonly HtmlParser Parser = new();
 
@@ -25,14 +30,23 @@ public sealed class MercariSearchParser : ISearchPageParser
             : html.Contains("ItemContainer", StringComparison.Ordinal);
 
     public SearchPageResult Parse(string html) =>
-        MercariSearchPayloadParser.IsPayload(html)
-            ? MercariSearchPayloadParser.Parse(html)
-            : new SearchPageResult(ParseRenderedCards(html), TotalCount: null);
+        MercariSearchPayloadParser.IsPayload(html) ? ParsePayload(html) : ParseRenderedCards(html);
 
-    private static List<ListingSummary> ParseRenderedCards(string html)
+    private static SearchPageResult ParsePayload(string html) =>
+        MercariSearchPayloadParser.HasSearchResult(html)
+            ? MercariSearchPayloadParser.Parse(html)
+            : throw BuildUnrecognisedException(html, title: null);
+
+    private static SearchPageResult ParseRenderedCards(string html)
     {
         var document = Parser.ParseDocument(html);
         var cards = document.QuerySelectorAll(CardSelector);
+
+        if (cards.Length == 0)
+        {
+            throw BuildUnrecognisedException(html, document.Title);
+        }
+
         var summaries = new List<ListingSummary>();
 
         foreach (var card in cards)
@@ -40,8 +54,18 @@ public sealed class MercariSearchParser : ISearchPageParser
             summaries.Add(BuildSummary(card, card.Closest(TileSelector) ?? card));
         }
 
-        return summaries;
+        return new SearchPageResult(summaries, TotalCount: null);
     }
+
+    private static UnrecognisedSearchPageException BuildUnrecognisedException(string html, string? title) =>
+        IsChallengePage(html, title)
+            ? new UnrecognisedSearchPageException(ChallengePageMessage)
+            : new UnrecognisedSearchPageException($"Unrecognised search page (title: '{title}')");
+
+    private static bool IsChallengePage(string html, string? title) =>
+        string.Equals(title, ChallengePageTitle, StringComparison.Ordinal)
+        || html.Contains(ChallengePlatformMarker, StringComparison.OrdinalIgnoreCase)
+        || html.Contains(CloudflareChallengeMarker, StringComparison.OrdinalIgnoreCase);
 
     private static ListingSummary BuildSummary(IElement card, IElement tile)
     {
@@ -74,6 +98,10 @@ public sealed class MercariSearchParser : ISearchPageParser
             : null;
     }
 
-    private static bool IsSold(IElement tile) =>
-        string.Equals(tile.GetAttribute("data-itemstatus"), SoldStatus, StringComparison.OrdinalIgnoreCase);
+    private static bool IsSold(IElement tile)
+    {
+        var status = tile.GetAttribute("data-itemstatus");
+        return string.Equals(status, TradingStatus, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, SoldOutStatus, StringComparison.OrdinalIgnoreCase);
+    }
 }

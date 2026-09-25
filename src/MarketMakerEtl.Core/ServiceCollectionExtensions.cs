@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Scheduling;
@@ -19,6 +19,10 @@ public static class ServiceCollectionExtensions
     private const int DefaultMaxPages = 2;
     private const bool DefaultCollectSold = true;
     private const int DefaultMaxBandsPerDirection = 200;
+    private const int DefaultSoldBackfillDays = 30;
+    private const int DefaultMaxBackfillItemPageFetches = 400;
+    private const int DefaultSearchPageMaxAttempts = 5;
+    private const int DefaultSearchPageRetryBaseDelaySeconds = 5;
     private const string DefaultDatabaseFileName = "marketmakeretl.db";
     private const int DefaultTickMinutes = 5;
     private const int DefaultRefreshIntervalHours = 24;
@@ -66,6 +70,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISearchPageParser, MercariSearchParser>();
         services.AddSingleton<IItemPageParser, EbayItemPageParserService>();
         services.AddSingleton<IItemPageParser, MercariItemPageParser>();
+        services.AddSingleton(sp => new MarketplaceAdapters(
+            sp.GetServices<IEbaySearchUrlService>(),
+            sp.GetServices<ISearchPageParser>(),
+            sp.GetServices<IItemPageParser>()));
         services.AddSingleton<IScrapeRunStateService, ScrapeRunStateService>();
         services.AddSingleton<IScrapeStore, ScrapeStore>();
         services.AddSingleton<IScrapeRunReportStore, ScrapeRunReportStore>();
@@ -99,7 +107,11 @@ public static class ServiceCollectionExtensions
         new(
             ReadInt(configuration, "Scrape:MaxPages", DefaultMaxPages),
             ReadBool(configuration, "Scrape:CollectSold", DefaultCollectSold),
-            ReadInt(configuration, "Scrape:MaxBandsPerDirection", DefaultMaxBandsPerDirection));
+            ReadInt(configuration, "Scrape:MaxBandsPerDirection", DefaultMaxBandsPerDirection),
+            ReadInt(configuration, "Scrape:SoldBackfillDays", DefaultSoldBackfillDays),
+            ReadInt(configuration, "Scrape:MaxBackfillItemPageFetches", DefaultMaxBackfillItemPageFetches),
+            ReadInt(configuration, "Scrape:SearchPageMaxAttempts", DefaultSearchPageMaxAttempts),
+            ReadInt(configuration, "Scrape:SearchPageRetryBaseDelaySeconds", DefaultSearchPageRetryBaseDelaySeconds));
 
     private static ScheduleOptions BuildScheduleOptions(IConfiguration? configuration) =>
         new(

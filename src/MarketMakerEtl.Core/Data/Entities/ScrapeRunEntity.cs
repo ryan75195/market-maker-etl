@@ -32,6 +32,8 @@ public sealed class ScrapeRunEntity
 
     public int? TotalReportedBySearch { get; set; }
 
+    public int BackfillItemPageFetches { get; set; }
+
     public DateTime StartedUtc { get; set; }
 
     public DateTime? SearchCompletedUtc { get; set; }

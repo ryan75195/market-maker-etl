@@ -1,0 +1,100 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1a",
+      "criterion": "A full band whose last item is in-window is split and its own items are not stored.",
+      "plannedImplementation": "SoldBackfillPlanner.Resolve: when the page is full (>=100 listings), the reported total is >100, and the last item's resolved sold date is still inside the window, and the band can still split (PriceBand.CanSplit), the planner returns a Split decision. MercariPriceBandCollector's backfill branch enqueues the band's children on Split and does not call MergeAndCountNew for that band's own page.",
+      "plannedVerification": "SoldBackfillPlannerTests.Should_split_a_full_band_whose_last_item_is_still_inside_the_window and MercariPriceBandCollectorTests.Should_not_store_a_split_bands_own_items_when_backfilling.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~SoldBackfillPlannerTests|FullyQualifiedName~MercariPriceBandCollectorTests: both named tests pass (part of the 272/272 passing Unit run after the post-review fixes)."
+    },
+    {
+      "id": "AC-1b",
+      "criterion": "The cutoff search stores exactly the in-window items even with 2-3 out-of-order dates next to the boundary.",
+      "plannedImplementation": "SoldBackfillPlanner.FindCutoff runs a binary search over the page (anchored on the already-known in-window first item and out-of-window last item), then ProbeMargin re-checks every position within +/-3 of the binary search's approximate boundary and takes one past the last in-window position seen in that probed range, so 2-3 local inversions at the boundary cannot cause an off-by-N truncation.",
+      "plannedVerification": "SoldBackfillPlannerTests.Should_find_the_cutoff_tolerant_of_a_few_out_of_order_dates_near_the_boundary builds a page with 2 swapped dates straddling the true cutoff and asserts the stored count matches the true in-window count exactly; MercariPriceBandCollectorTests.Should_store_only_the_in_window_items_for_a_partial_band_even_with_local_order_inversions_near_the_boundary re-verifies the same scenario end to end through the collector.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "Both named tests pass in the 272/272 Unit run. Manually traced the binary search + probe over offsets [1,5,3,7,9,11,17,19,21,23] days with a 15-day cutoff: true in-window set is indices 0-5 (6 items); the algorithm returns cut=6 despite the transposed 5/3 pair, matching the assertion."
+    },
+    {
+      "id": "AC-1c",
+      "criterion": "Trading/no-date items are treated as in-window.",
+      "plannedImplementation": "SoldBackfillPlanner.ResolveSoldDate: an item page with Status=='Sold' (covers Mercari's 'trading' and 'sold_out' states) but no parsable SoldDate resolves to the injected TimeProvider's current time (always inside a positive-day window; TimeProvider replaced a direct DateTime.UtcNow call in the post-review round so tests can pin 'now' with FakeTimeProvider). An item that is fully resolved (its detail page parsed) but has no usable date at all resolves to Resolved(null), and IsBeforeCutoff(null) is false, so it is always treated as in-window; an item whose fetch/parse genuinely could not be resolved after 3 retries is tagged Unresolved instead, which top-level Resolve() still treats as in-window for the newest/oldest checks (consistent with the same conservative rule) but which FindCutoff/ProbeMargin treat as unknown rather than in-window (see AC-5's post-review fix).",
+      "plannedVerification": "SoldBackfillPlannerTests.Should_treat_a_trading_item_with_no_sold_date_as_sold_now and Should_report_the_full_page_as_in_window_when_the_oldest_item_has_no_usable_date.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "Both named tests pass in the 272/272 Unit run."
+    },
+    {
+      "id": "AC-1d",
+      "criterion": "A job with existing sold listings uses the existing incremental pruning path, not backfill.",
+      "plannedImplementation": "SearchPageService only builds a SoldBackfillPlanner when sold && knownSoldListingIds.Count == 0; otherwise it passes MercariCollectionSettings.Backfill = null, and MercariPriceBandCollector's loop only takes the date-driven branch when settings.Backfill is not null, leaving the original ShouldSplit/pruneKnownBands logic completely untouched for every other call.",
+      "plannedVerification": "MercariPriceBandCollectorTests.Should_use_the_existing_incremental_pruning_path_when_the_job_already_has_sold_listings configures settings.Backfill with a real (non-null) planner but calls Collect with a non-empty knownSoldListingIds set, then asserts the pruning counters populate exactly as in the pre-existing non-backfill pruning test AND that summary.BackfillCutoffUtc is null, proving the configured planner was bypassed. SearchPageServiceTests.Should_not_record_a_backfill_window_issue_on_a_later_incremental_run covers the same branch one layer up.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "Both named tests pass in the 272/272 Unit run."
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A live run through the real stack of a job created via POST /api/jobs for 'ps5 controller', with Scrape:SoldBackfillDays=30, stores a sold count within +/-3% of the scratchpad prototype run immediately before or after it. Record both numbers, searches, item-page fetches and elapsed time in the PR.",
+      "plannedImplementation": "Run Azurite, the AIOWebScraper Functions host, the patched (off-screen) ScraperWorker, MarketMakerEtl.Api and MarketMakerEtl.Etl per docs/running-locally.md against a throwaway scratchpad SQLite DB, create the job via POST /api/jobs, let the scheduler queue and run it, then poll GET /api/jobs/{id}/runs until complete. Run monthcrawl.exe against a fresh outdir immediately before or after for the comparison baseline.",
+      "plannedVerification": "Compare the ETL's ListingsAddedSold (+ListingsUpdated where relevant) against the prototype's summary.json soldInWindow; both numbers, search/item-page fetch counts, and elapsed time recorded in the PR body.",
+      "materialConcerns": [],
+      "comparison": true,
+      "verificationStatus": "pending",
+      "evidence": ""
+    },
+    {
+      "id": "AC-3",
+      "criterion": "Repo quality gate green: .githooks/pre-commit (build with all analyzers at error severity, dotnet format --verify-no-changes, Unit + Architecture tests).",
+      "plannedImplementation": "No dedicated implementation; satisfied by the cumulative changes passing the existing pre-commit hook.",
+      "plannedVerification": "The commit that lands this change only succeeds once .githooks/pre-commit's build, dotnet format --verify-no-changes and dotnet test (Unit + Architecture) all pass.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet build MarketMakerEtl.slnx --no-incremental: 0 warnings, 0 errors. dotnet format MarketMakerEtl.slnx --verify-no-changes: no output, exit 0. dotnet test tests/MarketMakerEtl.Tests.Unit --no-build: Passed 272/272. dotnet test tests/MarketMakerEtl.Tests.Architecture --no-build: Passed 25/25. Final confirmation will be the actual pre-commit hook run at commit time."
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Scope item 5: record a run issue when a band still has >100 in-window sales and cannot split, and record the window/cutoff on the run.",
+      "plannedImplementation": "PriceBandCollectionSummary gains BandsOverCapacityUnsplit and BackfillCutoffUtc. SearchPageService turns a non-null BackfillCutoffUtc into a 'SoldBackfillWindow' ScrapeRunIssueDetails and a positive BandsOverCapacityUnsplit into a 'SoldBackfillBandOverflow' issue, both recorded via the existing ScrapeRunReportStore.RecordIssue path used for PriceBandCapHit/SearchYieldedNoResults.",
+      "plannedVerification": "SoldBackfillPlannerTests.Should_flag_overflow_when_a_full_in_window_band_cannot_split_further (Overflowed flag) and SearchPageServiceTests.Should_record_a_sold_backfill_window_issue_when_a_jobs_first_sold_run_backfills / Should_not_record_a_backfill_window_issue_on_a_later_incremental_run for the window issue.",
+      "materialConcerns": [
+        "AddBackfillOverflowIssue's own SoldBackfillBandOverflow issue emission in SearchPageService is not covered by a dedicated unit test: reaching a band width where PriceBand.CanSplit is false requires ~9 sequential halvings of a seed band, which is disproportionate to set up at the collector/service level for a non-critical-path issue. The underlying Overflowed decision it maps 1:1 from is unit-tested at the planner level (SoldBackfillPlannerTests.Should_flag_overflow_when_a_full_in_window_band_cannot_split_further)."
+      ],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "Named tests pass in the 272/272 Unit run; the SoldBackfillBandOverflow wiring itself is a direct one-line mapping from the already-tested Overflowed flag, reviewed by inspection (SearchPageService.AddBackfillOverflowIssue)."
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Scope item 4: count item-date lookups against the run's fetch budget and record them on the run.",
+      "plannedImplementation": "SoldBackfillPlanner is constructed with a dedicated Scrape:MaxBackfillItemPageFetches budget (ScrapeOptions, default 400) as its item-page fetch cap -- no longer shared with DetailFetchOptions.MaxDetailFetchesPerRun, which serves the unrelated, later item-detail-fetch phase and defaulted far too low (50) for a real backfill (the 'ps5 controller' prototype needed 138 fetches). Each lookup retries up to 3 times (each attempt consuming budget) on a thrown exception or null parse result; once the budget is exhausted, ResolveDate returns Unresolved immediately rather than guessing 'in-window', and FindCutoff/ProbeMargin treat an Unresolved item as unknown (it can move the binary search's hi bound down but never lo, and is skipped rather than extending the in-window count), so an exhausted budget or a permanently-unresolvable item stops the planner from over-collecting instead of silently treating every unresolved date as in-window. SoldBackfillPlanner.BudgetExhausted surfaces this state; MercariPriceBandCollector threads it onto PriceBandCollectionSummary.BackfillBudgetExhausted, and SearchRunIssueFactory.AddBackfillBudgetExhaustedIssue records a 'SoldBackfillBudgetExhausted' run issue when it fires. ItemPageFetchesUsed threads through PriceBandCollectionSummary -> SearchCollectionResult.BackfillItemPageFetches -> ScrapeRunService's RunCompletionCounts -> a new ScrapeRunEntity.BackfillItemPageFetches column (migration) -> ScrapeRunView.",
+      "plannedVerification": "SoldBackfillPlannerTests.Should_store_only_what_is_already_decided_when_the_item_page_fetch_budget_is_exhausted (budget exhaustion stops guessing), Should_resolve_the_date_after_the_item_page_fetch_fails_once_then_succeeds (retry), Should_not_let_an_unresolvable_midpoint_push_the_cutoff_later (tri-state cutoff math), MercariPriceBandCollectorTests.Should_flag_the_backfill_budget_as_exhausted_when_item_page_fetches_run_out (summary/issue wiring), CoreServicesDefaultsTests.Should_default_max_backfill_item_page_fetches_to_four_hundred, ScrapeLimitsConfigurationTests.Should_read_max_backfill_item_page_fetches_from_configuration, and ScrapeRunServiceTests.Should_record_backfill_item_page_fetches_on_the_completed_run.",
+      "materialConcerns": [
+        "The new SoldBackfillBudgetExhausted run issue is exercised end-to-end at the MercariPriceBandCollector level (summary.BackfillBudgetExhausted) but not through a dedicated SearchPageServiceTests-level test that asserts the ScrapeRunIssueDetails.IssueType == 'SoldBackfillBudgetExhausted' string; SearchRunIssueFactory.AddBackfillBudgetExhaustedIssue's mapping from the summary flag to the issue is a direct one-line translation, matching the same untested-at-that-layer pattern already accepted for SoldBackfillBandOverflow (see AC-4)."
+      ],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "All named tests pass in the 272/272 Unit run. Migration 20260924131942_AddBackfillItemPageFetches adds the ScrapeRuns.BackfillItemPageFetches column; EtlDbContextModelSnapshot.cs regenerated to match. Manually traced Should_not_let_an_unresolvable_midpoint_push_the_cutoff_later against the pre-fix algorithm: the old code would have stored 2 items (treating the permanently-unresolvable midpoint as in-window and letting it move lo), the fixed code stores 1 (only the conclusively-resolved newest item)."
+    },
+    {
+      "id": "AC-6",
+      "criterion": "Scope item 6 (first half, required): ItemDetailStore.GetListingsNeedingDetail orders never-attempted sold listings first.",
+      "plannedImplementation": "GetListingsNeedingDetail orders by (DetailFetchAttempts == 0 && IsSold) descending, then by the existing DetailFetchAttempts/Id ordering, so a never-attempted sold listing is always fetched before a never-attempted active one or a previously-retried listing.",
+      "plannedVerification": "ItemDetailStoreTests.Should_return_never_attempted_sold_listings_before_others_when_the_cap_is_tight.",
+      "materialConcerns": [
+        "Scope item 6's second half (writing a backfill-learned sale date straight onto the listing instead of relying on a later detail fetch) is explicitly optional in the ticket and is NOT implemented -- see Gaps in the PR."
+      ],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "Named test passes in the 272/272 Unit run (an integration-style EF Core/SQLite test, matching the file's existing pattern for this store)."
+    }
+  ]
+}

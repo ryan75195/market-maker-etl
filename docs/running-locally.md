@@ -76,6 +76,19 @@ only:
   [AIOWebScraper#150](https://github.com/ryan75195/AIOWebScraper/issues/150)
   for the evidence and a curated-allowlist alternative if you need domain
   filtering for other marketplaces at the same time as Mercari.
+
+  **Setting `allowedDomains: []` in `appsettings.local.json` does not clear
+  a populated list from an earlier-loaded config file.** ScraperWorker loads
+  `appsettings.routing.json` (tracked in git, and may hold an allowlist for
+  other marketplaces such as eBay) before `appsettings.local.json`. .NET's
+  configuration system merges array-shaped settings **by index**, not by
+  replacement: an empty array in a later-loaded file contributes no indexed
+  keys at all, so it leaves every entry from the earlier file's array in
+  place rather than overriding it. The only way to actually disable the
+  allowlist for a local run is to empty the array in
+  `appsettings.routing.json` itself, as a local, uncommitted edit (the same
+  way the off-screen `StealthBrowser.cs` patch below is local and
+  uncommitted) — an empty `appsettings.local.json` array cannot do it.
 - `routing:blockedResourceTypes`
 
 ### Off-screen browser requirement
@@ -104,21 +117,32 @@ allowlist that omits Cloudflare's beacon or Mercari's asset CDN reproduces a
 Cloudflare block on nearly every fetch and is easy to mistake for a genuine
 anti-bot problem.
 
-### Mercari active (unfiltered) search can silently return zero listings
+### Mercari search fetches sometimes land on a Cloudflare challenge page
 
-Mercari's price-band collector (`MercariPriceBandCollector`) issues an
-unfiltered search first (no `itemStatuses`, no price bounds) for the active
-direction. AIOWebScraper's search-payload capture only recognizes a search
-response whose URL contains `operationName=searchFacetQuery`
-(`AIOWebScraper.Unblocker/SearchPayloadCapture.cs`), which reliably matches
-sold/filtered searches (`itemStatuses=2`) but can miss the plain/unfiltered
-active search entirely. When it misses, the worker falls back to the raw
-rendered HTML, and `MercariSearchParser`'s rendered-card fallback can find
-no `data-testid="ItemContainer"` cards in that HTML — so the fetch succeeds
-(200, a real multi-hundred-KB page, no captcha verdict) but the active
-direction still collects zero listings and logs a null reported total. This
-looks identical to "the search is genuinely empty," which it is not. Filed
-as [AIOWebScraper#150](https://github.com/ryan75195/AIOWebScraper/issues/150).
+A meaningful fraction of Mercari search fetches (roughly a third, in a
+captured live run) come back as a Cloudflare "Just a moment..." challenge
+page — a ~28KB HTML document with a `challenge-platform` script and no item
+cards or JSON payload — rather than a genuine search response. The scraper
+reports this fetch as a plain 200 success, so nothing at the HTTP layer
+distinguishes it from a real page.
+
+A genuine Mercari search result always arrives either as a JSON payload
+containing `data.search` (with `count` and `itemsList`, `count: 0` and an
+empty `itemsList` being a real empty result) or as rendered HTML containing
+at least one `data-testid="ItemContainer"` card. `MercariSearchParser.Parse`
+only accepts those two shapes; anything else — a challenge page or any other
+unrecognised page — throws `UnrecognisedSearchPageException` instead of
+silently returning an empty `SearchPageResult`. `SearchPageFetcher` retries
+that exception like any other transient failure: up to
+`Scrape:SearchPageMaxAttempts` attempts (default 5) with an increasing delay
+between attempts (roughly 5s/15s/30s/60s at the default
+`Scrape:SearchPageRetryBaseDelaySeconds` of 5), since challenge pages tend to
+cluster in time and a short wait is often enough for the next attempt to get
+a real page. If every attempt for a band comes back as a challenge (or other
+unrecognised) page, the band is recorded as a `SearchPageFailed` issue whose
+message is "Cloudflare challenge page" — distinguishing it from a genuinely
+empty search, which is never retried and never recorded as an issue — while
+every other band's results are kept.
 
 ## 4. Start MarketMakerEtl.Api
 
@@ -166,6 +190,8 @@ is environment-variable only):
 | `Scrape:MaxConcurrentDetailFetches` | Concurrency for item detail page fetches |
 | `Scrape:MaxDetailFetchesPerRun` | Cap on item detail fetches per run |
 | `Scrape:MaxDetailFetchAttempts` | Retry attempts per item detail fetch |
+| `Scrape:SearchPageMaxAttempts` | Max attempts per Mercari/eBay search-page fetch before recording a `SearchPageFailed` issue (Cloudflare challenge pages are retried like any other unrecognised-page failure) |
+| `Scrape:SearchPageRetryBaseDelaySeconds` | Base delay between search-page fetch retries; the actual delay grows with each attempt (about 5s/15s/30s/60s at the default) |
 
 For a short local smoke test, set a low `Schedule:TickMinutes` (e.g. `1`) and
 small `Scrape:MaxBandsPerDirection` / `Scrape:MaxDetailFetchesPerRun` values

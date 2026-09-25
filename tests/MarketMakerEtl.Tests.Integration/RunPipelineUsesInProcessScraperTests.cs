@@ -96,9 +96,9 @@ public class RunPipelineUsesInProcessScraperTests
         return new ScrapeRunService(
             new SearchPageService(
                 client,
-                [urls],
-                [new EbaySearchParser()],
+                new MarketplaceAdapters([urls], [new EbaySearchParser()], []),
                 new ScrapeOptions(MaxPages: 1, CollectSold: false),
+                TimeProvider.System,
                 NullLogger<SearchPageService>.Instance),
             store,
             detailFetch,

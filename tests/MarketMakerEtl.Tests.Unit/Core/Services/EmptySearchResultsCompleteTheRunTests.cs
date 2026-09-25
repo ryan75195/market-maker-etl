@@ -82,9 +82,9 @@ public class EmptySearchResultsCompleteTheRunTests
         new(
             new SearchPageService(
                 client,
-                [new EbaySearchUrlService()],
-                [new EbaySearchParser()],
+                new MarketplaceAdapters([new EbaySearchUrlService()], [new EbaySearchParser()], []),
                 new ScrapeOptions(MaxPages: 3, CollectSold: false),
+                TimeProvider.System,
                 NullLogger<SearchPageService>.Instance),
             store,
             new NoOpItemDetailFetchService(),

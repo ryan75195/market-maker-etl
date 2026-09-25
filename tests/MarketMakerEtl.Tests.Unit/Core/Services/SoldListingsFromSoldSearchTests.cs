@@ -100,9 +100,9 @@ public class SoldListingsFromSoldSearchTests
         new(
             new SearchPageService(
                 client,
-                [new EbaySearchUrlService()],
-                [new EbaySearchParser()],
+                new MarketplaceAdapters([new EbaySearchUrlService()], [new EbaySearchParser()], []),
                 new ScrapeOptions(MaxPages: 1, CollectSold: true),
+                TimeProvider.System,
                 NullLogger<SearchPageService>.Instance),
             store,
             new NoOpItemDetailFetchService(),

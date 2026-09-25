@@ -54,7 +54,8 @@ public sealed class ScrapeRunService : IScrapeRunService
                 TotalListingsFound: result.Listings.Count,
                 TotalReportedBySearch: result.TotalReportedBySearch,
                 SearchCompletedUtc: searchCompletedUtc,
-                DetailCompletedUtc: detailCompletedUtc);
+                DetailCompletedUtc: detailCompletedUtc,
+                BackfillItemPageFetches: result.BackfillItemPageFetches);
 
             await _store.CompleteRun(work.RunId, counts, ct);
         }

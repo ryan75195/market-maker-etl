@@ -157,6 +157,19 @@ public class ItemDetailStoreTests
     }
 
     [Test]
+    public async Task Should_return_never_attempted_sold_listings_before_others_when_the_cap_is_tight()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        await SeedListing(jobId, "never-attempted-active", detailFetched: false, isSold: false);
+        await SeedListing(jobId, "never-attempted-sold", detailFetched: false, isSold: true);
+
+        var targets = await store.GetListingsNeedingDetail(jobId, 1, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets.Single().ListingId, Is.EqualTo("never-attempted-sold"));
+    }
+
+    [Test]
     public async Task Should_enrich_the_existing_sold_history_row_instead_of_adding_a_duplicate_when_already_sold()
     {
         var store = CreateStore();

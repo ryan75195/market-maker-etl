@@ -64,9 +64,9 @@ public class RunPipelineRecordsDetailFetchIssueTests
         var runs = new ScrapeRunService(
             new SearchPageService(
                 client,
-                [new EbaySearchUrlService()],
-                [new EbaySearchParser()],
+                new MarketplaceAdapters([new EbaySearchUrlService()], [new EbaySearchParser()], []),
                 new ScrapeOptions(MaxPages: 1, CollectSold: false),
+                TimeProvider.System,
                 NullLogger<SearchPageService>.Instance),
             store,
             detailFetch,

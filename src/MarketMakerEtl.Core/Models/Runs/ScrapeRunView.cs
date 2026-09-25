@@ -14,6 +14,7 @@ public sealed record ScrapeRunView(
     int ListingsFailed,
     int TotalListingsFound,
     int? TotalReportedBySearch,
+    int BackfillItemPageFetches,
     DateTime StartedUtc,
     DateTime? SearchCompletedUtc,
     DateTime? DetailCompletedUtc,
