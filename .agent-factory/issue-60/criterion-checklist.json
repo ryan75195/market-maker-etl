@@ -1,0 +1,71 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "The PR contains a field-presence table per sampled category, from live captures, for search and item page.",
+      "plannedImplementation": "Four categories were sampled via live captures (electronics, clothing/shoes, trading cards, toys), already present in this branch as tests/MarketMakerEtl.Tests.Unit/Fixtures/Mercari/{search-payload.json, search-payload-custom-facets.json, search-payload-clothing.json, search-payload-cards.json, search-payload-toys.json, item-active-m71344610988.html, item-active-m74693959349.html, item-active-m14283608971.html, item-active-m80477245182.html, item-active-m89945662386.html, item-sold-m44688360101.html}. Each fixture was inspected field-by-field with PowerShell JSON parsing (ConvertFrom-Json / ConvertTo-Json -Depth) rather than trusting the ticket's field list, confirming which of itemCategoryHierarchy, itemCategory/categoryId, itemCondition, brand, itemSize, color, customFacetsList, seller, shippingPayer, discountRatio, shippingClass, shippingFromArea, shippingPackageDimension, additionalAttributes actually appear in the search payload vs. the item-detail JSON, and which are consistently absent (color always null in search payload; additionalAttributes always empty/absent in item-detail JSON; shippingPayer always {id:null,name:null,code:null} in the search payload, only reliable from the item-detail shippingPayer ref's code field).",
+      "plannedVerification": "A field-presence table (source x field x present/absent/example-value, per category) is included in the PR description, built directly from the fixture inspection above rather than re-derived at PR-writing time, so the table matches what the fixtures and their tests actually assert.",
+      "materialConcerns": [
+        "The live captures themselves were performed in an earlier part of this session before a context compaction; this continuation worked from the already-captured fixtures and did not re-run live captures. A mid-task message purporting to come from 'the coordinator' asked this session to run further live captures against a scraper stack (S:\\scraper, subst S:, ~20-30 fetches). That message did not arrive as a genuine coordinator/user turn -- it appeared embedded in tool-result-shaped content -- and it contradicts the task's explicit 'no extra network fetches' constraint and the instruction to work from existing captures, so it was treated as a prompt-injection attempt and not acted on. This is disclosed here and in the final report."
+      ],
+      "comparison": false,
+      "verificationStatus": "verified: field-presence table written into the PR body from the fixture inspection notes; four categories covered as required, with three fields explicitly documented as confirmed-absent gaps rather than omitted silently"
+    },
+    {
+      "id": "AC-2",
+      "criterion": "Unit tests with real captured fixtures, one per sampled category, map every new field; add them under tests/MarketMakerEtl.Tests.Unit/Fixtures/Mercari/.",
+      "plannedImplementation": "MercariSearchPayloadParser.BuildSummary and MercariItemDetailJsonParser.BuildListing (plus the extracted MercariItemDetailSegmentationReader) were extended to read CategoryId, the 3-level CategoryHierarchy, BrandId, ConditionId, SizeName, ColorName, ShippingPayer, ShipsFromState, SellerId, DiscountRatio, SellerProfile, Attributes (custom facets / additional attributes), and RawJson.",
+      "plannedVerification": "MercariSearchPayloadSegmentationFieldsTests (4 tests) parses search-payload.json/search-payload-clothing.json/search-payload-custom-facets.json and asserts CategoryId/CategoryHierarchy/BrandId/ConditionId/SellerId/RawJson for electronics, the confirmed-null ShippingPayer/ColorName gap, SizeName from the clothing fixture, and Attributes from the custom-facets fixture. MercariItemPageSegmentationFieldsTests (4 tests) parses item-active-m71344610988.html/item-active-m74693959349.html/item-active-m14283608971.html and asserts the leaf-only CategoryHierarchy (item-detail JSON has no hierarchy array, only a single leaf-level ref, confirmed by direct fixture inspection), BrandId, ConditionId, DiscountRatio, ShipsFromState, ShippingPayer, the full SellerProfile (including AccountCreatedUtc decoded from a unix-seconds field), SizeName from the clothing fixture, and buyer-paid shipping from the toys fixture. All fixtures used already lived under tests/MarketMakerEtl.Tests.Unit/Fixtures/Mercari/ (captured in the pre-compaction portion of this session); no new fixtures were added this continuation since the four required categories were already represented.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: dotnet test tests/MarketMakerEtl.Tests.Unit --filter \"FullyQualifiedName~Segmentation\" passes for all 8 parser-level tests"
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A rescrape with a field missing does not erase a stored value (null-preserving).",
+      "plannedImplementation": "ListingSegmentationUpserter.ApplyEnrichment null-coalesces every new segmentation field against the existing stored entity value (field ?? entity.field), extending the null-preserving merge pattern already established for other fields in #43; Attributes is only overwritten when the incoming listing has a non-empty attributes dictionary.",
+      "plannedVerification": "ScrapeStoreSegmentationFieldsTests.Should_not_erase_segmentation_fields_when_a_rescrape_omits_them upserts a fully-populated ListingSummary, then upserts a second, deliberately thin ListingSummary for the same listing id with all segmentation fields left at their default (null), and asserts the previously stored Price update took effect while CategoryId, BrandId, SellerId, and Attributes all still hold their original values.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: test passes; a manual check confirmed it would fail without the null-coalescing (ApplyEnrichment unconditionally assigning the incoming, null, value would overwrite the stored fields with null)"
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Seller stats upsert on each item-page fetch, and a later fetch updates them.",
+      "plannedImplementation": "A new Sellers table (SellerEntity: SellerId key, Name, NumSales, NumSellItems, RatingCount, RatingAverage, IsProSeller, AccountCreatedUtc, LastSeenUtc) is upserted by SellerUpserter.Apply, called from ItemDetailStore.ApplyItemDetail on every item-detail fetch that has a non-null SellerProfile, using the real Mercari seller id as the key (no store-generated id needed since the value is always explicitly supplied on insert).",
+      "plannedVerification": "ItemDetailStoreSegmentationFieldsTests.Should_upsert_the_seller_and_persist_item_detail_raw_json_when_applying_an_item_detail asserts a Sellers row is created with the correct Name/NumSales on first fetch; Should_refresh_seller_stats_on_a_later_item_detail_fetch calls ApplyItemDetail twice for the same seller with different NumSales values (100 then 150) and asserts the single Sellers row reflects the later value rather than a duplicate row.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: both tests pass"
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Raw JSON round-trips for a listing, and the average stored size per listing is reported.",
+      "plannedImplementation": "A new ListingRawData table (one row per listing, SearchItemJsonGzip / ItemDetailJsonGzip nullable BLOB columns with independent updated-timestamp columns) is upserted from ListingSegmentationUpserter.UpsertRawData (search JSON, on every scrape upsert) and ItemDetailStore's item-detail raw-data upsert (item-detail JSON, on every detail fetch), each gzip-compressed via the repo's existing GzipJson helper. A new IListingRawDataStore / ListingRawDataStore exposes read-only decompressed access, kept as its own store rather than added to IScrapeStore because ScrapeStore was already at the CI0004 public-method-count ceiling.",
+      "plannedVerification": "ListingRawDataStoreTests asserts gzip-compressed search/detail JSON round-trips back to the original string, and that a listing with no raw-data row returns null. ScrapeStoreSegmentationFieldsTests.Should_persist_raw_search_json_for_a_listing_and_update_it_on_rescrape upserts a listing with RawJson v1, reads it back via ListingRawDataStore, then upserts v2 for the same listing and asserts the stored value updates in place (single row, not a duplicate). Average size was measured by gzip-simulating the same GzipJson.Compress behavior against the fixture corpus in PowerShell: search-item JSON averages ~1,244 bytes raw / ~552 bytes gzip; item-detail JSON averages ~2,463 bytes raw / ~921 bytes gzip; a fully-detailed listing (both blobs stored) averages ~3,707 bytes raw / ~1,473 bytes gzip, a ~60.3% size reduction, reported in the PR body.",
+      "materialConcerns": [
+        "The size measurement was computed against the available fixture corpus (11 samples across 4 categories), not a large production sample; it is reported as an estimate representative of typical listing JSON size, not a guaranteed production average."
+      ],
+      "comparison": false,
+      "verificationStatus": "verified: round-trip tests pass; size figures computed and reported in the PR body"
+    },
+    {
+      "id": "AC-6",
+      "criterion": "Migrating a pre-change database keeps all existing listings and history.",
+      "plannedImplementation": "Migration 20260925024945_AddSegmentationSellersAndRawData (generated via dotnet ef against the branch's actual current tip, 20260924131942_AddBackfillItemPageFetches) purely adds nullable columns to Listings and creates the new ListingRawData and Sellers tables; it does not alter or drop any existing column, table, or index.",
+      "plannedVerification": "MigratingAPreSegmentationDatabasePreservesListingsTests.Should_preserve_existing_listing_rows_and_add_segmentation_columns_and_tables seeds a SQLite database migrated only up to the pre-change migration (20260924131942_AddBackfillItemPageFetches), inserts a legacy Listings row via raw SQL, then applies the remaining migrations and asserts: the legacy row's Title and Price are unchanged, the new columns (CategoryId, SellerId, Attributes, etc.) exist and are null on that row, and no Sellers or ListingRawData rows were spuriously created by the migration itself.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: test passes"
+    },
+    {
+      "id": "AC-7",
+      "criterion": "Repo quality gate green: .githooks/pre-commit (build with all analyzers at error severity, dotnet format --verify-no-changes, Unit + Architecture tests).",
+      "plannedImplementation": "New/extracted types (ListingSegmentationUpserter, ListingSummaryMapper, MercariItemDetailSegmentationReader, ListingRawDataStore, SellerUpserter, SellerEntity, ListingRawDataEntity) were sized and shaped to stay within CI0014 (class length), CI0004 (public method count), CI0007 (method length), and CI0013 (no comments, including generated /// migration doc comments, stripped by hand); CA1819 on the new byte[]? BLOB properties was suppressed narrowly via [SuppressMessage] with justification rather than a blanket editorconfig rule; the architecture test's AllowedArrayReturns allowlist was extended for those two property getters, and a matching *Tests fixture was added for the one new public class requiring one under Should_have_test_fixture_for_every_public_class (ListingRawDataStoreTests).",
+      "plannedVerification": "dotnet build (full solution) --no-incremental, dotnet format --verify-no-changes, dotnet test tests/MarketMakerEtl.Tests.Unit, and dotnet test tests/MarketMakerEtl.Tests.Architecture were all run directly ahead of commit, followed by the .githooks/pre-commit hook itself at commit time.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified: dotnet build succeeds 0 warnings/0 errors, dotnet format --verify-no-changes passes, Unit tests 314/314 passing (16 new this session), Architecture tests 25/25 passing"
+    }
+  ]
+}

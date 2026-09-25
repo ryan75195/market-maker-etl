@@ -61,4 +61,38 @@ public sealed class ListingEntity
     public DateTime CreatedUtc { get; set; }
 
     public DateTime? UpdatedUtc { get; set; }
+
+    public int? CategoryId { get; set; }
+
+    public int? Category0Id { get; set; }
+
+    public string? Category0Name { get; set; }
+
+    public int? Category1Id { get; set; }
+
+    public string? Category1Name { get; set; }
+
+    public int? Category2Id { get; set; }
+
+    public string? Category2Name { get; set; }
+
+    public int? BrandId { get; set; }
+
+    public int? ConditionId { get; set; }
+
+    public string? SizeName { get; set; }
+
+    public string? ColorName { get; set; }
+
+    public string? ShippingPayer { get; set; }
+
+    public string? ShipsFromState { get; set; }
+
+    public long? SellerId { get; set; }
+
+    public int? DiscountRatio { get; set; }
+
+    public string? Attributes { get; set; }
+
+    public ListingRawDataEntity? RawData { get; set; }
 }

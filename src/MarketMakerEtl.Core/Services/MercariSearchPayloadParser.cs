@@ -84,7 +84,84 @@ internal static class MercariSearchPayloadParser
             OriginalPrice: ReadCents(item, "originalPrice"),
             Category: ReadNestedName(item, "itemCategory"),
             Likes: null,
-            ImageUrls: imageUrls.Count > 0 ? imageUrls : null);
+            ImageUrls: imageUrls.Count > 0 ? imageUrls : null,
+            CategoryId: ReadInt(item, "categoryId"),
+            CategoryHierarchy: ReadCategoryHierarchy(item),
+            BrandId: ReadNestedInt(item, "brand", "id"),
+            ConditionId: ReadNestedInt(item, "itemCondition", "id"),
+            SizeName: ReadNestedName(item, "itemSize"),
+            ColorName: ReadString(item, "color"),
+            ShippingPayer: ReadNestedString(item, "shippingPayer", "code"),
+            SellerId: ReadNestedLong(item, "seller", "sellerId"),
+            Attributes: ReadCustomFacets(item),
+            RawJson: item.GetRawText());
+    }
+
+    private static MercariCategoryHierarchy? ReadCategoryHierarchy(JsonElement item)
+    {
+        if (!item.TryGetProperty("itemCategoryHierarchy", out var hierarchy)
+            || hierarchy.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        int? level0Id = null;
+        string? level0Name = null;
+        int? level1Id = null;
+        string? level1Name = null;
+        int? level2Id = null;
+        string? level2Name = null;
+
+        foreach (var level in hierarchy.EnumerateArray())
+        {
+            var levelNumber = ReadInt(level, "level");
+            var id = ReadInt(level, "id");
+            var name = ReadString(level, "name");
+
+            switch (levelNumber)
+            {
+                case 0:
+                    level0Id = id;
+                    level0Name = name;
+                    break;
+                case 1:
+                    level1Id = id;
+                    level1Name = name;
+                    break;
+                case 2:
+                    level2Id = id;
+                    level2Name = name;
+                    break;
+            }
+        }
+
+        return new MercariCategoryHierarchy(level0Id, level0Name, level1Id, level1Name, level2Id, level2Name);
+    }
+
+    private static IReadOnlyDictionary<string, string>? ReadCustomFacets(JsonElement item)
+    {
+        if (!item.TryGetProperty("customFacetsList", out var facets) || facets.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        Dictionary<string, string>? attributes = null;
+
+        foreach (var facet in facets.EnumerateArray())
+        {
+            var name = ReadString(facet, "facetName");
+            var value = ReadString(facet, "value");
+
+            if (name is null || value is null)
+            {
+                continue;
+            }
+
+            attributes ??= [];
+            attributes[name] = value;
+        }
+
+        return attributes;
     }
 
     private static bool IsSoldStatus(string? status) =>
@@ -113,6 +190,29 @@ internal static class MercariSearchPayloadParser
 
     private static string? ReadNestedName(JsonElement item, string propertyName) =>
         TryGetObject(item, propertyName, out var nested) ? ReadString(nested, "name") : null;
+
+    private static string? ReadNestedString(JsonElement item, string propertyName, string nestedPropertyName) =>
+        TryGetObject(item, propertyName, out var nested) ? ReadString(nested, nestedPropertyName) : null;
+
+    private static int? ReadNestedInt(JsonElement item, string propertyName, string nestedPropertyName) =>
+        TryGetObject(item, propertyName, out var nested) ? ReadInt(nested, nestedPropertyName) : null;
+
+    private static long? ReadNestedLong(JsonElement item, string propertyName, string nestedPropertyName) =>
+        TryGetObject(item, propertyName, out var nested) ? ReadLong(nested, nestedPropertyName) : null;
+
+    private static int? ReadInt(JsonElement element, string propertyName) =>
+        element.TryGetProperty(propertyName, out var value)
+        && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt32(out var number)
+            ? number
+            : null;
+
+    private static long? ReadLong(JsonElement element, string propertyName) =>
+        element.TryGetProperty(propertyName, out var value)
+        && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt64(out var number)
+            ? number
+            : null;
 
     private static decimal? ReadCents(JsonElement item, string propertyName) =>
         item.TryGetProperty(propertyName, out var value)

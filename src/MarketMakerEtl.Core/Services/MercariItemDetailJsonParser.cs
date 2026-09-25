@@ -90,7 +90,20 @@ internal static class MercariItemDetailJsonParser
             ShippingCost: ReadShippingCost(serverState, item),
             OriginalPrice: ReadCents(item, "originalPrice"),
             PostedUtc: ReadDateTimeOffset(item, "created"),
-            Likes: ReadInt(item, "numLikes"));
+            Likes: ReadInt(item, "numLikes"),
+            CategoryId: MercariItemDetailSegmentationReader.ReadRefInt(serverState, item, "itemCategory", "id"),
+            CategoryHierarchy: MercariItemDetailSegmentationReader.ReadCategoryHierarchy(serverState, item),
+            BrandId: MercariItemDetailSegmentationReader.ReadRefInt(serverState, item, "brand", "id"),
+            ConditionId: MercariItemDetailSegmentationReader.ReadRefInt(serverState, item, "itemCondition", "id"),
+            SizeName: ReadRefName(serverState, item, "itemSize"),
+            ColorName: null,
+            ShippingPayer: MercariItemDetailSegmentationReader.ReadRefString(
+                serverState, item, "shippingPayer", "code"),
+            ShipsFromState: ReadRefName(serverState, item, "shippingFromArea"),
+            DiscountRatio: ReadInt(item, "discountRatio"),
+            SellerProfile: MercariItemDetailSegmentationReader.ReadSellerProfile(serverState, item),
+            Attributes: MercariItemDetailSegmentationReader.ReadAdditionalAttributes(item),
+            RawJson: item.GetRawText());
     }
 
     private static string? MapStatus(string? state) =>
@@ -122,7 +135,7 @@ internal static class MercariItemDetailJsonParser
     private static string? ReadRefName(JsonElement serverState, JsonElement item, string propertyName) =>
         TryResolveRef(serverState, item, propertyName, out var resolved) ? ReadString(resolved, "name") : null;
 
-    private static bool TryResolveRef(
+    internal static bool TryResolveRef(
         JsonElement serverState, JsonElement item, string propertyName, out JsonElement resolved)
     {
         resolved = default;
@@ -171,7 +184,7 @@ internal static class MercariItemDetailJsonParser
             : null;
     }
 
-    private static DateTimeOffset? ReadDateTimeOffset(JsonElement item, string propertyName)
+    internal static DateTimeOffset? ReadDateTimeOffset(JsonElement item, string propertyName)
     {
         var seconds = ReadUnixSeconds(item, propertyName);
 
@@ -192,14 +205,14 @@ internal static class MercariItemDetailJsonParser
             ? cents / 100m
             : null;
 
-    private static int? ReadInt(JsonElement element, string propertyName) =>
+    internal static int? ReadInt(JsonElement element, string propertyName) =>
         element.TryGetProperty(propertyName, out var value)
         && value.ValueKind == JsonValueKind.Number
         && value.TryGetInt32(out var count)
             ? count
             : null;
 
-    private static string? ReadString(JsonElement element, string propertyName)
+    internal static string? ReadString(JsonElement element, string propertyName)
     {
         if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
         {

@@ -48,6 +48,8 @@ public sealed class ItemDetailStore : IItemDetailStore
 
         var wasSold = listing.IsSold;
         ApplyDetailFields(listing, detail);
+        await SellerUpserter.Apply(db, detail.SellerProfile, ct);
+        await UpsertItemDetailRawData(db, listingEntityId, detail.RawJson, ct);
 
         if (string.Equals(detail.Status, SoldStatus, StringComparison.Ordinal))
         {
@@ -57,6 +59,33 @@ public sealed class ItemDetailStore : IItemDetailStore
         listing.DetailFetchedUtc = DateTime.UtcNow;
         listing.UpdatedUtc = DateTime.UtcNow;
         await SqliteBusyRetry.ExecuteAsync(() => db.SaveChangesAsync(ct), ct);
+    }
+
+    private static async Task UpsertItemDetailRawData(
+        EtlDbContext db, int listingEntityId, string? rawJson, CancellationToken ct)
+    {
+        if (rawJson is null)
+        {
+            return;
+        }
+
+        var gzip = GzipJson.Compress(rawJson);
+        var existingRawData = await db.ListingRawData
+            .FirstOrDefaultAsync(r => r.ListingEntityId == listingEntityId, ct);
+
+        if (existingRawData is not null)
+        {
+            existingRawData.ItemDetailJsonGzip = gzip;
+            existingRawData.ItemDetailJsonUpdatedUtc = DateTime.UtcNow;
+            return;
+        }
+
+        db.ListingRawData.Add(new ListingRawDataEntity
+        {
+            ListingEntityId = listingEntityId,
+            ItemDetailJsonGzip = gzip,
+            ItemDetailJsonUpdatedUtc = DateTime.UtcNow
+        });
     }
 
     public async Task MarkDetailFetchFailed(int listingEntityId, int maxAttempts, CancellationToken ct)
@@ -93,6 +122,32 @@ public sealed class ItemDetailStore : IItemDetailStore
         if (detail.ImageUrls is { Count: > 0 })
         {
             listing.ImageUrls = ListingImageUrlsJson.Serialize(detail.ImageUrls);
+        }
+
+        ApplySegmentationDetailFields(listing, detail);
+    }
+
+    private static void ApplySegmentationDetailFields(ListingEntity listing, ItemPageListing detail)
+    {
+        listing.CategoryId = detail.CategoryId ?? listing.CategoryId;
+        listing.Category0Id = detail.CategoryHierarchy?.Level0Id ?? listing.Category0Id;
+        listing.Category0Name = detail.CategoryHierarchy?.Level0Name ?? listing.Category0Name;
+        listing.Category1Id = detail.CategoryHierarchy?.Level1Id ?? listing.Category1Id;
+        listing.Category1Name = detail.CategoryHierarchy?.Level1Name ?? listing.Category1Name;
+        listing.Category2Id = detail.CategoryHierarchy?.Level2Id ?? listing.Category2Id;
+        listing.Category2Name = detail.CategoryHierarchy?.Level2Name ?? listing.Category2Name;
+        listing.BrandId = detail.BrandId ?? listing.BrandId;
+        listing.ConditionId = detail.ConditionId ?? listing.ConditionId;
+        listing.SizeName = detail.SizeName ?? listing.SizeName;
+        listing.ColorName = detail.ColorName ?? listing.ColorName;
+        listing.ShippingPayer = detail.ShippingPayer ?? listing.ShippingPayer;
+        listing.ShipsFromState = detail.ShipsFromState ?? listing.ShipsFromState;
+        listing.DiscountRatio = detail.DiscountRatio ?? listing.DiscountRatio;
+        listing.SellerId = detail.SellerProfile?.SellerId ?? listing.SellerId;
+
+        if (detail.Attributes is { Count: > 0 })
+        {
+            listing.Attributes = ListingAttributesJson.Serialize(detail.Attributes);
         }
     }
 

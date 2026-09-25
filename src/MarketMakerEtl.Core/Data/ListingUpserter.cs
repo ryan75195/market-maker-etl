@@ -24,7 +24,8 @@ internal static class ListingUpserter
         int jobId,
         Marketplace marketplace,
         ListingSummary listing,
-        ListingEntity? existing)
+        ListingEntity? existing,
+        ListingRawDataEntity? existingRawData)
     {
         if (existing is null)
         {
@@ -32,6 +33,7 @@ internal static class ListingUpserter
             return listing.IsSold ? ListingUpsertOutcome.AddedSold : ListingUpsertOutcome.AddedActive;
         }
 
+        ListingSegmentationUpserter.UpsertRawData(db, existing, existingRawData, listing.RawJson);
         return UpdateExisting(db, listing, existing);
     }
 
@@ -50,7 +52,10 @@ internal static class ListingUpserter
         foreach (var listing in listings.GroupBy(l => l.ListingId).Select(g => g.Last()))
         {
             var existing = await db.Listings.FirstOrDefaultAsync(l => l.ListingId == listing.ListingId, ct);
-            switch (Apply(db, jobId, marketplace, listing, existing))
+            var existingRawData = existing is null
+                ? null
+                : await db.ListingRawData.FirstOrDefaultAsync(r => r.ListingEntityId == existing.Id, ct);
+            switch (Apply(db, jobId, marketplace, listing, existing, existingRawData))
             {
                 case ListingUpsertOutcome.AddedActive:
                     addedActive++;
@@ -80,6 +85,16 @@ internal static class ListingUpserter
             CreatedUtc = DateTime.UtcNow
         };
         ApplyNewListingFields(entity, listing);
+
+        if (listing.RawJson is not null)
+        {
+            entity.RawData = new ListingRawDataEntity
+            {
+                SearchItemJsonGzip = GzipJson.Compress(listing.RawJson),
+                SearchItemJsonUpdatedUtc = DateTime.UtcNow
+            };
+        }
+
         db.Listings.Add(entity);
 
         if (listing.IsSold)
@@ -154,6 +169,7 @@ internal static class ListingUpserter
         entity.Category = listing.Category;
         entity.Likes = listing.Likes;
         entity.ImageUrls = ListingImageUrlsJson.Serialize(listing.ImageUrls);
+        ListingSegmentationUpserter.ApplyNew(entity, listing);
     }
 
     private static void ApplyCoreSearchFields(ListingEntity entity, ListingSummary listing)
@@ -183,5 +199,7 @@ internal static class ListingUpserter
         {
             entity.ImageUrls = ListingImageUrlsJson.Serialize(listing.ImageUrls);
         }
+
+        ListingSegmentationUpserter.ApplyEnrichment(entity, listing);
     }
 }

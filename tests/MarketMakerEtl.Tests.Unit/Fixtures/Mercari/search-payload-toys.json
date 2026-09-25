@@ -1,0 +1,145 @@
+{
+  "data": {
+    "search": {
+      "count": 11932,
+      "itemsList": [
+        {
+          "id": "m14283608971",
+          "name": "LEGO Ideas 21343 Viking Village - Brand New Sealed NIB",
+          "status": "on_sale",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m14283608971_1.jpg?1788035429",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m14283608971_1.jpg?1788035429&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 957892018,
+            "sellerId": 957892018,
+            "__typename": "PublicUser"
+          },
+          "price": 15900,
+          "originalPrice": 16900,
+          "brand": {
+            "id": 3752,
+            "name": "LEGO",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": null,
+          "__typename": "Item",
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 1611,
+              "level": 0,
+              "name": "Toys & Collectibles",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 1648,
+              "level": 1,
+              "name": "Building Toys",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 2211,
+              "level": 2,
+              "name": "LEGO Toys",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 2211,
+            "name": "LEGO Toys",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "LEGO Toys",
+          "categoryId": 2211
+        },
+        {
+          "id": "m62602715780",
+          "name": "LEGO Queer Eye - The Fab 5 Loft 10291 - UNOPENED",
+          "status": "on_sale",
+          "shippingPayer": {
+            "id": null,
+            "name": null,
+            "code": null,
+            "__typename": "ShippingPayer"
+          },
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m62602715780_1.jpg?1790096664",
+              "thumbnail": "https://u-mercari-images.mercdn.net/photos/m62602715780_1.jpg?1790096664&width=200&height=200",
+              "__typename": "Photo"
+            }
+          ],
+          "seller": {
+            "id": 406210104,
+            "sellerId": 406210104,
+            "__typename": "PublicUser"
+          },
+          "price": 5700,
+          "originalPrice": 6000,
+          "brand": {
+            "id": 3752,
+            "name": "LEGO",
+            "__typename": "ItemBrand"
+          },
+          "itemSize": null,
+          "__typename": "Item",
+          "description": "",
+          "itemCategoryHierarchy": [
+            {
+              "id": 1611,
+              "level": 0,
+              "name": "Toys & Collectibles",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 1648,
+              "level": 1,
+              "name": "Building Toys",
+              "__typename": "ItemCategory"
+            },
+            {
+              "id": 2211,
+              "level": 2,
+              "name": "LEGO Toys",
+              "__typename": "ItemCategory"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New",
+            "__typename": "ItemCondition"
+          },
+          "itemCategory": {
+            "id": 2211,
+            "name": "LEGO Toys",
+            "__typename": "ItemCategory"
+          },
+          "customFacetsList": [],
+          "color": null,
+          "shippingClass": null,
+          "categoryTitle": "LEGO Toys",
+          "categoryId": 2211
+        }
+      ]
+    }
+  }
+}

@@ -18,4 +18,16 @@ public sealed record ItemPageListing(
     decimal? ShippingCost = null,
     decimal? OriginalPrice = null,
     DateTimeOffset? PostedUtc = null,
-    int? Likes = null);
+    int? Likes = null,
+    int? CategoryId = null,
+    MercariCategoryHierarchy? CategoryHierarchy = null,
+    int? BrandId = null,
+    int? ConditionId = null,
+    string? SizeName = null,
+    string? ColorName = null,
+    string? ShippingPayer = null,
+    string? ShipsFromState = null,
+    int? DiscountRatio = null,
+    MercariSellerProfile? SellerProfile = null,
+    IReadOnlyDictionary<string, string>? Attributes = null,
+    string? RawJson = null);
