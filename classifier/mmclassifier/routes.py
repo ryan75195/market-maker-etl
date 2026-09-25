@@ -84,12 +84,12 @@ def build_router() -> APIRouter:
     async def classify(payload: ClassifyRequest, request: Request) -> ClassifyResponse:
         registry = get_registry(request)
         lock = get_inference_lock(request)
-        ensemble = get_ensemble_or_404(registry, payload.model)
 
         questions = {question_id: question.model_dump() for question_id, question in payload.questions.items()}
         check_limits(payload.questions, payload.states)
 
         async with lock:
+            ensemble = await run_in_threadpool(get_ensemble_or_404, registry, payload.model)
             results = await run_in_threadpool(ensemble.predict, payload.states, questions)
 
         return ClassifyResponse(model=payload.model, members=ensemble.members, results=results)
@@ -102,12 +102,12 @@ def build_router() -> APIRouter:
     async def systemone(payload: SystemOneRequest, request: Request) -> SystemOneResponse:
         registry = get_registry(request)
         lock = get_inference_lock(request)
-        ensemble = get_ensemble_or_404(registry, payload.model)
 
         questions = {question_id: question.model_dump() for question_id, question in payload.questions.items()}
         check_limits(payload.questions, [payload.state])
 
         async with lock:
+            ensemble = await run_in_threadpool(get_ensemble_or_404, registry, payload.model)
             [result] = await run_in_threadpool(ensemble.predict, [payload.state], questions)
 
         answers = {

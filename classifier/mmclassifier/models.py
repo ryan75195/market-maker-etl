@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Sequence
@@ -76,6 +77,7 @@ class ModelRegistry:
         self._device = device
         self._loader = loader
         self._loaded: Dict[str, Ensemble] = {}
+        self._load_lock = threading.Lock()
 
     @property
     def device(self) -> str:
@@ -91,16 +93,22 @@ class ModelRegistry:
             self.get(name)
 
     def get(self, name: str) -> Ensemble:
-        if name in self._loaded:
-            return self._loaded[name]
+        ensemble = self._loaded.get(name)
+        if ensemble is not None:
+            return ensemble
 
-        model_dir = self._models_dir / name
-        if not model_dir.is_dir():
-            raise ModelNotFoundError(name)
+        with self._load_lock:
+            ensemble = self._loaded.get(name)
+            if ensemble is not None:
+                return ensemble
 
-        ensemble = self._loader(name, model_dir, self._device)
-        self._loaded[name] = ensemble
-        return ensemble
+            model_dir = self._models_dir / name
+            if not model_dir.is_dir():
+                raise ModelNotFoundError(name)
+
+            ensemble = self._loader(name, model_dir, self._device)
+            self._loaded[name] = ensemble
+            return ensemble
 
     def loaded_models(self) -> Dict[str, int]:
         return {name: ensemble.members for name, ensemble in self._loaded.items()}
