@@ -1,0 +1,68 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A run whose only issues are SoldBackfillWindow and/or PriceBandCapHit completes as Completed.",
+      "plannedImplementation": "ScrapeRunIssueSeverityClassifier.IsFailure returns false only for the two literal IssueType strings SoldBackfillWindow and PriceBandCapHit. ScrapeRunCompletion.DetermineStatus loads the run's ScrapeRunIssues.IssueType values and returns Completed when none of them classify as a failure.",
+      "plannedVerification": "ARunWithOnlyInformationalIssuesCompletesCleanlyTests (real SQLite via IDbContextFactory, same pattern as ScrapeStoreTests/ScrapeRunReportStoreTests): seeds a run with both SoldBackfillWindow and PriceBandCapHit issue rows and asserts ScrapeRunCompletion.DetermineStatus returns Completed.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A run with only SoldBackfillWindow and PriceBandCapHit issue rows completes as Completed.",
+        "whenHeldValueAbsent": "ARunWithAFailureIssueEndsCompletedWithErrorsTests seeds the same informational SoldBackfillWindow row plus one SearchPageFailed row and gets CompletedWithErrors instead -- proving the informational rows themselves never drive the status, only the presence of a failure-class row does."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Data/ARunWithOnlyInformationalIssuesCompletesCleanlyTests.cs passes: `dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~ARunWithOnlyInformationalIssuesCompletesCleanlyTests\"` -> 1 passed, 0 failed. Full suite: `dotnet test tests/MarketMakerEtl.Tests.Unit` -> 323 passed, 0 failed."
+    },
+    {
+      "id": "AC-2",
+      "criterion": "A run with any failure-class issue, or an unknown issue type, completes as CompletedWithErrors.",
+      "plannedImplementation": "ScrapeRunIssueSeverityClassifier.IsFailure returns true for every IssueType string not in its two-entry informational set, so both the six named failure types (SearchPageFailed, ItemDetailFetchFailed, ItemDetailParseFailed, SoldBackfillBudgetExhausted, SoldBackfillBandOverflow, SearchYieldedNoResults) and any future/unknown type fail closed to CompletedWithErrors.",
+      "plannedVerification": "ARunWithAFailureIssueEndsCompletedWithErrorsTests seeds a mix of one informational and one named failure issue (SearchPageFailed) and asserts CompletedWithErrors. AnUnknownIssueTypeFailsSafeToCompletedWithErrorsTests seeds a single issue with an invented IssueType string not present in the classifier's set and asserts CompletedWithErrors, proving the fail-safe default.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A run with one unrecognised issue type ends CompletedWithErrors.",
+        "whenHeldValueAbsent": "ARunWithOnlyInformationalIssuesCompletesCleanlyTests seeds only the two known informational types and ends plain Completed -- proving unknown types are not silently treated as informational by default, only the two explicitly listed strings are."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Data/ARunWithAFailureIssueEndsCompletedWithErrorsTests.cs and tests/MarketMakerEtl.Tests.Unit/Core/Data/AnUnknownIssueTypeFailsSafeToCompletedWithErrorsTests.cs pass: `dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~ARunWithAFailureIssueEndsCompletedWithErrorsTests|FullyQualifiedName~AnUnknownIssueTypeFailsSafeToCompletedWithErrorsTests\"` -> 2 passed, 0 failed."
+    },
+    {
+      "id": "AC-3",
+      "criterion": "These are tested against the real DB (integration-style, like the existing ScrapeRunCompletion tests if present), not a mock.",
+      "plannedImplementation": "ScrapeRunCompletion.DetermineStatus is exercised directly against a real EF Core EtlDbContext backed by a real, per-test SQLite file (Path.GetTempPath()-based, created and deleted in SetUp/TearDown), using the same IDbContextFactory<EtlDbContext> pattern already used by ScrapeStoreTests and ScrapeRunReportStoreTests -- no repository or DbContext mock involved.",
+      "plannedVerification": "All three new ScrapeRunCompletion test fixtures and the new ScrapeRunIssueViewExposesItsSeverityTests fixture seed rows through db.ScrapeRunIssues.Add/SaveChangesAsync against a live SQLite database and read the result back through the real static classes (ScrapeRunCompletion, ScrapeRunReportStore) with no substituted dependency.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "No mock or fake IDbContextFactory/EtlDbContext appears anywhere in the four new test files; each opens Microsoft.Data.Sqlite against a real temp-file database, matching the existing ScrapeStoreTests.cs/ScrapeRunReportStoreTests.cs convention. All four fixtures pass under `dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~ARunWithOnlyInformationalIssuesCompletesCleanlyTests|FullyQualifiedName~ARunWithAFailureIssueEndsCompletedWithErrorsTests|FullyQualifiedName~AnUnknownIssueTypeFailsSafeToCompletedWithErrorsTests|FullyQualifiedName~ScrapeRunIssueViewExposesItsSeverityTests\"` -> 4 passed, 0 failed."
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Quality gate: pre-commit hook (build with analyzers, dotnet format --verify-no-changes, Unit + Architecture tests) green.",
+      "plannedImplementation": "Changes are confined to one new internal static classifier, a two-line change to ScrapeRunCompletion.DetermineStatus, a trailing field addition on the ScrapeRunIssueView record, and the matching mapper line -- no ctor param count, method length, or public-method-count limits are approached.",
+      "plannedVerification": "Run the same three gates the pre-commit hook runs before committing: dotnet build --no-incremental, dotnet format --verify-no-changes, dotnet test on Unit + Architecture.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "dotnet build MarketMakerEtl.slnx --no-incremental -> Build succeeded, 0 Warning(s), 0 Error(s). dotnet format MarketMakerEtl.slnx --verify-no-changes -> exit code 0, no output. dotnet test tests/MarketMakerEtl.Tests.Unit --no-build -> 323 passed, 0 failed. dotnet test tests/MarketMakerEtl.Tests.Architecture --no-build -> 25 passed, 0 failed."
+    },
+    {
+      "id": "scope-3",
+      "criterion": "(Scope item 3, optional) Expose the class on the runs API (GET /api/jobs/{id}/runs issue objects) as a severity field (info / error).",
+      "plannedImplementation": "ScrapeRunIssueView gained a trailing string Severity property. ScrapeRunViewMapper.MapIssue populates it via ScrapeRunIssueSeverityClassifier.ToSeverityLabel(issue.IssueType), which returns the literal 'info' or 'error'. GET /api/jobs/{id}/runs (Program.cs, unchanged) already serializes ScrapeRunView -> Issues -> ScrapeRunIssueView as-is, so the new field flows through automatically.",
+      "plannedVerification": "ScrapeRunIssueViewExposesItsSeverityTests records one PriceBandCapHit and one SearchPageFailed issue through the real ScrapeRunReportStore.RecordIssue/GetRunsForJob path (the same path the API endpoint calls) and asserts Severity is 'info' for the former and 'error' for the latter.",
+      "materialConcerns": [
+        "No dedicated Integration-project test hits GET /api/jobs/{id}/runs over HTTP to check the JSON field name/casing on the wire; ScrapeRunReportStore.GetRunsForJob is exercised directly instead, which is the only method that endpoint calls, so the model-level behaviour is covered but the wire-format assertion is not."
+      ],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A PriceBandCapHit issue's Severity is 'info'.",
+        "whenHeldValueAbsent": "A SearchPageFailed issue recorded on the same run in the same test has Severity 'error' -- proving the field reflects the classifier's per-issue-type decision rather than a run-level constant."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "tests/MarketMakerEtl.Tests.Unit/Core/Data/ScrapeRunIssueViewExposesItsSeverityTests.cs passes: `dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~ScrapeRunIssueViewExposesItsSeverityTests\"` -> 1 passed, 0 failed."
+    }
+  ]
+}

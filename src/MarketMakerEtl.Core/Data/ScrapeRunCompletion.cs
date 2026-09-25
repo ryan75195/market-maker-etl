@@ -8,8 +8,13 @@ internal static class ScrapeRunCompletion
 {
     public static async Task<ScrapeRunStatus> DetermineStatus(EtlDbContext db, int runId, CancellationToken ct)
     {
-        var hasIssues = await db.ScrapeRunIssues.AnyAsync(issue => issue.ScrapeRunId == runId, ct);
-        return hasIssues ? ScrapeRunStatus.CompletedWithErrors : ScrapeRunStatus.Completed;
+        var issueTypes = await db.ScrapeRunIssues
+            .Where(issue => issue.ScrapeRunId == runId)
+            .Select(issue => issue.IssueType)
+            .ToListAsync(ct);
+
+        var hasFailure = issueTypes.Any(ScrapeRunIssueSeverityClassifier.IsFailure);
+        return hasFailure ? ScrapeRunStatus.CompletedWithErrors : ScrapeRunStatus.Completed;
     }
 
     public static void Apply(ScrapeRunEntity run, ScrapeRunStatus status, RunCompletionCounts counts)

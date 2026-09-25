@@ -8,4 +8,5 @@ public sealed record ScrapeRunIssueView(
     string ErrorMessage,
     string Phase,
     int? HttpStatusCode,
-    DateTime CreatedUtc);
+    DateTime CreatedUtc,
+    string Severity);
