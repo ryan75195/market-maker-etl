@@ -26,13 +26,46 @@ internal readonly record struct BandOutcome(SearchPageResult Result, bool Pruned
 
 internal readonly record struct QueuedBand(PriceBand Band);
 
+internal enum ClaimStatus
+{
+    Claimed,
+    Wait,
+    Done,
+}
+
 internal sealed class CollectorRunState
 {
     internal readonly object SyncRoot = new();
     internal int Fetched;
+    internal int InFlight;
     internal int BandsPruned;
     internal int BandsOverCapacityUnsplit;
     internal int? TotalReported;
+    private TaskCompletionSource<bool> _signal = CreateSignal();
+
+    internal Task CurrentSignalUnderLock()
+    {
+        lock (SyncRoot)
+        {
+            return _signal.Task;
+        }
+    }
+
+    internal void PulseAll()
+    {
+        TaskCompletionSource<bool> previous;
+
+        lock (SyncRoot)
+        {
+            previous = _signal;
+            _signal = CreateSignal();
+        }
+
+        previous.TrySetResult(true);
+    }
+
+    private static TaskCompletionSource<bool> CreateSignal() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
 internal sealed class PriceBandQueue
@@ -200,6 +233,128 @@ internal static class BandOutcomeApplier
         PriceBandResultMath.ReportedCount(result) >= MinimumCountRequiringSplit && band.CanSplit(MinimumBandWidth);
 }
 
+internal sealed class PriceBandWorkerPool
+{
+    private readonly int _maxBandsPerDirection;
+
+    internal PriceBandWorkerPool(int maxBandsPerDirection) => _maxBandsPerDirection = maxBandsPerDirection;
+
+    internal async Task RunAsync(
+        int concurrency,
+        PriceBandQueue queue,
+        CollectorRunState state,
+        Func<QueuedBand, PriceBandQueue, CancellationToken, Task<BandOutcome?>> processBand,
+        CancellationToken ct)
+    {
+        using var faultCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        await Task.WhenAll(Enumerable.Range(0, concurrency).Select(_ => RunWorker(queue, state, faultCts, processBand)));
+    }
+
+    private async Task RunWorker(
+        PriceBandQueue queue,
+        CollectorRunState state,
+        CancellationTokenSource faultCts,
+        Func<QueuedBand, PriceBandQueue, CancellationToken, Task<BandOutcome?>> processBand)
+    {
+        try
+        {
+            while (true)
+            {
+                var status = ClaimNext(queue, state, out var queued, out var waitTask);
+                if (status == ClaimStatus.Done)
+                {
+                    return;
+                }
+
+                if (status == ClaimStatus.Wait)
+                {
+                    await waitTask.WaitAsync(faultCts.Token);
+                    continue;
+                }
+
+                await ProcessClaimedBand(queued, queue, state, processBand, faultCts.Token);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await faultCts.CancelAsync();
+            throw;
+        }
+    }
+
+    private ClaimStatus ClaimNext(PriceBandQueue queue, CollectorRunState state, out QueuedBand queued, out Task waitTask)
+    {
+        lock (state.SyncRoot)
+        {
+            if (state.Fetched >= _maxBandsPerDirection)
+            {
+                queued = default;
+                waitTask = Task.CompletedTask;
+                return ClaimStatus.Done;
+            }
+
+            if (queue.Count > 0)
+            {
+                queued = queue.Dequeue();
+                state.Fetched++;
+                state.InFlight++;
+                waitTask = Task.CompletedTask;
+                return ClaimStatus.Claimed;
+            }
+
+            queued = default;
+
+            if (state.InFlight > 0)
+            {
+                waitTask = state.CurrentSignalUnderLock();
+                return ClaimStatus.Wait;
+            }
+
+            waitTask = Task.CompletedTask;
+            return ClaimStatus.Done;
+        }
+    }
+
+    private static async Task ProcessClaimedBand(
+        QueuedBand queued,
+        PriceBandQueue queue,
+        CollectorRunState state,
+        Func<QueuedBand, PriceBandQueue, CancellationToken, Task<BandOutcome?>> processBand,
+        CancellationToken ct)
+    {
+        var isSeedBand = queue.IsSeedBand(queued.Band);
+
+        try
+        {
+            var outcome = await processBand(queued, queue, ct);
+            if (outcome is not { } bandOutcome)
+            {
+                return;
+            }
+
+            lock (state.SyncRoot)
+            {
+                if (isSeedBand)
+                {
+                    state.TotalReported = PriceBandResultMath.AccumulateReportedTotal(state.TotalReported, bandOutcome.Result);
+                }
+
+                state.BandsPruned += bandOutcome.Pruned ? 1 : 0;
+                state.BandsOverCapacityUnsplit += bandOutcome.OverCapacity ? 1 : 0;
+            }
+        }
+        finally
+        {
+            lock (state.SyncRoot)
+            {
+                state.InFlight--;
+            }
+
+            state.PulseAll();
+        }
+    }
+}
+
 internal sealed class PriceBandCollectionRun
 {
     private readonly IPriceBandSearchUrlService _urls;
@@ -233,14 +388,14 @@ internal sealed class PriceBandCollectionRun
         var state = new CollectorRunState();
         var concurrency = Math.Max(1, _settings.SearchConcurrency);
 
-        var workers = new Task[concurrency];
-        for (var i = 0; i < concurrency; i++)
-        {
-            workers[i] = RunWorker(
-                searchTerm, sold, queue, backfill, pruneKnownBands, merged, knownSoldListingIds, state, ct);
-        }
-
-        await Task.WhenAll(workers);
+        var pool = new PriceBandWorkerPool(_settings.MaxBandsPerDirection);
+        await pool.RunAsync(
+            concurrency,
+            queue,
+            state,
+            (queued, q, token) => ProcessBand(
+                searchTerm, sold, queued, q, backfill, pruneKnownBands, merged, knownSoldListingIds, state, token),
+            ct);
 
         var capHit = queue.Count > 0;
         LogOutcome(searchTerm, sold, state.Fetched, merged.Count, state.TotalReported, capHit, state.BandsPruned);
@@ -258,57 +413,6 @@ internal sealed class PriceBandCollectionRun
             state.BandsOverCapacityUnsplit,
             backfillBudgetExhausted,
             _searchPageFailures);
-    }
-
-    private async Task RunWorker(
-        string searchTerm,
-        bool sold,
-        PriceBandQueue queue,
-        SoldBackfillPlanner? backfill,
-        bool pruneKnownBands,
-        Dictionary<string, ListingSummary> merged,
-        IReadOnlySet<string> knownSoldListingIds,
-        CollectorRunState state,
-        CancellationToken ct)
-    {
-        while (TryClaimNext(queue, state, out var queued))
-        {
-            var isSeedBand = queue.IsSeedBand(queued.Band);
-            var outcome = await ProcessBand(
-                searchTerm, sold, queued, queue, backfill, pruneKnownBands, merged, knownSoldListingIds, state, ct);
-
-            if (outcome is not { } bandOutcome)
-            {
-                continue;
-            }
-
-            lock (state.SyncRoot)
-            {
-                if (isSeedBand)
-                {
-                    state.TotalReported = PriceBandResultMath.AccumulateReportedTotal(state.TotalReported, bandOutcome.Result);
-                }
-
-                state.BandsPruned += bandOutcome.Pruned ? 1 : 0;
-                state.BandsOverCapacityUnsplit += bandOutcome.OverCapacity ? 1 : 0;
-            }
-        }
-    }
-
-    private bool TryClaimNext(PriceBandQueue queue, CollectorRunState state, out QueuedBand queued)
-    {
-        lock (state.SyncRoot)
-        {
-            if (state.Fetched < _settings.MaxBandsPerDirection && queue.Count > 0)
-            {
-                queued = queue.Dequeue();
-                state.Fetched++;
-                return true;
-            }
-        }
-
-        queued = default;
-        return false;
     }
 
     private async Task<BandOutcome?> ProcessBand(
