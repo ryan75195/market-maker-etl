@@ -96,4 +96,142 @@ public class TaxonomyDocumentParserTests
             Assert.That(itemType.NotStatedMeans, Is.Null);
         });
     }
+
+    [Test]
+    public void Should_throw_for_syntactically_invalid_json()
+    {
+        var exception = Assert.Throws<TaxonomyParseException>(() => TaxonomyDocumentParser.Parse("{ not json"));
+
+        Assert.That(exception!.Message, Does.Contain("JSON"));
+    }
+
+    [Test]
+    public void Should_throw_when_the_document_root_is_not_an_object()
+    {
+        var exception = Assert.Throws<TaxonomyParseException>(() => TaxonomyDocumentParser.Parse("[1, 2, 3]"));
+
+        Assert.That(exception!.Message, Does.Contain("JSON object"));
+    }
+
+    [Test]
+    public void Should_throw_when_questions_is_missing()
+    {
+        const string json = """{ "family": "x", "version": 1 }""";
+
+        var exception = Assert.Throws<TaxonomyParseException>(() => TaxonomyDocumentParser.Parse(json));
+
+        Assert.That(exception!.Message, Does.Contain("questions"));
+    }
+
+    [Test]
+    public void Should_throw_when_questions_is_not_an_object()
+    {
+        const string json = """{ "family": "x", "version": 1, "questions": "not-an-object" }""";
+
+        var exception = Assert.Throws<TaxonomyParseException>(() => TaxonomyDocumentParser.Parse(json));
+
+        Assert.That(exception!.Message, Does.Contain("questions"));
+    }
+
+    [Test]
+    public void Should_throw_when_a_question_is_not_an_object()
+    {
+        const string json = """
+            {
+             "family": "x",
+             "version": 1,
+             "questions": { "item_type": "not-an-object" }
+            }
+            """;
+
+        var exception = Assert.Throws<TaxonomyParseException>(() => TaxonomyDocumentParser.Parse(json));
+
+        Assert.That(exception!.Message, Does.Contain("item_type"));
+    }
+
+    [Test]
+    public void Should_throw_when_criteria_is_not_an_object()
+    {
+        const string json = """
+            {
+             "family": "x",
+             "version": 1,
+             "questions": {
+              "item_type": {
+               "instructions": "What is this?",
+               "criteria": ["a", "b"]
+              }
+             }
+            }
+            """;
+
+        var exception = Assert.Throws<TaxonomyParseException>(() => TaxonomyDocumentParser.Parse(json));
+
+        Assert.That(exception!.Message, Does.Contain("criteria"));
+    }
+
+    [Test]
+    public void Should_throw_when_a_criteria_value_is_not_a_string()
+    {
+        const string json = """
+            {
+             "family": "x",
+             "version": 1,
+             "questions": {
+              "item_type": {
+               "instructions": "What is this?",
+               "criteria": { "console": 1, "controller": "A controller." }
+              }
+             }
+            }
+            """;
+
+        var exception = Assert.Throws<TaxonomyParseException>(() => TaxonomyDocumentParser.Parse(json));
+
+        Assert.That(exception!.Message, Does.Contain("console"));
+    }
+
+    [Test]
+    public void Should_throw_when_ask_when_is_not_an_array()
+    {
+        const string json = """
+            {
+             "family": "x",
+             "version": 1,
+             "questions": {
+              "item_type": {
+               "instructions": "What is this?",
+               "criteria": { "a": "A.", "b": "B." },
+               "askWhen": "not-an-array"
+              }
+             }
+            }
+            """;
+
+        var exception = Assert.Throws<TaxonomyParseException>(() => TaxonomyDocumentParser.Parse(json));
+
+        Assert.That(exception!.Message, Does.Contain("askWhen"));
+    }
+
+    [Test]
+    public void Should_throw_when_an_ask_when_entry_is_missing_any_of()
+    {
+        const string json = """
+            {
+             "family": "x",
+             "version": 1,
+             "questions": {
+              "item_type": {
+               "instructions": "What is this?",
+               "criteria": { "a": "A.", "b": "B." },
+               "askWhen": [ { "question": "item_type" } ]
+              }
+             }
+            }
+            """;
+
+        var exception = Assert.Throws<TaxonomyParseException>(() => TaxonomyDocumentParser.Parse(json));
+
+        Assert.That(exception!.Message, Does.Contain("anyOf"));
+    }
 }

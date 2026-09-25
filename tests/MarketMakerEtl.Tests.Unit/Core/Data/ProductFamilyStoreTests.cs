@@ -41,7 +41,7 @@ public class ProductFamilyStoreTests
     {
         var store = CreateStore();
 
-        var family = await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None);
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
 
         Assert.Multiple(() =>
         {
@@ -53,10 +53,21 @@ public class ProductFamilyStoreTests
     }
 
     [Test]
+    public async Task Should_return_null_when_creating_a_family_with_a_duplicate_key()
+    {
+        var store = CreateStore();
+        await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None);
+
+        var duplicate = await store.CreateFamily("ps5-controller", "Other Name", "other-model", CancellationToken.None);
+
+        Assert.That(duplicate, Is.Null);
+    }
+
+    [Test]
     public async Task Should_list_every_family_with_its_latest_taxonomy_version()
     {
         var store = CreateStore();
-        var family = await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None);
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
         await store.AddTaxonomyVersion(family.Id, "{}", CancellationToken.None);
         await store.AddTaxonomyVersion(family.Id, "{\"v\":2}", CancellationToken.None);
 
@@ -70,7 +81,7 @@ public class ProductFamilyStoreTests
     public async Task Should_return_a_single_family_by_id()
     {
         var store = CreateStore();
-        var created = await store.CreateFamily("iphone-15", "iPhone 15", "iphone-15", CancellationToken.None);
+        var created = (await store.CreateFamily("iphone-15", "iPhone 15", "iphone-15", CancellationToken.None))!;
 
         var family = await store.GetFamily(created.Id, CancellationToken.None);
 
@@ -91,7 +102,7 @@ public class ProductFamilyStoreTests
     public async Task Should_increment_taxonomy_versions_per_family_starting_at_one()
     {
         var store = CreateStore();
-        var family = await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None);
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
 
         var first = await store.AddTaxonomyVersion(family.Id, "{\"a\":1}", CancellationToken.None);
         var second = await store.AddTaxonomyVersion(family.Id, "{\"a\":2}", CancellationToken.None);
@@ -117,7 +128,7 @@ public class ProductFamilyStoreTests
     public async Task Should_round_trip_the_stored_questions_json_unchanged()
     {
         var store = CreateStore();
-        var family = await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None);
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
         const string questionsJson = "{\"family\":\"ps5-controller\",\"questions\":{\"a\":1}}";
 
         var added = await store.AddTaxonomyVersion(family.Id, questionsJson, CancellationToken.None);
@@ -130,7 +141,7 @@ public class ProductFamilyStoreTests
     public async Task Should_return_null_for_an_unknown_taxonomy_version()
     {
         var store = CreateStore();
-        var family = await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None);
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
 
         var version = await store.GetTaxonomyVersion(family.Id, 5, CancellationToken.None);
 
@@ -141,7 +152,7 @@ public class ProductFamilyStoreTests
     public async Task Should_return_the_highest_version_as_the_latest_taxonomy_version()
     {
         var store = CreateStore();
-        var family = await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None);
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
         await store.AddTaxonomyVersion(family.Id, "{\"v\":1}", CancellationToken.None);
         await store.AddTaxonomyVersion(family.Id, "{\"v\":2}", CancellationToken.None);
 
@@ -154,7 +165,7 @@ public class ProductFamilyStoreTests
     public async Task Should_return_null_latest_taxonomy_version_for_a_family_with_none()
     {
         var store = CreateStore();
-        var family = await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None);
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
 
         var latest = await store.GetLatestTaxonomyVersion(family.Id, CancellationToken.None);
 
@@ -165,7 +176,7 @@ public class ProductFamilyStoreTests
     public async Task Should_set_and_clear_a_jobs_family()
     {
         var store = CreateStore();
-        var family = await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None);
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
         var jobId = await CreateJob();
 
         var setResult = await store.SetJobFamily(jobId, family.Id, CancellationToken.None);

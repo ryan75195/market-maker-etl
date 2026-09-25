@@ -1,6 +1,6 @@
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Taxonomies;
 using MarketMakerEtl.Core.Services;
 
 namespace MarketMakerEtl.Api;
@@ -69,7 +69,9 @@ public static class FamilyEndpoints
         }
 
         var family = await families.CreateFamily(request.Key, request.Name, request.ModelName, ct);
-        return Results.Created($"/api/families/{family.Id}", family);
+        return family is null
+            ? Results.Conflict($"A product family with key '{request.Key}' already exists.")
+            : Results.Created($"/api/families/{family.Id}", family);
     }
 
     private static async Task<IResult> AddTaxonomyVersion(
@@ -83,9 +85,20 @@ public static class FamilyEndpoints
             return Results.NotFound();
         }
 
-        var payload = await request.ReadFromJsonAsync<JsonElement>(ct);
-        var questionsJson = payload.GetRawText();
-        var validation = TaxonomyValidator.Validate(TaxonomyDocumentParser.Parse(questionsJson));
+        using var reader = new StreamReader(request.Body);
+        var questionsJson = await reader.ReadToEndAsync(ct);
+
+        TaxonomyDocument document;
+        try
+        {
+            document = TaxonomyDocumentParser.Parse(questionsJson);
+        }
+        catch (TaxonomyParseException ex)
+        {
+            return TaxonomyValidationProblem([ex.Message]);
+        }
+
+        var validation = TaxonomyValidator.Validate(document);
         if (!validation.IsValid)
         {
             return TaxonomyValidationProblem(validation.Errors);

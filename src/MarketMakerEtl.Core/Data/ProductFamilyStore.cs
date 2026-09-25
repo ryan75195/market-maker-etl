@@ -14,9 +14,15 @@ public sealed class ProductFamilyStore : IProductFamilyStore
         _factory = factory;
     }
 
-    public async Task<ProductFamilyView> CreateFamily(string key, string name, string modelName, CancellationToken ct)
+    public async Task<ProductFamilyView?> CreateFamily(string key, string name, string modelName, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
+        var keyAlreadyExists = await db.ProductFamilies.AnyAsync(f => f.Key == key, ct);
+        if (keyAlreadyExists)
+        {
+            return null;
+        }
+
         var family = new ProductFamilyEntity
         {
             Key = key,
@@ -25,7 +31,16 @@ public sealed class ProductFamilyStore : IProductFamilyStore
             CreatedUtc = DateTime.UtcNow
         };
         db.ProductFamilies.Add(family);
-        await db.SaveChangesAsync(ct);
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return null;
+        }
+
         return MapToView(family, null);
     }
 

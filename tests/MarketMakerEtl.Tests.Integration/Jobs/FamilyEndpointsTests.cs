@@ -98,6 +98,68 @@ public class FamilyEndpointsTests : JobsApiTestBase
     }
 
     [Test]
+    public async Task Should_reject_creating_a_family_with_a_duplicate_key()
+    {
+        await Client.PostAsJsonAsync(
+            "/api/families",
+            new CreateProductFamilyRequest("duplicate-key", "First", "first-model"));
+
+        var response = await Client.PostAsJsonAsync(
+            "/api/families",
+            new CreateProductFamilyRequest("duplicate-key", "Second", "second-model"));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
+    }
+
+    [TestCase("not json at all", TestName = "Should_reject_a_syntactically_invalid_body")]
+    [TestCase("""["not", "an", "object"]""", TestName = "Should_reject_a_non_object_body")]
+    [TestCase(
+        """{ "family": "x", "version": 1, "questions": "not-an-object" }""",
+        TestName = "Should_reject_questions_that_is_not_an_object")]
+    [TestCase(
+        """{ "family": "x", "version": 1, "questions": { "item_type": "not-an-object" } }""",
+        TestName = "Should_reject_a_question_that_is_not_an_object")]
+    [TestCase(
+        """
+        {
+         "family": "x",
+         "version": 1,
+         "questions": {
+          "item_type": { "instructions": "What is this?", "criteria": ["a", "b"] }
+         }
+        }
+        """,
+        TestName = "Should_reject_criteria_that_is_not_an_object")]
+    [TestCase(
+        """
+        {
+         "family": "x",
+         "version": 1,
+         "questions": {
+          "item_type": {
+           "instructions": "What is this?",
+           "criteria": { "a": "A.", "b": "B." },
+           "askWhen": "not-an-array"
+          }
+         }
+        }
+        """,
+        TestName = "Should_reject_ask_when_that_is_not_an_array")]
+    public async Task Should_reject_a_malformed_taxonomy_body_with_400(string malformedJson)
+    {
+        var family = await CreateFamily(Guid.NewGuid().ToString("N"));
+
+        var response = await PostTaxonomy(family.Id, malformedJson);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+            Assert.That(body, Is.Not.Empty);
+        });
+    }
+
+    [Test]
     public async Task Should_return_not_found_for_unknown_family_and_taxonomy_version()
     {
         var family = await CreateFamily("unknown-lookups");

@@ -7,13 +7,42 @@ public static class TaxonomyDocumentParser
 {
     public static TaxonomyDocument Parse(string questionsJson)
     {
-        using var document = JsonDocument.Parse(questionsJson);
+        using var document = ParseDocument(questionsJson);
         var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new TaxonomyParseException("Taxonomy document must be a JSON object.");
+        }
+
         return new TaxonomyDocument(ReadFamily(root), ReadVersion(root), ReadQuestions(root));
     }
 
-    private static string ReadFamily(JsonElement root) =>
-        root.TryGetProperty("family", out var value) ? value.GetString() ?? string.Empty : string.Empty;
+    private static JsonDocument ParseDocument(string questionsJson)
+    {
+        try
+        {
+            return JsonDocument.Parse(questionsJson);
+        }
+        catch (JsonException ex)
+        {
+            throw new TaxonomyParseException($"Taxonomy document is not valid JSON: {ex.Message}", ex);
+        }
+    }
+
+    private static string ReadFamily(JsonElement root)
+    {
+        if (!root.TryGetProperty("family", out var value))
+        {
+            return string.Empty;
+        }
+
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new TaxonomyParseException("family must be a string.");
+        }
+
+        return value.GetString() ?? string.Empty;
+    }
 
     private static int ReadVersion(JsonElement root) =>
         root.TryGetProperty("version", out var value) && value.ValueKind == JsonValueKind.Number
@@ -22,10 +51,14 @@ public static class TaxonomyDocumentParser
 
     private static IReadOnlyList<TaxonomyQuestion> ReadQuestions(JsonElement root)
     {
-        if (!root.TryGetProperty("questions", out var questionsElement)
-            || questionsElement.ValueKind != JsonValueKind.Object)
+        if (!root.TryGetProperty("questions", out var questionsElement))
         {
-            return [];
+            throw new TaxonomyParseException("questions is required.");
+        }
+
+        if (questionsElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new TaxonomyParseException("questions must be a JSON object.");
         }
 
         return questionsElement.EnumerateObject()
@@ -33,56 +66,130 @@ public static class TaxonomyDocumentParser
             .ToList();
     }
 
-    private static TaxonomyQuestion ReadQuestion(string key, JsonElement element) =>
-        new(key, ReadInstructions(element), ReadCriteria(element), ReadAskWhen(element), ReadNotStatedMeans(element));
-
-    private static string ReadInstructions(JsonElement element) =>
-        element.TryGetProperty("instructions", out var value) ? value.GetString() ?? string.Empty : string.Empty;
-
-    private static IReadOnlyDictionary<string, string> ReadCriteria(JsonElement element)
+    private static TaxonomyQuestion ReadQuestion(string key, JsonElement element)
     {
-        if (!element.TryGetProperty("criteria", out var criteriaElement)
-            || criteriaElement.ValueKind != JsonValueKind.Object)
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            throw new TaxonomyParseException($"Question '{key}' must be a JSON object.");
+        }
+
+        return new(
+            key,
+            ReadInstructions(key, element),
+            ReadCriteria(key, element),
+            ReadAskWhen(key, element),
+            ReadNotStatedMeans(key, element));
+    }
+
+    private static string ReadInstructions(string questionKey, JsonElement element)
+    {
+        if (!element.TryGetProperty("instructions", out var value))
+        {
+            return string.Empty;
+        }
+
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new TaxonomyParseException($"Question '{questionKey}' instructions must be a string.");
+        }
+
+        return value.GetString() ?? string.Empty;
+    }
+
+    private static IReadOnlyDictionary<string, string> ReadCriteria(string questionKey, JsonElement element)
+    {
+        if (!element.TryGetProperty("criteria", out var criteriaElement))
         {
             return new Dictionary<string, string>();
         }
 
-        return criteriaElement.EnumerateObject()
-            .ToDictionary(property => property.Name, property => property.Value.GetString() ?? string.Empty);
+        if (criteriaElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new TaxonomyParseException($"Question '{questionKey}' criteria must be a JSON object of strings.");
+        }
+
+        var criteria = new Dictionary<string, string>();
+        foreach (var property in criteriaElement.EnumerateObject())
+        {
+            if (property.Value.ValueKind != JsonValueKind.String)
+            {
+                throw new TaxonomyParseException(
+                    $"Question '{questionKey}' criteria value '{property.Name}' must be a string.");
+            }
+
+            criteria[property.Name] = property.Value.GetString() ?? string.Empty;
+        }
+
+        return criteria;
     }
 
-    private static IReadOnlyList<TaxonomyAskWhenClause> ReadAskWhen(JsonElement element)
+    private static IReadOnlyList<TaxonomyAskWhenClause> ReadAskWhen(string questionKey, JsonElement element)
     {
-        if (!element.TryGetProperty("askWhen", out var askWhenElement)
-            || askWhenElement.ValueKind != JsonValueKind.Array)
+        if (!element.TryGetProperty("askWhen", out var askWhenElement))
         {
             return [];
         }
 
-        return askWhenElement.EnumerateArray().Select(ReadAskWhenClause).ToList();
+        if (askWhenElement.ValueKind != JsonValueKind.Array)
+        {
+            throw new TaxonomyParseException($"Question '{questionKey}' askWhen must be an array.");
+        }
+
+        return askWhenElement.EnumerateArray()
+            .Select(clause => ReadAskWhenClause(questionKey, clause))
+            .ToList();
     }
 
-    private static TaxonomyAskWhenClause ReadAskWhenClause(JsonElement element)
+    private static TaxonomyAskWhenClause ReadAskWhenClause(string questionKey, JsonElement element)
     {
-        var question = element.TryGetProperty("question", out var questionValue)
-            ? questionValue.GetString() ?? string.Empty
-            : string.Empty;
-        var anyOf = ReadAnyOf(element);
-        return new TaxonomyAskWhenClause(question, anyOf);
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            throw new TaxonomyParseException($"Question '{questionKey}' askWhen entries must be objects.");
+        }
+
+        if (!element.TryGetProperty("question", out var questionValue)
+            || questionValue.ValueKind != JsonValueKind.String)
+        {
+            throw new TaxonomyParseException(
+                $"Question '{questionKey}' askWhen entries must have a string 'question'.");
+        }
+
+        return new TaxonomyAskWhenClause(questionValue.GetString() ?? string.Empty, ReadAnyOf(questionKey, element));
     }
 
-    private static IReadOnlyList<string> ReadAnyOf(JsonElement element)
+    private static IReadOnlyList<string> ReadAnyOf(string questionKey, JsonElement element)
     {
         if (!element.TryGetProperty("anyOf", out var anyOfElement) || anyOfElement.ValueKind != JsonValueKind.Array)
         {
-            return [];
+            throw new TaxonomyParseException($"Question '{questionKey}' askWhen entries must have an array 'anyOf'.");
         }
 
-        return anyOfElement.EnumerateArray().Select(value => value.GetString() ?? string.Empty).ToList();
+        var values = new List<string>();
+        foreach (var value in anyOfElement.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.String)
+            {
+                throw new TaxonomyParseException($"Question '{questionKey}' askWhen anyOf entries must be strings.");
+            }
+
+            values.Add(value.GetString() ?? string.Empty);
+        }
+
+        return values;
     }
 
-    private static string? ReadNotStatedMeans(JsonElement element) =>
-        element.TryGetProperty("notStatedMeans", out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
+    private static string? ReadNotStatedMeans(string questionKey, JsonElement element)
+    {
+        if (!element.TryGetProperty("notStatedMeans", out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new TaxonomyParseException($"Question '{questionKey}' notStatedMeans must be a string.");
+        }
+
+        return value.GetString();
+    }
 }
