@@ -1,5 +1,6 @@
 ﻿using MarketMakerEtl.Core;
 using MarketMakerEtl.Core.Data;
+using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Etl.Workers;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +15,16 @@ using (var scope = host.Services.CreateScope())
 {
     var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
     await factory.ApplyMigrations();
+
+    var staleRunRecovery = scope.ServiceProvider.GetRequiredService<IStaleScrapeRunRecoveryService>();
+    var failedStaleRuns = await staleRunRecovery.FailRunsLeftRunning(CancellationToken.None);
+
+    if (failedStaleRuns > 0)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(
+            "Failed {Count} scrape run(s) left Running by a previous ETL process at startup.", failedStaleRuns);
+    }
 }
 
 await host.RunAsync();

@@ -77,6 +77,7 @@ public static class ServiceCollectionExtensions
             sp.GetServices<IItemPageParser>()));
         services.AddSingleton<IScrapeRunStateService, ScrapeRunStateService>();
         services.AddSingleton<IScrapeStore, ScrapeStore>();
+        services.AddSingleton<IStaleScrapeRunRecoveryService, StaleScrapeRunRecoveryService>();
         services.AddSingleton<IScrapeRunReportStore, ScrapeRunReportStore>();
         services.AddSingleton<IJobStore, JobStore>();
         services.AddSingleton<ICategoryStore, CategoryStore>();

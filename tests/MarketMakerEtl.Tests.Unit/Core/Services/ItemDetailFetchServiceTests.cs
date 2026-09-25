@@ -69,6 +69,28 @@ public class ItemDetailFetchServiceTests
     }
 
     [Test]
+    public async Task Should_mark_the_listing_failed_and_continue_when_the_fetch_times_out()
+    {
+        var store = Substitute.For<IItemDetailStore>();
+        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([Target]);
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Target.Url!, Arg.Any<CancellationToken>())
+            .Returns<string>(_ => throw new TimeoutException($"Fetching {Target.Url} timed out after 00:00:05."));
+        var parser = BuildParser(Marketplace.Mercari, BuildPage());
+        var service = new ItemDetailFetchService(store, client, [parser], Options(), NullLogger<ItemDetailFetchService>.Instance);
+
+        var issues = await service.FetchDetails(JobId, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(issues, Has.Count.EqualTo(1));
+            Assert.That(issues[0].ErrorMessage, Does.Contain("timed out"));
+        });
+        await store.Received(1).MarkDetailFetchFailed(Target.Id, Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task Should_record_the_innermost_exception_message_and_type_when_the_save_fails()
     {
         var store = Substitute.For<IItemDetailStore>();

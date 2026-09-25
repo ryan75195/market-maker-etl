@@ -234,6 +234,30 @@ public class SoldBackfillPlannerTests
     }
 
     [Test]
+    public async Task Should_treat_a_timed_out_item_page_fetch_as_unresolved_rather_than_throw()
+    {
+        var listing = BuildListing("t0", "https://x/t0");
+        var page = new SearchPageResult([listing], TotalCount: 1);
+
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml("https://x/t0", Arg.Any<CancellationToken>())
+            .Returns<string>(_ => throw new TimeoutException("Fetching https://x/t0 timed out after 00:00:05."));
+
+        var itemParser = Substitute.For<IItemPageParser>();
+        var planner = new SoldBackfillPlanner(client, itemParser, SoldBackfillDays, 100, new FakeTimeProvider(Now));
+
+        SoldBackfillDecision decision = default;
+        Assert.DoesNotThrowAsync(async () => decision = await planner.Resolve(page, canSplit: true, CancellationToken.None));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(decision, Is.EqualTo(SoldBackfillDecision.Store(0, overflowed: false)));
+            Assert.That(planner.ResolvedDetails, Does.Not.ContainKey("t0"));
+            Assert.That(planner.BudgetExhausted, Is.False);
+        });
+    }
+
+    [Test]
     public async Task Should_not_let_an_unresolvable_midpoint_push_the_cutoff_later()
     {
         var n0 = BuildListing("u0", "https://x/u0");

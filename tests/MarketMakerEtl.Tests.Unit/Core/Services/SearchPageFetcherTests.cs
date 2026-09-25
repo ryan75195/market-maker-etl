@@ -1,4 +1,7 @@
+using System.Net;
+using System.Text;
 using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -78,5 +81,49 @@ public class SearchPageFetcherTests
 
         Assert.ThrowsAsync<OperationCanceledException>(async () =>
             await fetcher.Fetch("https://search", Band, CancellationToken.None));
+    }
+
+    [Test]
+    public async Task Should_return_a_failed_outcome_after_exhausting_attempts_when_every_fetch_times_out()
+    {
+        var handler = new NeverTerminatingScrapeHandler();
+        var content = Substitute.For<IScrapeContentStore>();
+        var options = new ScrapeClientOptions(
+            "http://scraper.test", "key", TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(5));
+        var client = new HttpScrapeClient(
+            new HttpClient(handler), options, content, NullLogger<HttpScrapeClient>.Instance);
+
+        var fetcher = new SearchPageFetcher(
+            client, new MercariSearchParser(), maxAttempts: 2, baseDelaySeconds: 0, NullLogger.Instance);
+
+        var outcome = await fetcher.Fetch("https://search", Band, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(outcome.Result, Is.Null);
+            Assert.That(outcome.Failure, Is.Not.Null);
+            Assert.That(outcome.Failure!.Value.ErrorMessage, Does.Contain("timed out"));
+        });
+    }
+
+    private sealed class NeverTerminatingScrapeHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+
+            var body = path switch
+            {
+                "/api/NewJob" => "{\"jobId\":\"job-1\"}",
+                "/api/GetStatus" => "{\"job\":{\"jobId\":\"job-1\",\"status\":\"processing\"}}",
+                _ => "[]"
+            };
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            });
+        }
     }
 }
