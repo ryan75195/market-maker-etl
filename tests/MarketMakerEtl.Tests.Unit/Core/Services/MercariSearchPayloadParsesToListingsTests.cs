@@ -78,6 +78,14 @@ public class MercariSearchPayloadParsesToListingsTests
     }
 
     [Test]
+    public void Should_leave_sold_date_absent_when_parsing_a_captured_in_transaction_item()
+    {
+        var summary = new MercariSearchParser().Parse(CapturedPayload).Listings[2];
+
+        Assert.That(summary.SoldDate, Is.Null);
+    }
+
+    [Test]
     public void Should_mark_a_payload_item_that_is_sold_out_as_sold()
     {
         var summaries = new MercariSearchParser().Parse(SoldOutItemPayload).Listings;
