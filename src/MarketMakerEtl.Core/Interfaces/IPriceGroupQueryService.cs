@@ -1,0 +1,10 @@
+using MarketMakerEtl.Core.Models.PriceGroups;
+
+namespace MarketMakerEtl.Core.Interfaces;
+
+public interface IPriceGroupQueryService
+{
+    Task<IReadOnlyList<PriceGroupSummary>> GetPriceGroups(PriceGroupQuery query, CancellationToken ct);
+
+    Task<IReadOnlyList<PriceGroupListingResult>> GetGroupListings(PriceGroupListingsQuery query, CancellationToken ct);
+}
