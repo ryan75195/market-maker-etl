@@ -73,7 +73,7 @@ public class ClassificationReviewStoreTests
         await SeedRow(middle, versionId, "item_type", ClassificationSource.Model, confidence: 0.7);
         await SeedRow(highest, versionId, "item_type", ClassificationSource.Model, confidence: 0.8);
 
-        var queue = await store.GetReviewQueue(familyId, question: null, threshold: 0.9, take: 2, CancellationToken.None);
+        var queue = await store.GetReviewQueue(familyId, versionId, question: null, threshold: 0.9, take: 2, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -93,7 +93,7 @@ public class ClassificationReviewStoreTests
         await SeedRow(humanListing, versionId, "item_type", ClassificationSource.Human, confidence: 0.5);
         await SeedRow(notApplicableListing, versionId, "item_type", ClassificationSource.Model, confidence: 0.5, isApplicable: false);
 
-        var queue = await store.GetReviewQueue(familyId, question: null, threshold: 0.9, take: 50, CancellationToken.None);
+        var queue = await store.GetReviewQueue(familyId, versionId, question: null, threshold: 0.9, take: 50, CancellationToken.None);
 
         Assert.That(queue, Is.Empty);
     }
@@ -107,7 +107,7 @@ public class ClassificationReviewStoreTests
         await SeedRow(listing, versionId, "item_type", ClassificationSource.Model, confidence: 0.5);
         await SeedRow(listing, versionId, "edition", ClassificationSource.Model, confidence: 0.5);
 
-        var queue = await store.GetReviewQueue(familyId, question: "edition", threshold: 0.9, take: 50, CancellationToken.None);
+        var queue = await store.GetReviewQueue(familyId, versionId, question: "edition", threshold: 0.9, take: 50, CancellationToken.None);
 
         Assert.That(queue.Single().Question, Is.EqualTo("edition"));
     }
@@ -122,9 +122,28 @@ public class ClassificationReviewStoreTests
         await SeedRow(first, versionId, "item_type", ClassificationSource.Model, confidence: 0.5);
         await SeedRow(second, versionId, "item_type", ClassificationSource.Model, confidence: 0.6);
 
-        var summary = await store.GetReviewSummary(familyId, threshold: 0.9, CancellationToken.None);
+        var summary = await store.GetReviewSummary(familyId, versionId, threshold: 0.9, CancellationToken.None);
 
         Assert.That(summary.Single(c => c.Question == "item_type").Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task Should_exclude_rows_on_an_older_taxonomy_version_from_the_queue_and_summary()
+    {
+        var store = CreateStore();
+        var (familyId, jobId, oldVersionId) = await SeedFamily();
+        var newVersionId = await AddTaxonomyVersion(familyId);
+        var listing = await SeedListing(jobId, "m-stale-version");
+        await SeedRow(listing, oldVersionId, "item_type", ClassificationSource.Model, confidence: 0.5);
+
+        var queue = await store.GetReviewQueue(familyId, newVersionId, question: null, threshold: 0.9, take: 50, CancellationToken.None);
+        var summary = await store.GetReviewSummary(familyId, newVersionId, threshold: 0.9, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(queue, Is.Empty);
+            Assert.That(summary, Is.Empty);
+        });
     }
 
     [Test]
@@ -236,6 +255,21 @@ public class ClassificationReviewStoreTests
         db.TaxonomyVersions.Add(version);
         await db.SaveChangesAsync();
         return new SeededFamily(family.Id, job.Id, version.Id);
+    }
+
+    private async Task<int> AddTaxonomyVersion(int familyId)
+    {
+        await using var db = await _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>().CreateDbContextAsync();
+        var version = new TaxonomyVersionEntity
+        {
+            ProductFamilyId = familyId,
+            Version = 2,
+            QuestionsJson = GatedTaxonomyJson,
+            CreatedUtc = DateTime.UtcNow
+        };
+        db.TaxonomyVersions.Add(version);
+        await db.SaveChangesAsync();
+        return version.Id;
     }
 
     private async Task<int> SeedListing(int jobId, string listingId)

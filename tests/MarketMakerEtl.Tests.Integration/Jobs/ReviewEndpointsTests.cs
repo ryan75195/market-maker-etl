@@ -192,6 +192,7 @@ public class ReviewEndpointsTests : JobsApiTestBase
         {
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             Assert.That(lines, Has.Length.EqualTo(1));
+            Assert.That(text, Does.EndWith("\n"));
             Assert.That(exported!.ListingId, Is.EqualTo("m-export-human"));
             Assert.That(exported.Answers["item_type"], Is.EqualTo("console"));
         });

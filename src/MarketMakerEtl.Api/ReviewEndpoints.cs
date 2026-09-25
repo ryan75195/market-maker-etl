@@ -39,7 +39,8 @@ public static class ReviewEndpoints
             return Results.Ok(new List<ClassificationReviewItem>());
         }
 
-        var rows = await reviews.GetReviewQueue(familyId, question, options.ReviewThreshold, take, ct);
+        var rows = await reviews.GetReviewQueue(
+            familyId, family.LatestTaxonomyVersion.Id, question, options.ReviewThreshold, take, ct);
         var taxonomy = TaxonomyDocumentParser.Parse(family.LatestTaxonomyVersion.QuestionsJson);
         var items = BuildReviewItems(rows, taxonomy);
 
@@ -53,12 +54,18 @@ public static class ReviewEndpoints
         ClassificationReviewOptions options,
         CancellationToken ct)
     {
-        if (await families.GetFamily(familyId, ct) is null)
+        var family = await families.GetFamily(familyId, ct);
+        if (family is null)
         {
             return Results.NotFound();
         }
 
-        var counts = await reviews.GetReviewSummary(familyId, options.ReviewThreshold, ct);
+        if (family.LatestTaxonomyVersion is null)
+        {
+            return Results.Ok(new ClassificationReviewSummary([], 0));
+        }
+
+        var counts = await reviews.GetReviewSummary(familyId, family.LatestTaxonomyVersion.Id, options.ReviewThreshold, ct);
         return Results.Ok(new ClassificationReviewSummary(counts, counts.Sum(c => c.Count)));
     }
 
@@ -75,8 +82,8 @@ public static class ReviewEndpoints
         }
 
         var listings = await reviews.GetLabelExportRows(familyId, ct);
-        var lines = listings.Select(listing => BuildExportLine(listing, options.ReviewThreshold));
-        return Results.Text(string.Join('\n', lines), "application/jsonl");
+        var body = string.Concat(listings.Select(listing => BuildExportLine(listing, options.ReviewThreshold) + "\n"));
+        return Results.Text(body, "application/jsonl");
     }
 
     private static IReadOnlyList<ClassificationReviewItem> BuildReviewItems(
