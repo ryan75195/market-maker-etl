@@ -255,6 +255,41 @@ public class SoldBackfillPlannerTests
     }
 
     [Test]
+    public async Task Should_retain_the_parsed_detail_for_every_successfully_resolved_listing()
+    {
+        var newest = BuildListing("n0", "https://x/n0");
+        var oldest = BuildListing("o0", string.Empty);
+        var page = new SearchPageResult([newest, oldest], TotalCount: 2);
+        var detail = BuildDetail(daysAgo: 1);
+        var detailsByUrl = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["https://x/n0"] = detail,
+        };
+        var planner = BuildPlanner(detailsByUrl);
+
+        await planner.Resolve(page, canSplit: true, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(planner.ResolvedDetails, Contains.Key("n0"));
+            Assert.That(planner.ResolvedDetails["n0"], Is.EqualTo(detail));
+            Assert.That(planner.ResolvedDetails, Does.Not.ContainKey("o0"));
+        });
+    }
+
+    [Test]
+    public async Task Should_not_retain_a_detail_for_a_listing_whose_page_never_parses()
+    {
+        var listing = BuildListing("unparseable0", "https://x/unparseable0");
+        var page = new SearchPageResult([listing], TotalCount: 1);
+        var planner = BuildPlanner(new Dictionary<string, ItemPageListing>(StringComparer.Ordinal));
+
+        await planner.Resolve(page, canSplit: true, CancellationToken.None);
+
+        Assert.That(planner.ResolvedDetails, Does.Not.ContainKey("unparseable0"));
+    }
+
+    [Test]
     public void Should_compute_the_cutoff_from_the_injected_time_provider()
     {
         var client = Substitute.For<IScrapeClient>();

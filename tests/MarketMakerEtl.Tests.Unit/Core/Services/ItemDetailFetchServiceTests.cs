@@ -160,6 +160,35 @@ public class ItemDetailFetchServiceTests
         });
     }
 
+    [Test]
+    public async Task Should_apply_a_backfilled_detail_through_the_same_apply_item_detail_path()
+    {
+        var store = Substitute.For<IItemDetailStore>();
+        var detail = BuildPage();
+        store.GetListingEntityIds(JobId, Arg.Is<IReadOnlyCollection<string>>(ids => ids.Contains("listing-1")), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, int>(StringComparer.Ordinal) { ["listing-1"] = 1 });
+        var service = new ItemDetailFetchService(store, Substitute.For<IScrapeClient>(), [], Options());
+
+        await service.ApplyBackfilledDetails(
+            JobId, new Dictionary<string, ItemPageListing>(StringComparer.Ordinal) { ["listing-1"] = detail }, CancellationToken.None);
+
+        await store.Received(1).ApplyItemDetail(1, detail, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_do_nothing_when_there_are_no_backfilled_details_to_apply()
+    {
+        var store = Substitute.For<IItemDetailStore>();
+        var service = new ItemDetailFetchService(store, Substitute.For<IScrapeClient>(), [], Options());
+
+        await service.ApplyBackfilledDetails(
+            JobId, new Dictionary<string, ItemPageListing>(StringComparer.Ordinal), CancellationToken.None);
+
+        await store.DidNotReceive().GetListingEntityIds(
+            Arg.Any<int>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
+        await store.DidNotReceive().ApplyItemDetail(Arg.Any<int>(), Arg.Any<ItemPageListing>(), Arg.Any<CancellationToken>());
+    }
+
     private static ItemPageListing BuildPage() =>
         new(
             ListingId: null,

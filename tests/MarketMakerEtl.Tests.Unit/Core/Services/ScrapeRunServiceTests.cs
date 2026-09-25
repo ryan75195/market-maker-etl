@@ -175,6 +175,71 @@ public class ScrapeRunServiceTests
     }
 
     [Test]
+    public async Task Should_apply_backfilled_details_before_fetching_the_remaining_detail_targets()
+    {
+        var detail = new ItemPageListing(
+            ListingId: null,
+            Title: null,
+            Price: null,
+            Currency: null,
+            Condition: null,
+            BuyingFormat: null,
+            Status: "Sold",
+            SoldPrice: null,
+            SoldDate: null,
+            Seller: null,
+            PrimaryImageUrl: null);
+        var backfilledDetails = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
+        {
+            ["111111111111"] = detail,
+        };
+        var search = Substitute.For<ISearchPageService>();
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new SearchCollectionResult(
+                [new ListingSummary("111111111111", "PS5", 1m, "GBP", "https://x/itm/1", true, null, null, null)],
+                TotalReportedBySearch: 1,
+                Issues: [],
+                BackfilledDetails: backfilledDetails));
+        var store = Substitute.For<IScrapeStore>();
+        store.GetListings(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new List<ListingSummary>());
+        store.UpsertListings(Arg.Any<int>(), Arg.Any<IReadOnlyList<ListingSummary>>(), Arg.Any<CancellationToken>())
+            .Returns(new ListingUpsertSummary(0, 1, 0, 0));
+        var detailFetch = Substitute.For<IItemDetailFetchService>();
+        detailFetch.FetchDetails(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ScrapeRunIssueDetails>());
+        var service = new ScrapeRunService(search, store, detailFetch, Substitute.For<IScrapeRunReportStore>());
+
+        await service.Run(Work, CancellationToken.None);
+
+        Received.InOrder(() =>
+        {
+            detailFetch.ApplyBackfilledDetails(2, backfilledDetails, Arg.Any<CancellationToken>());
+            detailFetch.FetchDetails(2, Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Test]
+    public async Task Should_not_call_apply_backfilled_details_when_the_search_found_nothing_to_backfill()
+    {
+        var search = Substitute.For<ISearchPageService>();
+        search.Collect("ps5", Marketplace.Ebay, Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new SearchCollectionResult([], TotalReportedBySearch: null, Issues: []));
+        var store = Substitute.For<IScrapeStore>();
+        store.GetListings(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new List<ListingSummary>());
+        store.UpsertListings(Arg.Any<int>(), Arg.Any<IReadOnlyList<ListingSummary>>(), Arg.Any<CancellationToken>())
+            .Returns(new ListingUpsertSummary(0, 0, 0, 0));
+        var detailFetch = Substitute.For<IItemDetailFetchService>();
+        detailFetch.FetchDetails(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ScrapeRunIssueDetails>());
+        var service = new ScrapeRunService(search, store, detailFetch, Substitute.For<IScrapeRunReportStore>());
+
+        await service.Run(Work, CancellationToken.None);
+
+        await detailFetch.DidNotReceive().ApplyBackfilledDetails(
+            Arg.Any<int>(), Arg.Any<IReadOnlyDictionary<string, ItemPageListing>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task Should_pass_the_jobs_existing_sold_listing_ids_as_known_sold_listings()
     {
         var search = Substitute.For<ISearchPageService>();

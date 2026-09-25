@@ -13,7 +13,8 @@ internal sealed record PriceBandCollectionSummary(
     DateTime? BackfillCutoffUtc = null,
     int BandsOverCapacityUnsplit = 0,
     bool BackfillBudgetExhausted = false,
-    IReadOnlyList<SearchPageFailure>? SearchPageFailures = null);
+    IReadOnlyList<SearchPageFailure>? SearchPageFailures = null,
+    IReadOnlyDictionary<string, ItemPageListing>? BackfillDetails = null);
 
 internal sealed record MercariCollectionSettings(
     int MaxBandsPerDirection,
@@ -412,7 +413,8 @@ internal sealed class PriceBandCollectionRun
             backfill?.CutoffUtc,
             state.BandsOverCapacityUnsplit,
             backfillBudgetExhausted,
-            _searchPageFailures);
+            _searchPageFailures,
+            backfill?.ResolvedDetails);
     }
 
     private async Task<BandOutcome?> ProcessBand(

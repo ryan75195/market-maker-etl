@@ -6,4 +6,5 @@ public sealed record SearchCollectionResult(
     IReadOnlyList<ListingSummary> Listings,
     int? TotalReportedBySearch,
     IReadOnlyList<ScrapeRunIssueDetails> Issues,
-    int BackfillItemPageFetches = 0);
+    int BackfillItemPageFetches = 0,
+    IReadOnlyDictionary<string, ItemPageListing>? BackfilledDetails = null);

@@ -1,0 +1,96 @@
+{
+  "criteria": [
+    {
+      "id": "scope-1",
+      "criterion": "SoldBackfillPlanner retains the successfully parsed ItemPageListing (which already carries RawJson) for each resolved listing, exposed after collection via PriceBandCollectionSummary/SearchCollectionResult, bounded by the existing Scrape:MaxBackfillItemPageFetches budget, and safe under #62's concurrent bands.",
+      "plannedImplementation": "SoldBackfillPlanner gained a ConcurrentDictionary<string, ItemPageListing> _resolvedDetails, written in ResolveDate only when FetchDetail returns a non-null parsed page (before the DateLookup is built), keyed by the same listing.ListingId already used as the _dateCache key. Exposed as internal IReadOnlyDictionary<string, ItemPageListing> ResolvedDetails. Because DateOf caches the in-flight Task per listing id, ResolveDate runs at most once per unique listing regardless of how many concurrent bands ask for it, so at most one dictionary entry is ever written per listing and the dictionary can never exceed the number of unique successful fetches, itself capped by _maxItemPageFetches (Scrape:MaxBackfillItemPageFetches). PriceBandCollectionRun.Execute reads backfill.ResolvedDetails only after PriceBandWorkerPool.RunAsync's Task.WhenAll over all concurrent band workers has completed, so the read happens with no bands still writing -- no new locking was needed. PriceBandCollectionSummary.BackfillDetails and SearchCollectionResult.BackfilledDetails carry it out to ScrapeRunService.",
+      "plannedVerification": "SoldBackfillPlannerTests.Should_retain_the_parsed_detail_for_every_successfully_resolved_listing and Should_not_retain_a_detail_for_a_listing_whose_page_never_parses exercise ResolveDate directly. SearchPageServiceTests.Should_expose_backfill_resolved_item_pages_for_the_run_to_persist drives a full Mercari band search with CollectSold true and asserts SearchCollectionResult.BackfilledDetails carries the resolved detail keyed by ListingId. MercariPriceBandCollectorTests' existing concurrency tests (Should_overlap_search_fetches_up_to_the_configured_limit..., Should_keep_idle_workers_available_to_fetch_a_late_splits_children_concurrently) already exercise SearchConcurrency > 1 against the modified planner/collector and continue to pass unchanged, confirming the addition did not disturb #62's concurrent-band behaviour.",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A listing whose item page parses successfully during backfill appears in ResolvedDetails keyed by its ListingId, with the exact ItemPageListing instance the parser returned.",
+        "whenHeldValueAbsent": "Should_not_retain_a_detail_for_a_listing_whose_page_never_parses uses the same planner and Resolve() call but a parser that never returns a page for the listing's URL, and ResolvedDetails has no entry for that listing -- proving only successfully parsed pages are retained, not every listing the planner looks at."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~SoldBackfillPlannerTests|FullyQualifiedName~SearchPageServiceTests\" -> 56 passed as part of the combined filtered run (SoldBackfillPlannerTests + SearchPageServiceTests + others below), 0 failed; full suite dotnet test tests/MarketMakerEtl.Tests.Unit -> 328 passed, 0 failed."
+    },
+    {
+      "id": "scope-2",
+      "criterion": "After the search results are stored, the retained backfill details are persisted through the same ItemDetailStore path the detail phase uses (description, sale date, segmentation fields, sellers, raw JSON identical), those listings are marked detailed so ItemDetailFetchService skips them, and items whose parse failed or resolved as unresolved stay eligible for the normal detail phase.",
+      "plannedImplementation": "IItemDetailStore.GetListingEntityIds(jobId, listingIds, ct) is a read-only lookup (no writes, no parallel save path) resolving already-upserted listing rows to entity ids. IItemDetailFetchService.ApplyBackfilledDetails(jobId, detailsByListingId, ct) resolves those entity ids and then calls the pre-existing IItemDetailStore.ApplyItemDetail(entityId, detail, ct) once per match -- the identical method ItemDetailFetchService.FetchDetail already calls for freshly fetched pages -- so ApplyDetailFields, ApplySegmentationDetailFields, SellerUpserter.Apply, and UpsertItemDetailRawData all run exactly as they do in the normal detail phase, and ApplyItemDetail's own listing.DetailFetchedUtc = DateTime.UtcNow stamp is what later excludes the listing from GetListingsNeedingDetail's `l.DetailFetchedUtc == null` filter -- no new selection logic was added. ScrapeRunService.Run calls ApplyBackfilledDetails right after UpsertListings and before FetchDetails. Listings the planner could not resolve are never added to SoldBackfillPlanner.ResolvedDetails (see scope-1), so they never appear in detailsByListingId and are left with DetailFetchedUtc still null, keeping them eligible for the ordinary FetchDetails pass.",
+      "plannedVerification": "ItemDetailFetchServiceTests.Should_apply_a_backfilled_detail_through_the_same_apply_item_detail_path and Should_do_nothing_when_there_are_no_backfilled_details_to_apply (mock IItemDetailStore) prove ApplyBackfilledDetails calls the same ApplyItemDetail method with the resolved entity id and detail. ItemDetailStoreTests.Should_map_listing_ids_to_entity_ids_for_only_the_matching_job_and_requested_ids (real SQLite) proves the lookup is scoped to the given job and only returns requested, existing ids. ScrapeRunServiceTests.Should_apply_backfilled_details_before_fetching_the_remaining_detail_targets proves ScrapeRunService calls ApplyBackfilledDetails before FetchDetails (Received.InOrder), and Should_not_call_apply_backfilled_details_when_the_search_found_nothing_to_backfill proves it is skipped when there is nothing to apply. BackfilledSoldDetailsSkipTheDetailPhaseTests (real SQLite database, real ScrapeStore/ItemDetailStore/ItemDetailFetchService/ScrapeRunService, real MercariItemPageParser parsing the existing item-sold-m44688360101.html fixture) runs the full ScrapeRunService.Run pipeline and asserts the persisted listing has the fixture's sold price/date and description, a Sellers row for the fixture's seller, a gzip ListingRawData row, DetailFetchedUtc set, and -- via a fake counting IScrapeClient -- that the listing's item-page URL was requested exactly once for the whole run (i.e. the detail phase made no further request for it).",
+      "materialConcerns": [],
+      "comparison": true,
+      "comparisonObservation": {
+        "firstObservation": "A listing with a backfilled detail is persisted with DetailFetchedUtc set and its item-page URL fetched exactly once for the whole run.",
+        "whenHeldValueAbsent": "AlreadyDetailedListingIsNotRefetchedByLaterRunsTests (pre-existing, unmodified) shows a listing whose DetailFetchedUtc is already set is excluded from GetListingsNeedingDetail and never triggers a client fetch -- the same DetailFetchedUtc mechanism this change relies on, proving no separate exclusion path was introduced for backfilled listings."
+      },
+      "verificationStatus": "verified",
+      "verificationEvidence": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~ItemDetailStoreTests|FullyQualifiedName~ItemDetailFetchServiceTests|FullyQualifiedName~ScrapeRunServiceTests|FullyQualifiedName~BackfilledSoldDetailsSkipTheDetailPhaseTests\" -> all passing as part of the 56-test combined filtered run, 0 failed; full suite dotnet test tests/MarketMakerEtl.Tests.Unit -> 328 passed, 0 failed."
+    },
+    {
+      "id": "AC-1",
+      "criterion": "Unit test: backfill-resolved listings reach the item-detail store once, and the detail phase doesn't refetch them. Use a fake IScrapeClient that counts fetches per URL; each backfilled item URL is fetched exactly once per run.",
+      "plannedImplementation": "See scope-2. BackfilledSoldDetailsSkipTheDetailPhaseTests uses tests/MarketMakerEtl.Tests.Unit/Core/Services/StubScrapeClient.cs (already tracks every requested URL in an ordered list) as the fake counting client, wired to both the simulated search/backfill phase (one GetPageHtml call for the item URL) and the real ItemDetailFetchService's detail phase.",
+      "plannedVerification": "BackfilledSoldDetailsSkipTheDetailPhaseTests.Should_persist_a_backfilled_sold_listing_through_item_detail_store_and_skip_it_in_the_detail_phase asserts client.RequestedUrls.Count(url => url == ListingUrl) == 1 after running the full ScrapeRunService.Run pipeline (search/backfill simulation + UpsertListings + ApplyBackfilledDetails + FetchDetails), alongside assertions that the listing's sold price, sold date, description, seller row and raw JSON were all persisted through ItemDetailStore.",
+      "materialConcerns": [
+        "The test's fake ISearchPageService simulates the backfill phase's single client.GetPageHtml call directly rather than driving it through the full MercariPriceBandCollector/SoldBackfillPlanner geometric band search (which is exercised separately and unit-tested for its own single-fetch-per-listing caching behaviour in SoldBackfillPlannerTests/MercariPriceBandCollectorTests). This keeps the test focused on the persistence/skip boundary this issue changes, but it means no single test exercises the entire band-search-through-detail-phase path end to end with a counting client."
+      ],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~BackfilledSoldDetailsSkipTheDetailPhaseTests\" -> 1 passed, 0 failed."
+    },
+    {
+      "id": "AC-2",
+      "criterion": "An integration test against the real DB shows a backfill-resolved sold listing with its sale date, a description and a seller row, with no detail-phase fetch.",
+      "plannedImplementation": "Same as AC-1: BackfilledSoldDetailsSkipTheDetailPhaseTests runs against a real, per-test SQLite database file (Path.GetTempPath()-based, created/deleted in SetUp/TearDown) through the real ScrapeStore, ItemDetailStore and ScrapeRunReportStore -- no repository or DbContext mock -- matching this repo's existing convention (e.g. NewListingsGetItemDetailFetchedAfterARunTests, SoldListingFromSearchGetsSoldDateAndHistoryFromDetailFetchTests) of placing real-SQLite, multi-component tests under tests/MarketMakerEtl.Tests.Unit rather than tests/MarketMakerEtl.Tests.Integration, since only Unit + Architecture run in the pre-commit gate.",
+      "plannedVerification": "BackfilledSoldDetailsSkipTheDetailPhaseTests reads the persisted ListingEntity, ListingRawDataEntity and SellerEntity rows back from a live SQLite database after the run and asserts SoldDate, SoldPrice, Description, the gzip ListingRawData row, and a matching SellerEntity.Name, plus DetailFetchedUtc not null and zero additional client fetches.",
+      "materialConcerns": [
+        "This is placed under tests/MarketMakerEtl.Tests.Unit (real SQLite, no mocked DbContext) rather than tests/MarketMakerEtl.Tests.Integration, following this repo's existing convention for DB-backed multi-component tests; it was not duplicated into Tests.Integration since that project is not run by the pre-commit gate and the coordinator asked for code-only changes with no live services started."
+      ],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~BackfilledSoldDetailsSkipTheDetailPhaseTests\" -> 1 passed, 0 failed."
+    },
+    {
+      "id": "AC-3",
+      "criterion": "A live check is pending the coordinator. Expected: a first \"ps5 controller\" run's detail-phase fetches drop by about the backfill fetch count, and sold listings with a sale date rise accordingly.",
+      "plannedImplementation": "No code change needed; this is an operational verification against the real Mercari scraper/Azurite/Api/Etl stack, which this agent was instructed not to start.",
+      "plannedVerification": "N/A -- requires the coordinator to run the live stack per docs/running-locally.md.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "pending coordinator live check",
+      "verificationEvidence": "Not executed by this agent per explicit instruction to make code-only changes and not start scraper/Azurite/Api/Etl processes."
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Quality gate: pre-commit hook (build with analyzers, dotnet format --verify-no-changes, Unit + Architecture tests) green.",
+      "plannedImplementation": "All new/changed public surface area stays well within the analyzer limits: ItemDetailStore gains one public method (4 total, max 10 per CI0004), ItemDetailFetchService gains one public method (2 total), no constructor gained a parameter (CI0005 max 5 unaffected), and the longest new/changed method (ScrapeRunService.Run) grew by one line by extracting the new logic into a separate ApplyBackfilledDetails helper method to stay under CI0007's 40-line cap. No new comments were added (CI0013).",
+      "plannedVerification": "Run the same three gates the pre-commit hook runs: dotnet build --no-incremental, dotnet format --verify-no-changes, dotnet test on Unit + Architecture.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "dotnet build MarketMakerEtl.slnx --no-incremental -> Build succeeded, 0 Warning(s), 0 Error(s). dotnet format --verify-no-changes -> exit code 0, no output. dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --no-build -> 328 passed, 0 failed. dotnet test tests/MarketMakerEtl.Tests.Architecture/MarketMakerEtl.Tests.Architecture.csproj --no-build -> 25 passed, 0 failed."
+    },
+    {
+      "id": "constraint-1",
+      "criterion": "Don't change backfill decisions (which items get probed, cut positions) or the detail phase's selection order for other listings.",
+      "plannedImplementation": "SoldBackfillPlanner.Resolve, FindCutoff, ProbeMargin and IsEntirelyBeforeCutoff are unchanged; the only addition is a side-effect write into _resolvedDetails inside ResolveDate, which does not read or influence any decision value. ItemDetailStore.GetListingsNeedingDetail's ORDER BY/WHERE clause is completely unchanged; backfilled listings are excluded purely because DetailFetchedUtc is no longer null for them, the same mechanism every already-detailed listing uses.",
+      "plannedVerification": "The full pre-existing SoldBackfillPlannerTests and MercariPriceBandCollectorTests suites (cutoff/probe/split/overflow/order-inversion cases) pass unmodified in assertions (only two new tests were added, no existing assertions changed), and ItemDetailStoreTests' pre-existing ordering tests (Should_prefer_never_attempted_listings_over_previously_failed_ones_when_the_cap_is_tight, Should_return_never_attempted_sold_listings_before_others_when_the_cap_is_tight) pass unmodified.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj -> 328 passed, 0 failed, including all pre-existing SoldBackfillPlannerTests, MercariPriceBandCollectorTests and ItemDetailStoreTests cases with their original assertions untouched."
+    },
+    {
+      "id": "constraint-2",
+      "criterion": "Concurrency from #62: the planner is shared across concurrent bands, so retained details must be collected thread-safely.",
+      "plannedImplementation": "_resolvedDetails is a ConcurrentDictionary<string, ItemPageListing>; combined with the existing _dateCache Task-memoization (each listing id resolves at most once regardless of concurrent callers), concurrent bands write to distinct keys with no shared mutable state. PriceBandCollectionRun.Execute only reads backfill.ResolvedDetails after PriceBandWorkerPool.RunAsync's Task.WhenAll has completed for every concurrent worker, so there is no concurrent read/write overlap either.",
+      "plannedVerification": "MercariPriceBandCollectorTests.Should_overlap_search_fetches_up_to_the_configured_limit_and_match_a_concurrency_one_runs_listings and Should_keep_idle_workers_available_to_fetch_a_late_splits_children_concurrently (pre-existing, SearchConcurrency > 1) continue to pass unmodified against the changed SoldBackfillPlanner/PriceBandCollectionRun.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "verificationEvidence": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~MercariPriceBandCollectorTests\" -> passing as part of the 328-test full run, 0 failed."
+    }
+  ]
+}

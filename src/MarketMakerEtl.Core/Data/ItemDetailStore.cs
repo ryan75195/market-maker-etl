@@ -36,6 +36,24 @@ public sealed class ItemDetailStore : IItemDetailStore
             .ToList();
     }
 
+    public async Task<IReadOnlyDictionary<string, int>> GetListingEntityIds(
+        int jobId, IReadOnlyCollection<string> listingIds, CancellationToken ct)
+    {
+        if (listingIds.Count == 0)
+        {
+            return new Dictionary<string, int>(StringComparer.Ordinal);
+        }
+
+        var idArray = listingIds.ToArray();
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var matches = await db.Listings
+            .Where(l => l.ScrapeJobId == jobId && idArray.Contains(l.ListingId))
+            .Select(l => new { l.ListingId, l.Id })
+            .ToListAsync(ct);
+
+        return matches.ToDictionary(m => m.ListingId, m => m.Id, StringComparer.Ordinal);
+    }
+
     public async Task ApplyItemDetail(int listingEntityId, ItemPageListing detail, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);

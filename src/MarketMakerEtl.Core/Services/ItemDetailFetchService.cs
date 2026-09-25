@@ -44,6 +44,22 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
         return results.Where(issue => issue is not null).Select(issue => issue!).ToList();
     }
 
+    public async Task ApplyBackfilledDetails(
+        int jobId, IReadOnlyDictionary<string, ItemPageListing> detailsByListingId, CancellationToken ct)
+    {
+        if (detailsByListingId.Count == 0)
+        {
+            return;
+        }
+
+        var entityIds = await _store.GetListingEntityIds(jobId, detailsByListingId.Keys.ToList(), ct);
+
+        foreach (var (listingId, entityId) in entityIds)
+        {
+            await _store.ApplyItemDetail(entityId, detailsByListingId[listingId], ct);
+        }
+    }
+
     private async Task<ScrapeRunIssueDetails?> FetchOne(ListingDetailTarget target, SemaphoreSlim gate, CancellationToken ct)
     {
         await gate.WaitAsync(ct);
