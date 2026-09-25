@@ -117,6 +117,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IListingClassificationStore, ListingClassificationStore>();
         services.AddSingleton<IListingClassificationService, ListingClassificationService>();
         services.AddSingleton<IClassificationReviewStore, ClassificationReviewStore>();
+        services.AddSingleton<IPriceGroupListingStore, PriceGroupListingStore>();
+        services.AddSingleton<IPriceGroupQueryService, PriceGroupQueryService>();
         return services;
     }
 
