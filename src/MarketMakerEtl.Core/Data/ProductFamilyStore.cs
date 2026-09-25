@@ -106,6 +106,13 @@ public sealed class ProductFamilyStore : IProductFamilyStore
         return await LoadLatestVersion(db, familyId, ct);
     }
 
+    public async Task<TaxonomyVersionView?> GetTaxonomyVersionById(int taxonomyVersionId, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var entity = await db.TaxonomyVersions.FindAsync([taxonomyVersionId], ct);
+        return entity is null ? null : MapToVersionView(entity);
+    }
+
     public async Task<bool> SetJobFamily(int jobId, int? productFamilyId, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);

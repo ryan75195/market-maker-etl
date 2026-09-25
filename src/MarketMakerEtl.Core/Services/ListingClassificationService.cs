@@ -8,7 +8,6 @@ namespace MarketMakerEtl.Core.Services;
 
 public sealed class ListingClassificationService : IListingClassificationService
 {
-    private const int MaxDescriptionLength = 1200;
     private const string ChoiceType = "choice";
 
     private readonly IJobStore _jobs;
@@ -140,26 +139,10 @@ public sealed class ListingClassificationService : IListingClassificationService
         var questions = taxonomy.Questions.ToDictionary(
             question => question.Key,
             question => new ClassifyQuestion(ChoiceType, question.Instructions, question.Criteria));
-        var states = batch.Select(BuildState).ToList();
+        var states = batch.Select(ClassificationStateBuilder.BuildState).ToList();
 
         return new ClassifyRequest(modelName, questions, states);
     }
-
-    private static ClassifyListingState BuildState(ListingClassificationTarget target) =>
-        new(target.Title, BuildMercariCategory(target), target.Brand, TruncateDescription(target.Description));
-
-    private static string? BuildMercariCategory(ListingClassificationTarget target)
-    {
-        var parts = new[] { target.Category0Name, target.Category1Name, target.Category2Name }
-            .Where(part => !string.IsNullOrEmpty(part));
-        var joined = string.Join(" > ", parts);
-        return joined.Length == 0 ? null : joined;
-    }
-
-    private static string? TruncateDescription(string? description) =>
-        description is null || description.Length <= MaxDescriptionLength
-            ? description
-            : description[..MaxDescriptionLength];
 
     private static IReadOnlyList<ListingClassificationBatchItem> BuildBatchItems(
         TaxonomyDocument taxonomy,

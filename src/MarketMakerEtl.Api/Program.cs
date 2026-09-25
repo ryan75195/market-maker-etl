@@ -180,6 +180,7 @@ app.MapPost("/api/categories/{categoryId:int}/disable", async (int categoryId, I
 
 app.MapFamilyEndpoints();
 app.MapClassificationEndpoints();
+app.MapReviewEndpoints();
 
 await app.RunAsync();
 
