@@ -170,6 +170,85 @@ public class ItemDetailStoreTests
     }
 
     [Test]
+    public async Task Should_order_backlog_listings_sold_first_then_newest_active_then_retries()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var otherJobId = await SeedJob();
+        var retry = await SeedListing(jobId, "backlog-retry", detailFetched: false, detailFetchAttempts: 1);
+        var oldActive = await SeedListing(
+            otherJobId, "backlog-active-old", detailFetched: false,
+            postedUtc: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var newActive = await SeedListing(
+            jobId, "backlog-active-new", detailFetched: false,
+            postedUtc: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+        var sold = await SeedListing(otherJobId, "backlog-sold", detailFetched: false, isSold: true);
+
+        var targets = await store.GetBacklogListingsNeedingDetail([jobId, otherJobId], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(
+            targets.Select(t => t.Id),
+            Is.EqualTo(new[] { sold, newActive, oldActive, retry }));
+    }
+
+    [Test]
+    public async Task Should_fall_back_to_created_date_when_posted_date_is_missing_for_active_backlog_listings()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var noPostedDate = await SeedListing(
+            jobId, "backlog-no-posted", detailFetched: false,
+            createdUtc: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc));
+        var newerNoPostedDate = await SeedListing(
+            jobId, "backlog-newer-no-posted", detailFetched: false,
+            createdUtc: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var targets = await store.GetBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets.Select(t => t.Id), Is.EqualTo(new[] { newerNoPostedDate, noPostedDate }));
+    }
+
+    [Test]
+    public async Task Should_exclude_backlog_listings_that_reached_the_maximum_attempt_count()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        await SeedListing(jobId, "backlog-exhausted", detailFetched: false, detailFetchAttempts: MaxAttempts);
+        var eligible = await SeedListing(jobId, "backlog-eligible", detailFetched: false, detailFetchAttempts: MaxAttempts - 1);
+
+        var targets = await store.GetBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets.Select(t => t.Id), Is.EqualTo(new[] { eligible }));
+    }
+
+    [Test]
+    public async Task Should_cap_backlog_listings_across_jobs_to_the_requested_limit()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var otherJobId = await SeedJob();
+        await SeedListing(jobId, "backlog-cap-1", detailFetched: false);
+        await SeedListing(otherJobId, "backlog-cap-2", detailFetched: false);
+        await SeedListing(jobId, "backlog-cap-3", detailFetched: false);
+
+        var targets = await store.GetBacklogListingsNeedingDetail([jobId, otherJobId], 2, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public async Task Should_return_no_backlog_listings_when_no_job_ids_are_eligible()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        await SeedListing(jobId, "backlog-ineligible", detailFetched: false);
+
+        var targets = await store.GetBacklogListingsNeedingDetail([], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets, Is.Empty);
+    }
+
+    [Test]
     public async Task Should_enrich_the_existing_sold_history_row_instead_of_adding_a_duplicate_when_already_sold()
     {
         var store = CreateStore();
@@ -296,7 +375,14 @@ public class ItemDetailStoreTests
         return job.Id;
     }
 
-    private async Task<int> SeedListing(int jobId, string listingId, bool detailFetched, bool isSold = false)
+    private async Task<int> SeedListing(
+        int jobId,
+        string listingId,
+        bool detailFetched,
+        bool isSold = false,
+        int detailFetchAttempts = 0,
+        DateTime? postedUtc = null,
+        DateTime? createdUtc = null)
     {
         await using var db = await Factory().CreateDbContextAsync();
         var listing = new ListingEntity
@@ -307,7 +393,9 @@ public class ItemDetailStoreTests
             ItemStatus = isSold ? "Sold" : "Active",
             IsSold = isSold,
             DetailFetchedUtc = detailFetched ? DateTime.UtcNow : null,
-            CreatedUtc = DateTime.UtcNow
+            DetailFetchAttempts = detailFetchAttempts,
+            PostedUtc = postedUtc,
+            CreatedUtc = createdUtc ?? DateTime.UtcNow
         };
         db.Listings.Add(listing);
         await db.SaveChangesAsync();

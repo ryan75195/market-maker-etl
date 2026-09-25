@@ -184,6 +184,42 @@ public class ItemDetailFetchServiceTests
     }
 
     [Test]
+    public async Task Should_return_no_issue_when_fetch_listing_detail_succeeds()
+    {
+        var store = Substitute.For<IItemDetailStore>();
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Target.Url!, Arg.Any<CancellationToken>()).Returns("<html/>");
+        var page = BuildPage();
+        var parser = BuildParser(Marketplace.Mercari, page);
+        var service = new ItemDetailFetchService(store, client, [parser], Options(), NullLogger<ItemDetailFetchService>.Instance);
+
+        var issue = await service.FetchListingDetail(Target, CancellationToken.None);
+
+        Assert.That(issue, Is.Null);
+        await store.Received(1).ApplyItemDetail(Target.Id, page, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_return_an_issue_and_mark_the_listing_failed_when_fetch_listing_detail_fails()
+    {
+        var store = Substitute.For<IItemDetailStore>();
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Target.Url!, Arg.Any<CancellationToken>())
+            .Returns<string>(_ => throw new InvalidOperationException("blocked"));
+        var parser = BuildParser(Marketplace.Mercari, BuildPage());
+        var service = new ItemDetailFetchService(store, client, [parser], Options(), NullLogger<ItemDetailFetchService>.Instance);
+
+        var issue = await service.FetchListingDetail(Target, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(issue, Is.Not.Null);
+            Assert.That(issue!.ListingId, Is.EqualTo(Target.ListingId));
+        });
+        await store.Received(1).MarkDetailFetchFailed(Target.Id, Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task Should_apply_a_backfilled_detail_through_the_same_apply_item_detail_path()
     {
         var store = Substitute.For<IItemDetailStore>();
