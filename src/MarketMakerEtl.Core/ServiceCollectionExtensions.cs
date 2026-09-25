@@ -40,6 +40,7 @@ public static class ServiceCollectionExtensions
     private const int DefaultClassifierTickMinutes = 5;
     private const int DefaultClassifierMaxListingsPerTick = 2000;
     private const int DefaultClassifierTimeoutSeconds = 120;
+    private const double DefaultClassificationReviewThreshold = 0.9;
 
     private static readonly TimeSpan DefaultFetchTimeout = TimeSpan.FromMinutes(5);
 
@@ -72,6 +73,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(detailFetchOptions);
         services.AddSingleton(BuildDetailBacklogOptions(configuration, detailFetchOptions.MaxDetailFetchAttempts));
         services.AddSingleton(BuildClassifierOptions(configuration));
+        services.AddSingleton(BuildClassificationReviewOptions(configuration));
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite(BuildDatabaseConnectionString(configuration)));
 
@@ -114,6 +116,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDetailBacklogService, DetailBacklogService>();
         services.AddSingleton<IListingClassificationStore, ListingClassificationStore>();
         services.AddSingleton<IListingClassificationService, ListingClassificationService>();
+        services.AddSingleton<IClassificationReviewStore, ClassificationReviewStore>();
         return services;
     }
 
@@ -169,6 +172,9 @@ public static class ServiceCollectionExtensions
             ReadInt(configuration, "Classifier:MaxListingsPerTick", DefaultClassifierMaxListingsPerTick),
             ReadInt(configuration, "Classifier:TimeoutSeconds", DefaultClassifierTimeoutSeconds));
 
+    private static ClassificationReviewOptions BuildClassificationReviewOptions(IConfiguration? configuration) =>
+        new(ReadDouble(configuration, "Classification:ReviewThreshold", DefaultClassificationReviewThreshold));
+
     private static string BuildDatabaseConnectionString(IConfiguration? configuration)
     {
         var configured = configuration?["Database:ConnectionString"];
@@ -210,5 +216,13 @@ public static class ServiceCollectionExtensions
     {
         var value = configuration?[key];
         return bool.TryParse(value, out var parsed) ? parsed : fallback;
+    }
+
+    private static double ReadDouble(IConfiguration? configuration, string key, double fallback)
+    {
+        var value = configuration?[key];
+        return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : fallback;
     }
 }

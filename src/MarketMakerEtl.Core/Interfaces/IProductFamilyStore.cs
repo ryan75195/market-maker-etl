@@ -16,5 +16,7 @@ public interface IProductFamilyStore
 
     Task<TaxonomyVersionView?> GetLatestTaxonomyVersion(int familyId, CancellationToken ct);
 
+    Task<TaxonomyVersionView?> GetTaxonomyVersionById(int taxonomyVersionId, CancellationToken ct);
+
     Task<bool> SetJobFamily(int jobId, int? productFamilyId, CancellationToken ct);
 }

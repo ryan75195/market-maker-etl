@@ -173,6 +173,28 @@ public class ProductFamilyStoreTests
     }
 
     [Test]
+    public async Task Should_return_a_taxonomy_version_by_its_id()
+    {
+        var store = CreateStore();
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
+        var added = (await store.AddTaxonomyVersion(family.Id, "{\"v\":1}", CancellationToken.None))!;
+
+        var fetched = await store.GetTaxonomyVersionById(added.Id, CancellationToken.None);
+
+        Assert.That(fetched!.QuestionsJson, Is.EqualTo("{\"v\":1}"));
+    }
+
+    [Test]
+    public async Task Should_return_null_for_an_unknown_taxonomy_version_id()
+    {
+        var store = CreateStore();
+
+        var fetched = await store.GetTaxonomyVersionById(999999, CancellationToken.None);
+
+        Assert.That(fetched, Is.Null);
+    }
+
+    [Test]
     public async Task Should_set_and_clear_a_jobs_family()
     {
         var store = CreateStore();

@@ -155,9 +155,9 @@ public sealed class ListingClassificationStore : IListingClassificationStore
         entity.ClassifiedUtc = classifiedUtc;
     }
 
-    private static ListingClassificationTarget MapToTarget(ListingEntity listing) =>
+    internal static ListingClassificationTarget MapToTarget(ListingEntity listing) =>
         new(listing.Id, listing.Title, listing.Category0Name, listing.Category1Name, listing.Category2Name, listing.Brand, listing.Description);
 
-    private static ListingClassificationAnswerView MapToAnswerView(ListingClassificationEntity entity) =>
+    internal static ListingClassificationAnswerView MapToAnswerView(ListingClassificationEntity entity) =>
         new(entity.Question, entity.Choice, entity.ResolvedChoice, entity.IsApplicable, entity.Confidence, entity.Agreement, entity.Source);
 }
