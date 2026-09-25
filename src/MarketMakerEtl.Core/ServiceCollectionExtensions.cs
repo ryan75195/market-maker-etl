@@ -68,6 +68,11 @@ public static class ServiceCollectionExtensions
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite(BuildDatabaseConnectionString(configuration)));
 
+        return services.AddCoreDomainServices();
+    }
+
+    private static IServiceCollection AddCoreDomainServices(this IServiceCollection services)
+    {
         services.AddHttpClient<IScrapeClient, HttpScrapeClient>();
         services.AddSingleton<IScrapeContentStore, BlobScrapeContentStore>();
         services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
