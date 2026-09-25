@@ -9,6 +9,9 @@ internal sealed class NoOpItemDetailFetchService : IItemDetailFetchService
     public Task<IReadOnlyList<ScrapeRunIssueDetails>> FetchDetails(int jobId, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<ScrapeRunIssueDetails>>([]);
 
+    public Task<ScrapeRunIssueDetails?> FetchListingDetail(ListingDetailTarget target, CancellationToken ct) =>
+        Task.FromResult<ScrapeRunIssueDetails?>(null);
+
     public Task ApplyBackfilledDetails(
         int jobId, IReadOnlyDictionary<string, ItemPageListing> detailsByListingId, CancellationToken ct) =>
         Task.CompletedTask;

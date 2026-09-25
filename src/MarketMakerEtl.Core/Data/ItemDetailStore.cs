@@ -36,6 +36,31 @@ public sealed class ItemDetailStore : IItemDetailStore
             .ToList();
     }
 
+    public async Task<IReadOnlyList<ListingDetailTarget>> GetBacklogListingsNeedingDetail(
+        IReadOnlyCollection<int> jobIds, int limit, int maxAttempts, CancellationToken ct)
+    {
+        if (jobIds.Count == 0 || limit <= 0)
+        {
+            return [];
+        }
+
+        var idArray = jobIds.ToArray();
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var listings = await db.Listings
+            .Where(l => idArray.Contains(l.ScrapeJobId) && l.DetailFetchedUtc == null && l.DetailFetchAttempts < maxAttempts)
+            .OrderBy(l => l.DetailFetchAttempts > 0 ? 2 : l.IsSold ? 0 : 1)
+            .ThenByDescending(l => l.PostedUtc)
+            .ThenByDescending(l => l.CreatedUtc)
+            .ThenBy(l => l.DetailFetchAttempts)
+            .ThenBy(l => l.Id)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return listings
+            .Select(l => new ListingDetailTarget(l.Id, l.ListingId, l.Url, l.ItemStatus, l.Marketplace))
+            .ToList();
+    }
+
     public async Task<IReadOnlyDictionary<string, int>> GetListingEntityIds(
         int jobId, IReadOnlyCollection<string> listingIds, CancellationToken ct)
     {

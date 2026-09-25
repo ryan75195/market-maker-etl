@@ -48,6 +48,9 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
         return results.Where(issue => issue is not null).Select(issue => issue!).ToList();
     }
 
+    public Task<ScrapeRunIssueDetails?> FetchListingDetail(ListingDetailTarget target, CancellationToken ct) =>
+        FetchDetail(target, ct);
+
     public async Task ApplyBackfilledDetails(
         int jobId, IReadOnlyDictionary<string, ItemPageListing> detailsByListingId, CancellationToken ct)
     {

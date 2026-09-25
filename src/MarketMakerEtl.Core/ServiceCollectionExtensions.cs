@@ -30,6 +30,10 @@ public static class ServiceCollectionExtensions
     private const int DefaultMaxConcurrentDetailFetches = 4;
     private const int DefaultMaxDetailFetchesPerRun = 50;
     private const int DefaultMaxDetailFetchAttempts = 3;
+    private const bool DefaultDetailBacklogEnabled = true;
+    private const int DefaultDetailBacklogTickMinutes = 5;
+    private const int DefaultDetailBacklogMaxFetchesPerTick = 30;
+    private const int DefaultDetailBacklogMaxFetchesPerHour = 300;
 
     private static readonly TimeSpan DefaultFetchTimeout = TimeSpan.FromMinutes(5);
 
@@ -58,7 +62,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(BuildScrapeOptions(configuration));
         services.AddSingleton(BuildScheduleOptions(configuration));
         services.AddSingleton(TimeProvider.System);
-        services.AddSingleton(BuildDetailFetchOptions(configuration));
+        var detailFetchOptions = BuildDetailFetchOptions(configuration);
+        services.AddSingleton(detailFetchOptions);
+        services.AddSingleton(BuildDetailBacklogOptions(configuration, detailFetchOptions.MaxDetailFetchAttempts));
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite(BuildDatabaseConnectionString(configuration)));
 
@@ -90,6 +96,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISchedulerStateStore, SchedulerStateStore>();
         services.AddSingleton<IJobSchedulingService, JobSchedulingService>();
         services.AddSingleton<IListingRefreshSchedulingService, ListingRefreshSchedulingService>();
+        services.AddSingleton<IDetailBacklogService, DetailBacklogService>();
         return services;
     }
 
@@ -127,6 +134,15 @@ public static class ServiceCollectionExtensions
             ReadInt(configuration, "Scrape:MaxConcurrentDetailFetches", DefaultMaxConcurrentDetailFetches),
             ReadInt(configuration, "Scrape:MaxDetailFetchesPerRun", DefaultMaxDetailFetchesPerRun),
             ReadInt(configuration, "Scrape:MaxDetailFetchAttempts", DefaultMaxDetailFetchAttempts));
+
+    private static DetailBacklogOptions BuildDetailBacklogOptions(
+        IConfiguration? configuration, int maxDetailFetchAttempts) =>
+        new(
+            ReadBool(configuration, "DetailBacklog:Enabled", DefaultDetailBacklogEnabled),
+            ReadInt(configuration, "DetailBacklog:TickMinutes", DefaultDetailBacklogTickMinutes),
+            ReadInt(configuration, "DetailBacklog:MaxFetchesPerTick", DefaultDetailBacklogMaxFetchesPerTick),
+            ReadInt(configuration, "DetailBacklog:MaxFetchesPerHour", DefaultDetailBacklogMaxFetchesPerHour),
+            maxDetailFetchAttempts);
 
     private static string BuildDatabaseConnectionString(IConfiguration? configuration)
     {
