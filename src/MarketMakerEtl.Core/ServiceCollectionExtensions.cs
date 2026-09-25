@@ -68,6 +68,11 @@ public static class ServiceCollectionExtensions
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite(BuildDatabaseConnectionString(configuration)));
 
+        return services.AddCoreDomainServices();
+    }
+
+    private static IServiceCollection AddCoreDomainServices(this IServiceCollection services)
+    {
         services.AddHttpClient<IScrapeClient, HttpScrapeClient>();
         services.AddSingleton<IScrapeContentStore, BlobScrapeContentStore>();
         services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
@@ -87,6 +92,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IScrapeRunReportStore, ScrapeRunReportStore>();
         services.AddSingleton<IJobStore, JobStore>();
         services.AddSingleton<ICategoryStore, CategoryStore>();
+        services.AddSingleton<IProductFamilyStore, ProductFamilyStore>();
         services.AddSingleton<IItemDetailStore, ItemDetailStore>();
         services.AddSingleton<IListingRawDataStore, ListingRawDataStore>();
         services.AddSingleton<ISearchPageService, SearchPageService>();

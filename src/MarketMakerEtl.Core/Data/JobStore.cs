@@ -178,5 +178,6 @@ public sealed class JobStore : IJobStore
             job.JobCategories
                 .Where(jc => jc.Category is not null)
                 .Select(jc => new CategoryView(jc.Category!.Id, jc.Category.Name, jc.Category.IsEnabled, jc.Category.CreatedUtc))
-                .ToList());
+                .ToList(),
+            job.ProductFamilyId);
 }

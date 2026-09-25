@@ -12,4 +12,5 @@ public sealed record JobView(
     DateTime? LastQueuedUtc,
     DateTime? LastRunUtc,
     DateTime CreatedUtc,
-    IReadOnlyList<CategoryView> Categories);
+    IReadOnlyList<CategoryView> Categories,
+    int? ProductFamilyId);

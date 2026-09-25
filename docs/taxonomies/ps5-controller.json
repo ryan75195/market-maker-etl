@@ -1,0 +1,88 @@
+{
+ "family": "ps5-controller",
+ "version": 1,
+ "questions": {
+  "item_type": {
+   "instructions": "What is the main item this Mercari listing is selling? Judge only from the text given.",
+   "criteria": {
+    "dualsense_standard": "A Sony DualSense controller for PS5 (not the Edge). Includes official limited editions and Sony DualSense controllers that have been customised or modded (painted, new shell, LED, paddles, upgraded joysticks).",
+    "dualsense_edge": "A Sony DualSense Edge pro controller. A 'PS5 pro controller' with no other maker named is the Edge.",
+    "third_party_controller": "A PS5-compatible controller designed and made by a company other than Sony, e.g. SCUF, Victrix, PowerA, BETMI, or an unbranded controller described as 'compatible with PS5'. A plain 'PS5 controller' or 'DualSense' with no other maker named is Sony, not third party.",
+    "other_platform_controller": "A controller for a different system: PS4 DualShock 4, Xbox, Switch, or PlayStation VR/VR2 controllers. 'DualShock 4' is PS4, not DualSense.",
+    "console": "A PlayStation 5 console (original, Slim, Pro, disc or digital), with or without controllers, games or accessories included. If a PS5 console bundle includes controllers it is still a console.",
+    "other_console": "A games console or handheld for a different system: PS4, PS3, PS2, PS1, PS Vita, PSP, PlayStation TV, Xbox, Nintendo Switch, Wii U, Wii, retro consoles.",
+    "controller_accessory": "An add-on or part for a controller sold without a working controller: shells, faceplates, grips, thumbstick caps, skins, chargers, charging docks, stands, holders, cases, cables, and controller adapters or converters such as Brook Wingman.",
+    "repair_service": "A repair or modification service rather than an item.",
+    "other": "Anything else: games, VR headsets, headsets, PlayStation Portal, empty boxes, merchandise, unrelated products."
+   }
+  },
+  "edition": {
+   "instructions": "Which kind of edition is this Sony DualSense or DualSense Edge controller?",
+   "criteria": {
+    "standard_colour": "A regular retail DualSense in a standard colour, not a limited edition and not modified.",
+    "limited_edition": "An official Sony limited or special edition, e.g. Spider-Man 2, Wolverine, 30th Anniversary, Astro Bot, Fortnite, God of War, Final Fantasy XVI, Death Stranding, Death Stranding 2, 007 First Light, Ghost of Yotei, or any 'X Edition' named after a game.",
+    "custom_modified": "An aftermarket customised controller: custom paint or shell, custom LED, paddles, or replaced joysticks such as TMR or hall effect, including controllers from custom builders such as Hex Gaming / HEXGAMING or eXtremeRate.",
+    "not_stated": "the listing does not say which edition or whether it is modified"
+   },
+   "askWhen": [
+    {
+     "question": "item_type",
+     "anyOf": [
+      "dualsense_standard",
+      "dualsense_edge"
+     ]
+    }
+   ],
+   "notStatedMeans": "standard_colour"
+  },
+  "colour": {
+   "instructions": "Which standard colour is this Sony DualSense controller? Map a plain colour word to the standard colour it most likely names.",
+   "criteria": {
+    "white": "White, the default colour.",
+    "midnight_black": "Black / Midnight Black.",
+    "cosmic_red": "Cosmic Red, plain red, or another red shade name such as Techno Red.",
+    "nova_pink": "Nova Pink or plain pink.",
+    "starlight_blue": "Starlight Blue or plain light blue.",
+    "galactic_purple": "Galactic Purple or plain purple.",
+    "grey_camouflage": "Grey Camouflage or plain camo.",
+    "deep_earth_metallic": "Cobalt Blue, Sterling Silver or Volcanic Red.",
+    "chroma": "Chroma Pearl, Chroma Teal or Chroma Indigo.",
+    "not_stated": "A standard DualSense whose colour the text does not state."
+   },
+   "askWhen": [
+    {
+     "question": "item_type",
+     "anyOf": [
+      "dualsense_standard"
+     ]
+    },
+    {
+     "question": "edition",
+     "anyOf": [
+      "standard_colour",
+      "not_stated"
+     ]
+    }
+   ]
+  },
+  "quantity": {
+   "instructions": "How many controllers does this listing include?",
+   "criteria": {
+    "zero": "No controller is included (e.g. a console without controller, or an accessory only).",
+    "one": "One controller, or a single controller whose count is not stated. A PS5 console with no controller count mentioned ships with one.",
+    "two": "Exactly two controllers, or plural 'controllers' with no number given.",
+    "three_or_more": "Three or more controllers."
+   }
+  },
+  "functional": {
+   "instructions": "What does the listing text say about whether the item works?",
+   "criteria": {
+    "working": "Works, or nothing suggests a fault.",
+    "faulty": "Has a named defect such as stick drift, broken button, damaged port, not charging.",
+    "untested_or_parts": "Sold as is, untested, for parts, or needs to be repaired.",
+    "not_stated": "the listing does not say whether it works, is faulty or is untested"
+   },
+   "notStatedMeans": "working"
+  }
+ }
+}

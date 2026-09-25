@@ -31,6 +31,10 @@ public sealed class EtlDbContext : DbContext
 
     public DbSet<ListingRawDataEntity> ListingRawData => Set<ListingRawDataEntity>();
 
+    public DbSet<ProductFamilyEntity> ProductFamilies => Set<ProductFamilyEntity>();
+
+    public DbSet<TaxonomyVersionEntity> TaxonomyVersions => Set<TaxonomyVersionEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ScrapeJobEntity>(entity =>
@@ -39,6 +43,11 @@ public sealed class EtlDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.SearchTerm).IsRequired().HasMaxLength(255);
             entity.HasIndex(e => e.SearchTerm);
+            entity.HasIndex(e => e.ProductFamilyId);
+            entity.HasOne<ProductFamilyEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.ProductFamilyId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ScrapeRunEntity>(entity =>
@@ -72,6 +81,7 @@ public sealed class EtlDbContext : DbContext
         });
 
         ConfigureSellersAndRawData(modelBuilder);
+        ConfigureProductFamilies(modelBuilder);
     }
 
     private static void ConfigureListings(ModelBuilder modelBuilder)
@@ -127,6 +137,31 @@ public sealed class EtlDbContext : DbContext
             entity.HasOne(e => e.Category)
                 .WithMany()
                 .HasForeignKey(e => e.CategoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureProductFamilies(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProductFamilyEntity>(entity =>
+        {
+            entity.ToTable("ProductFamilies");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.ModelName).IsRequired().HasMaxLength(255);
+            entity.HasIndex(e => e.Key).IsUnique();
+        });
+
+        modelBuilder.Entity<TaxonomyVersionEntity>(entity =>
+        {
+            entity.ToTable("TaxonomyVersions");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.QuestionsJson).IsRequired();
+            entity.HasIndex(e => new { e.ProductFamilyId, e.Version }).IsUnique();
+            entity.HasOne(e => e.ProductFamily)
+                .WithMany(f => f.TaxonomyVersions)
+                .HasForeignKey(e => e.ProductFamilyId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
