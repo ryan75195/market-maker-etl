@@ -22,5 +22,7 @@ public sealed class ScrapeJobEntity
 
     public DateTime CreatedUtc { get; set; }
 
+    public int? ProductFamilyId { get; set; }
+
     public ICollection<JobCategoryEntity> JobCategories { get; } = new List<JobCategoryEntity>();
 }

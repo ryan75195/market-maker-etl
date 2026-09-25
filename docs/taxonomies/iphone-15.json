@@ -1,0 +1,90 @@
+{
+ "family": "iphone-15",
+ "version": 1,
+ "questions": {
+  "item_type": {
+   "instructions": "What is the main item this Mercari listing is selling? Judge only from the text given.",
+   "criteria": {
+    "iphone_15_family": "An Apple iPhone 15, 15 Plus, 15 Pro or 15 Pro Max handset, including damaged, locked or for-parts phones.",
+    "other_iphone": "An Apple iPhone of a different generation, e.g. iPhone 11, 12, 13, 14, 16 or 17, or an iPhone SE.",
+    "other_phone": "A phone from another maker, e.g. Samsung Galaxy, Google Pixel, Motorola.",
+    "case_or_protector": "A phone case, cover, skin, wallet case, or screen or camera-lens protector, sold without a phone.",
+    "charger_or_cable": "A charger, charging cable, power bank, MagSafe charger or wireless charging pad, sold without a phone.",
+    "phone_part": "A replacement part for a phone sold without a working phone: screen, back glass, battery, housing, camera module, logic board, or an empty box.",
+    "other_accessory": "Another phone accessory: earbuds, AirPods, mounts, grips, straps, stands, camera attachments.",
+    "other": "Anything else: gift cards, other electronics, unrelated products."
+   }
+  },
+  "model": {
+   "instructions": "Which iPhone 15 model is this phone?",
+   "criteria": {
+    "iphone_15": "The base iPhone 15, not Plus, Pro or Pro Max.",
+    "iphone_15_plus": "iPhone 15 Plus.",
+    "iphone_15_pro": "iPhone 15 Pro, not Pro Max.",
+    "iphone_15_pro_max": "iPhone 15 Pro Max.",
+    "not_stated": "The text does not say which iPhone 15 model."
+   },
+   "askWhen": [
+    {
+     "question": "item_type",
+     "anyOf": [
+      "iphone_15_family"
+     ]
+    }
+   ]
+  },
+  "storage": {
+   "instructions": "How much storage does this iPhone have?",
+   "criteria": {
+    "gb_128": "128GB.",
+    "gb_256": "256GB.",
+    "gb_512": "512GB.",
+    "tb_1": "1TB.",
+    "not_stated": "The text does not state the storage."
+   },
+   "askWhen": [
+    {
+     "question": "item_type",
+     "anyOf": [
+      "iphone_15_family"
+     ]
+    }
+   ]
+  },
+  "carrier": {
+   "instructions": "Is this iPhone carrier unlocked or tied to a carrier?",
+   "criteria": {
+    "unlocked": "Factory or carrier unlocked, works on any carrier.",
+    "carrier_locked": "Locked to a named carrier such as AT&T, Verizon, T-Mobile, Cricket, Boost, Straight Talk, Tracfone, Visible, or described as carrier locked.",
+    "not_stated": "The text does not say whether it is unlocked or locked."
+   },
+   "askWhen": [
+    {
+     "question": "item_type",
+     "anyOf": [
+      "iphone_15_family"
+     ]
+    }
+   ]
+  },
+  "condition": {
+   "instructions": "What does the listing text say about the phone's working condition?",
+   "criteria": {
+    "working": "Works fully; cosmetic wear such as scratches or scuffs is still working.",
+    "cracked": "Works but the screen or back glass is cracked or shattered.",
+    "faulty": "Has a named functional defect such as Face ID not working, bad battery, dead pixels or lines on the screen, broken camera, not charging, no service.",
+    "activation_locked": "iCloud or activation locked, blacklisted, bad IMEI, or financed and unpaid.",
+    "for_parts": "Sold as is, untested, does not turn on, or for parts or repair.",
+    "not_stated": "The listing does not say anything about whether it works."
+   },
+   "askWhen": [
+    {
+     "question": "item_type",
+     "anyOf": [
+      "iphone_15_family"
+     ]
+    }
+   ]
+  }
+ }
+}

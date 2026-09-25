@@ -178,6 +178,8 @@ app.MapPost("/api/categories/{categoryId:int}/disable", async (int categoryId, I
     return category is null ? Results.NotFound() : Results.Ok(category);
 });
 
+app.MapFamilyEndpoints();
+
 await app.RunAsync();
 
 static async Task<IResult?> ValidateJobDetails(
@@ -262,4 +264,8 @@ namespace MarketMakerEtl.Api
     public sealed record CreateCategoryRequest(string Name, bool IsEnabled = true);
 
     public sealed record UpdateCategoryRequest(string Name, bool IsEnabled);
+
+    public sealed record SetJobFamilyRequest(int? ProductFamilyId);
+
+    public sealed record CreateProductFamilyRequest(string Key, string Name, string ModelName);
 }

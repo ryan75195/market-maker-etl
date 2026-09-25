@@ -43,6 +43,8 @@ internal static class MigrationSchemaInspector
                 return await ColumnExists(connection, addColumn.Table, addColumn.Name, cancellationToken);
             case CreateIndexOperation createIndex:
                 return await IndexExists(connection, createIndex.Name, cancellationToken);
+            case AddForeignKeyOperation addForeignKey:
+                return await ForeignKeyExists(connection, addForeignKey, cancellationToken);
             default:
                 return false;
         }
@@ -91,6 +93,20 @@ internal static class MigrationSchemaInspector
         command.CommandText = "SELECT COUNT(*) FROM pragma_table_info($table) WHERE name = $column";
         AddParameter(command, "$table", tableName);
         AddParameter(command, "$column", columnName);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result, CultureInfo.InvariantCulture) > 0;
+    }
+
+    private static async Task<bool> ForeignKeyExists(
+        DbConnection connection,
+        AddForeignKeyOperation addForeignKey,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT COUNT(*) FROM pragma_foreign_key_list($table) WHERE \"table\" = $referencedTable";
+        AddParameter(command, "$table", addForeignKey.Table);
+        AddParameter(command, "$referencedTable", addForeignKey.PrincipalTable);
         var result = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(result, CultureInfo.InvariantCulture) > 0;
     }
