@@ -430,6 +430,114 @@ public class MercariPriceBandCollectorTests
     }
 
     [Test]
+    public async Task Should_overlap_search_fetches_up_to_the_configured_limit_and_match_a_concurrency_one_runs_listings()
+    {
+        var catalogue = BuildCatalogueConcentratedBelowOneHundredDollars();
+        const int bandBudget = 60;
+        const int concurrencyLimit = 3;
+
+        var trackingClient = new ConcurrencyTrackingScrapeClient(TimeSpan.FromMilliseconds(20));
+        var concurrentCollector = new MercariPriceBandCollector(
+            trackingClient,
+            new CatalogueUrlService(),
+            new CatalogueParser(catalogue),
+            new MercariCollectionSettings(bandBudget, Backfill: null, SearchConcurrency: concurrencyLimit),
+            NullLogger.Instance);
+        var concurrentMerged = new Dictionary<string, ListingSummary>();
+        var concurrentSummary = await concurrentCollector.Collect(
+            SearchTerm, sold: true, concurrentMerged, new HashSet<string>(), CancellationToken.None);
+
+        var sequentialCollector = new MercariPriceBandCollector(
+            new PassthroughScrapeClient(),
+            new CatalogueUrlService(),
+            new CatalogueParser(catalogue),
+            new MercariCollectionSettings(bandBudget, Backfill: null),
+            NullLogger.Instance);
+        var sequentialMerged = new Dictionary<string, ListingSummary>();
+        var sequentialSummary = await sequentialCollector.Collect(
+            SearchTerm, sold: true, sequentialMerged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(concurrentSummary.CapHit, Is.False);
+            Assert.That(sequentialSummary.CapHit, Is.False);
+            Assert.That(trackingClient.MaxObservedConcurrency, Is.GreaterThan(1));
+            Assert.That(trackingClient.MaxObservedConcurrency, Is.LessThanOrEqualTo(concurrencyLimit));
+            Assert.That(concurrentMerged.Keys, Is.EquivalentTo(sequentialMerged.Keys));
+        });
+    }
+
+    [Test]
+    public async Task Should_keep_idle_workers_available_to_fetch_a_late_splits_children_concurrently()
+    {
+        var slowSeed = new PriceBand(1000.01m, null);
+        var children = slowSeed.Split();
+        var urlService = new KeyedUrlService();
+
+        string UrlFor(PriceBand band) => urlService.BuildSearch(SearchTerm, true, band.MinPrice, band.MaxPrice);
+
+        var seeds = PriceBand.SeedBands();
+        var resultsByUrl = new Dictionary<string, SearchPageResult>(StringComparer.Ordinal);
+        foreach (var seed in seeds)
+        {
+            resultsByUrl[UrlFor(seed)] = seed.Equals(slowSeed)
+                ? new SearchPageResult([], TotalCount: 200)
+                : new SearchPageResult([], TotalCount: 1);
+        }
+
+        resultsByUrl[UrlFor(children[0])] = new SearchPageResult([BuildListing("c0", "https://x/c0")], TotalCount: 1);
+        resultsByUrl[UrlFor(children[1])] = new SearchPageResult([BuildListing("c1", "https://x/c1")], TotalCount: 1);
+
+        var delaysByUrl = new Dictionary<string, TimeSpan>(StringComparer.Ordinal)
+        {
+            [UrlFor(slowSeed)] = TimeSpan.FromMilliseconds(150),
+            [UrlFor(children[0])] = TimeSpan.FromMilliseconds(30),
+            [UrlFor(children[1])] = TimeSpan.FromMilliseconds(30),
+        };
+
+        var client = new DelayedConcurrencyTrackingScrapeClient(delaysByUrl, TimeSpan.FromMilliseconds(5));
+        var parser = new KeyedResultParser(resultsByUrl, new SearchPageResult([], TotalCount: 0));
+        var settings = new MercariCollectionSettings(20, Backfill: null, SearchConcurrency: 3);
+        var collector = new MercariPriceBandCollector(client, urlService, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        await collector.Collect(SearchTerm, sold: true, merged, new HashSet<string>(), CancellationToken.None);
+
+        var maxChildStartConcurrency = Math.Max(
+            client.ConcurrencyAtStart(UrlFor(children[0])),
+            client.ConcurrencyAtStart(UrlFor(children[1])));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(maxChildStartConcurrency, Is.GreaterThanOrEqualTo(2));
+            Assert.That(merged.Keys, Is.SupersetOf(new[] { "c0", "c1" }));
+        });
+    }
+
+    [Test]
+    public void Should_stop_other_workers_promptly_and_rethrow_the_original_exception_when_a_fetch_faults()
+    {
+        var faultingBand = PriceBand.SeedBands()[4];
+        var client = new ConcurrencyTrackingScrapeClient(TimeSpan.FromMilliseconds(50));
+        var urls = new FaultingUrlService(faultingBand);
+        var parser = Substitute.For<ISearchPageParser>();
+        parser.Parse(Arg.Any<string>()).Returns(new SearchPageResult([], 0));
+
+        var settings = new MercariCollectionSettings(20, Backfill: null, SearchConcurrency: 3);
+        var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var thrown = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(thrown!.Message, Is.EqualTo("Simulated URL-builder fault."));
+            Assert.That(client.CallCount, Is.LessThan(9));
+        });
+    }
+
+    [Test]
     public async Task Should_keep_collected_results_and_record_no_search_page_failure_when_challenge_pages_recover_before_success()
     {
         var listing = new ListingSummary("m1", "M1", 1m, "USD", "https://x/m1", false, null, null, null);
@@ -698,6 +806,129 @@ public class MercariPriceBandCollectorTests
     private sealed class PassthroughScrapeClient : IScrapeClient
     {
         public Task<string> GetPageHtml(string url, CancellationToken ct) => Task.FromResult(url);
+    }
+
+    private sealed class ConcurrencyTrackingScrapeClient : IScrapeClient
+    {
+        private readonly TimeSpan _delay;
+        private int _current;
+        private int _max;
+        private int _callCount;
+
+        internal ConcurrencyTrackingScrapeClient(TimeSpan delay) => _delay = delay;
+
+        internal int MaxObservedConcurrency => Volatile.Read(ref _max);
+
+        internal int CallCount => Volatile.Read(ref _callCount);
+
+        public async Task<string> GetPageHtml(string url, CancellationToken ct)
+        {
+            Interlocked.Increment(ref _callCount);
+            var current = Interlocked.Increment(ref _current);
+            RecordMax(current);
+
+            await Task.Delay(_delay, ct);
+
+            Interlocked.Decrement(ref _current);
+            return url;
+        }
+
+        private void RecordMax(int current)
+        {
+            int observedMax;
+            do
+            {
+                observedMax = Volatile.Read(ref _max);
+                if (current <= observedMax)
+                {
+                    return;
+                }
+            }
+            while (Interlocked.CompareExchange(ref _max, current, observedMax) != observedMax);
+        }
+    }
+
+    private sealed class DelayedConcurrencyTrackingScrapeClient : IScrapeClient
+    {
+        private readonly IReadOnlyDictionary<string, TimeSpan> _delaysByUrl;
+        private readonly TimeSpan _defaultDelay;
+        private readonly object _lock = new();
+        private readonly Dictionary<string, int> _concurrencyAtStartByUrl = new(StringComparer.Ordinal);
+        private int _current;
+
+        internal DelayedConcurrencyTrackingScrapeClient(
+            IReadOnlyDictionary<string, TimeSpan> delaysByUrl, TimeSpan defaultDelay)
+        {
+            _delaysByUrl = delaysByUrl;
+            _defaultDelay = defaultDelay;
+        }
+
+        internal int ConcurrencyAtStart(string url)
+        {
+            lock (_lock)
+            {
+                return _concurrencyAtStartByUrl.GetValueOrDefault(url);
+            }
+        }
+
+        public async Task<string> GetPageHtml(string url, CancellationToken ct)
+        {
+            var current = Interlocked.Increment(ref _current);
+            lock (_lock)
+            {
+                _concurrencyAtStartByUrl[url] = current;
+            }
+
+            var delay = _delaysByUrl.GetValueOrDefault(url, _defaultDelay);
+            await Task.Delay(delay, ct);
+
+            Interlocked.Decrement(ref _current);
+            return url;
+        }
+    }
+
+    private sealed class KeyedUrlService : IPriceBandSearchUrlService
+    {
+        public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice) =>
+            $"{Encode(minPrice)}|{Encode(maxPrice)}";
+
+        private static string Encode(decimal? value) =>
+            value?.ToString(CultureInfo.InvariantCulture) ?? "open";
+    }
+
+    private sealed class KeyedResultParser : ISearchPageParser
+    {
+        private readonly IReadOnlyDictionary<string, SearchPageResult> _resultsByUrl;
+        private readonly SearchPageResult _default;
+
+        internal KeyedResultParser(IReadOnlyDictionary<string, SearchPageResult> resultsByUrl, SearchPageResult @default)
+        {
+            _resultsByUrl = resultsByUrl;
+            _default = @default;
+        }
+
+        public Marketplace Marketplace => Marketplace.Mercari;
+
+        public bool ContainsListingMarkup(string html) => true;
+
+        public SearchPageResult Parse(string html) => _resultsByUrl.GetValueOrDefault(html, _default);
+    }
+
+    private sealed class FaultingUrlService : IPriceBandSearchUrlService
+    {
+        private readonly PriceBand _faultingBand;
+
+        internal FaultingUrlService(PriceBand faultingBand) => _faultingBand = faultingBand;
+
+        public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice)
+        {
+            if (minPrice == _faultingBand.MinPrice && maxPrice == _faultingBand.MaxPrice)
+            {
+                throw new InvalidOperationException("Simulated URL-builder fault.");
+            }
+
+            return $"{minPrice}|{maxPrice}";
+        }
     }
 
     private sealed class CatalogueUrlService : IPriceBandSearchUrlService

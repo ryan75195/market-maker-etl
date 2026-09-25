@@ -1,0 +1,58 @@
+{
+  "criteria": [
+    {
+      "id": "AC-1",
+      "criterion": "A unit test with a fake IScrapeClient that records its maximum in-flight count proves: searches overlap up to the configured limit and never exceed it; the stored listings are identical to a concurrency-1 run over the same fake data.",
+      "plannedImplementation": "MercariPriceBandCollector.Collect runs Math.Max(1, MercariCollectionSettings.SearchConcurrency) worker Tasks that each claim-dequeue-and-increment-Fetched under a single CollectorRunState.SyncRoot lock, fetch unlocked, then re-lock only to merge/split/prune via BandOutcomeApplier. A new ConcurrencyTrackingScrapeClient test fake tracks concurrently in-flight GetPageHtml calls behind an artificial 20ms delay.",
+      "plannedVerification": "MercariPriceBandCollectorTests.Should_overlap_search_fetches_up_to_the_configured_limit_and_match_a_concurrency_one_runs_listings: asserts MaxObservedConcurrency > 1 and <= the configured limit (3), and that a concurrency-3 run's merged listing keys equal a concurrency-1 run's over the same deterministic, URL-addressable fake catalogue (band budget set high enough that neither run hits the cap, so the final set is provably order-independent).",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet test tests/MarketMakerEtl.Tests.Unit --filter FullyQualifiedName~MercariPriceBandCollectorTests: the new test passes as part of the full 297/297 Unit run."
+    },
+    {
+      "id": "AC-2",
+      "criterion": "Band cap, pruning and backfill tests still pass unchanged.",
+      "plannedImplementation": "MercariCollectionSettings.SearchConcurrency defaults to 1 and SoldBackfillPlanner.Resolve's new concurrency parameter defaults to 1, so every pre-existing test (which does not pass either) exercises exactly one worker / one probe at a time -- the same fully sequential code path as before the change, now expressed via a claim-loop over a lock instead of a bare while loop, with identical dequeue/merge/split ordering.",
+      "plannedVerification": "Full existing MarketMakerEtl.Tests.Unit suite (band-cap, pruning and every SoldBackfillPlannerTests/MercariPriceBandCollectorTests case) plus MarketMakerEtl.Tests.Architecture, run with no source changes to any existing test.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "dotnet build MarketMakerEtl.slnx --no-incremental: 0 errors. dotnet test tests/MarketMakerEtl.Tests.Unit --no-build: Passed 297/297 (294 pre-existing + 3 new). dotnet test tests/MarketMakerEtl.Tests.Architecture --no-build: Passed 25/25. dotnet format MarketMakerEtl.slnx --verify-no-changes: no output, exit 0."
+    },
+    {
+      "id": "AC-3",
+      "criterion": "Live check (docs/running-locally.md): a first run of 'ps5 controller' with Scrape:MaxBandsPerDirection=40 completes the search phase at least 2x faster than at concurrency 1 on the same machine, with no increase in failed fetches. Report both timings.",
+      "plannedImplementation": "No code change needed beyond the concurrency itself (default Scrape:SearchConcurrency=3); requires starting Azurite, AIOWebScraper and the real scraper stack, which this task was explicitly scoped out of running.",
+      "plannedVerification": "Not run in this session -- scope limits said not to start Azurite/AIOWebScraper/Api/Etl or run any live scrape, since another agent may be using the local scraper stack; the PR marks this criterion as pending the coordinator's own live timing check.",
+      "materialConcerns": [
+        "Not verified in this session by design (explicit scope limit). The coordinator must run the live check per docs/running-locally.md and report both concurrency-1 and concurrency-3 search-phase timings plus failed-fetch counts before this criterion can be marked done."
+      ],
+      "comparison": true,
+      "verificationStatus": "pending",
+      "evidence": ""
+    },
+    {
+      "id": "AC-4",
+      "criterion": "Quality gate: pre-commit hook (build with analyzers, dotnet format --verify-no-changes, Unit + Architecture tests) green. Add a config test for the default and an override.",
+      "plannedImplementation": "ScrapeOptions.SearchConcurrency defaults to 3; ServiceCollectionExtensions.BuildScrapeOptions reads Scrape:SearchConcurrency via ReadInt with that default.",
+      "plannedVerification": "CoreServicesDefaultsTests.Should_default_search_concurrency_to_three (default) and ScrapeLimitsConfigurationTests.Should_read_search_concurrency_from_configuration (override to 5). Final confirmation is the actual .githooks/pre-commit run at commit time.",
+      "materialConcerns": [],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "Both named tests pass in the 297/297 Unit run. dotnet build --no-incremental: 0 errors/warnings. dotnet format --verify-no-changes: clean."
+    },
+    {
+      "id": "AC-5",
+      "criterion": "Constraint: concurrency must not change band-splitting or backfill decisions; retries (SearchPageFetcher) must still work per band under concurrency; run issues and counters must stay correct.",
+      "plannedImplementation": "All band-splitting/backfill decision logic (ShouldSplit, SoldBackfillPlanner.Resolve's Split/Store/None decision, PriceBand.Split) is untouched; only its execution is moved behind worker Tasks with locking around the same merge/enqueue calls. SearchPageFetcher itself is stateless per call (only reads immutable config fields), so its 5-attempt Cloudflare-challenge retry is unaffected by running multiple bands' fetches concurrently. Fetched/BandsPruned/BandsOverCapacityUnsplit/TotalReported/_searchPageFailures are all mutated only inside CollectorRunState.SyncRoot; SoldBackfillPlanner's _dateCache (memoized Task-per-listing under a lock) and _itemPageFetches (Interlocked/Volatile) are now safe for concurrent Resolve() calls from different bands sharing one planner instance.",
+      "plannedVerification": "Existing MercariPriceBandCollectorTests Cloudflare-challenge-retry tests (Should_keep_collected_results_and_record_no_search_page_failure_when_challenge_pages_recover_before_success, Should_store_sibling_results_and_record_one_search_page_failed_issue_with_the_challenge_message_when_a_band_is_persistently_a_challenge_page) pass unchanged; the new overlap test's listing-set equality assertion is itself an end-to-end proof that concurrent execution reaches the same band-splitting/merge decisions as sequential execution.",
+      "materialConcerns": [
+        "SoldBackfillPlanner's own internal item-page concurrency (scope item 2: 'the first and last item of a page ... and the margin probe') is only partially implemented. The margin probe (ProbeMargin) is fully parallelized since it unconditionally visits every position in its window regardless of outcome, so concurrency cannot change its result or fetch count. The leading-sample early-exit (IsEntirelyBeforeCutoff) and the single 'oldest'/last-item fetch in Resolve were deliberately left sequential: both currently save fetches via short-circuiting (a locked-in test, SoldBackfillPlannerTests.Should_still_report_none_when_the_first_three_items_all_resolve_before_the_cutoff, asserts an exact fetch count of 3 for that short-circuit), and parallelizing across that boundary would add extra, sometimes-wasted item-page fetches -- a real behavior/budget change the ticket's 'must not change backfill decisions' constraint rules out. SoldBackfillPlanner was made safe for concurrent per-band Resolve() calls (required now that bands run concurrently and share one planner instance) even where its own internal fetches stayed sequential."
+      ],
+      "comparison": false,
+      "verificationStatus": "verified",
+      "evidence": "Named tests pass in the 297/297 Unit run; see materialConcerns for the one deliberately narrower part of scope item 2."
+    }
+  ]
+}
