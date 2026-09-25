@@ -1,6 +1,7 @@
 using System.Globalization;
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Models.Scheduling;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
@@ -34,6 +35,11 @@ public static class ServiceCollectionExtensions
     private const int DefaultDetailBacklogTickMinutes = 5;
     private const int DefaultDetailBacklogMaxFetchesPerTick = 30;
     private const int DefaultDetailBacklogMaxFetchesPerHour = 300;
+    private const string DefaultClassifierBaseUrl = "";
+    private const int DefaultClassifierBatchSize = 64;
+    private const int DefaultClassifierTickMinutes = 5;
+    private const int DefaultClassifierMaxListingsPerTick = 2000;
+    private const int DefaultClassifierTimeoutSeconds = 120;
 
     private static readonly TimeSpan DefaultFetchTimeout = TimeSpan.FromMinutes(5);
 
@@ -65,6 +71,7 @@ public static class ServiceCollectionExtensions
         var detailFetchOptions = BuildDetailFetchOptions(configuration);
         services.AddSingleton(detailFetchOptions);
         services.AddSingleton(BuildDetailBacklogOptions(configuration, detailFetchOptions.MaxDetailFetchAttempts));
+        services.AddSingleton(BuildClassifierOptions(configuration));
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite(BuildDatabaseConnectionString(configuration)));
 
@@ -74,6 +81,8 @@ public static class ServiceCollectionExtensions
     private static IServiceCollection AddCoreDomainServices(this IServiceCollection services)
     {
         services.AddHttpClient<IScrapeClient, HttpScrapeClient>();
+        services.AddHttpClient<IListingClassifierClient, HttpListingClassifierClient>(
+            client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddSingleton<IScrapeContentStore, BlobScrapeContentStore>();
         services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
         services.AddSingleton<IEbaySearchUrlService, MercariSearchUrlService>();
@@ -103,6 +112,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IJobSchedulingService, JobSchedulingService>();
         services.AddSingleton<IListingRefreshSchedulingService, ListingRefreshSchedulingService>();
         services.AddSingleton<IDetailBacklogService, DetailBacklogService>();
+        services.AddSingleton<IListingClassificationStore, ListingClassificationStore>();
+        services.AddSingleton<IListingClassificationService, ListingClassificationService>();
         return services;
     }
 
@@ -149,6 +160,14 @@ public static class ServiceCollectionExtensions
             ReadInt(configuration, "DetailBacklog:MaxFetchesPerTick", DefaultDetailBacklogMaxFetchesPerTick),
             ReadInt(configuration, "DetailBacklog:MaxFetchesPerHour", DefaultDetailBacklogMaxFetchesPerHour),
             maxDetailFetchAttempts);
+
+    private static ClassifierOptions BuildClassifierOptions(IConfiguration? configuration) =>
+        new(
+            ReadString(configuration, "Classifier:BaseUrl", DefaultClassifierBaseUrl),
+            ReadInt(configuration, "Classifier:BatchSize", DefaultClassifierBatchSize),
+            ReadInt(configuration, "Classifier:TickMinutes", DefaultClassifierTickMinutes),
+            ReadInt(configuration, "Classifier:MaxListingsPerTick", DefaultClassifierMaxListingsPerTick),
+            ReadInt(configuration, "Classifier:TimeoutSeconds", DefaultClassifierTimeoutSeconds));
 
     private static string BuildDatabaseConnectionString(IConfiguration? configuration)
     {

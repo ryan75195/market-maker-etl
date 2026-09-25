@@ -10,6 +10,7 @@ builder.Services.AddHostedService<ScrapeWorker>();
 builder.Services.AddHostedService<JobQueueingWorker>();
 builder.Services.AddHostedService<ListingRefreshWorker>();
 builder.Services.AddHostedService<DetailBacklogWorker>();
+builder.Services.AddHostedService<ClassificationWorker>();
 var host = builder.Build();
 
 using (var scope = host.Services.CreateScope())

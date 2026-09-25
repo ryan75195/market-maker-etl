@@ -35,7 +35,27 @@ public sealed class EtlDbContext : DbContext
 
     public DbSet<TaxonomyVersionEntity> TaxonomyVersions => Set<TaxonomyVersionEntity>();
 
+    public DbSet<ListingClassificationEntity> ListingClassifications => Set<ListingClassificationEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        ConfigureScrapeJobs(modelBuilder);
+        ConfigureScrapeRuns(modelBuilder);
+        ConfigureListings(modelBuilder);
+        ConfigureCategories(modelBuilder);
+
+        modelBuilder.Entity<SchedulerStateEntity>(entity =>
+        {
+            entity.ToTable("SchedulerState");
+            entity.HasKey(e => e.Id);
+        });
+
+        ConfigureSellersAndRawData(modelBuilder);
+        ConfigureProductFamilies(modelBuilder);
+        ConfigureListingClassifications(modelBuilder);
+    }
+
+    private static void ConfigureScrapeJobs(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ScrapeJobEntity>(entity =>
         {
@@ -49,7 +69,10 @@ public sealed class EtlDbContext : DbContext
                 .HasForeignKey(e => e.ProductFamilyId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
+    }
 
+    private static void ConfigureScrapeRuns(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<ScrapeRunEntity>(entity =>
         {
             entity.ToTable("ScrapeRuns");
@@ -70,18 +93,6 @@ public sealed class EtlDbContext : DbContext
             entity.Property(e => e.Phase).IsRequired().HasMaxLength(32);
             entity.HasIndex(e => e.ScrapeRunId);
         });
-
-        ConfigureListings(modelBuilder);
-        ConfigureCategories(modelBuilder);
-
-        modelBuilder.Entity<SchedulerStateEntity>(entity =>
-        {
-            entity.ToTable("SchedulerState");
-            entity.HasKey(e => e.Id);
-        });
-
-        ConfigureSellersAndRawData(modelBuilder);
-        ConfigureProductFamilies(modelBuilder);
     }
 
     private static void ConfigureListings(ModelBuilder modelBuilder)
@@ -162,6 +173,29 @@ public sealed class EtlDbContext : DbContext
             entity.HasOne(e => e.ProductFamily)
                 .WithMany(f => f.TaxonomyVersions)
                 .HasForeignKey(e => e.ProductFamilyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureListingClassifications(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ListingClassificationEntity>(entity =>
+        {
+            entity.ToTable("ListingClassifications");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Question).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Choice).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.ResolvedChoice).HasMaxLength(64);
+            entity.Property(e => e.ProbabilitiesJson).IsRequired();
+            entity.HasIndex(e => new { e.ListingEntityId, e.Question }).IsUnique();
+            entity.HasIndex(e => new { e.TaxonomyVersionId, e.Question, e.ResolvedChoice });
+            entity.HasOne<ListingEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.ListingEntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<TaxonomyVersionEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.TaxonomyVersionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
