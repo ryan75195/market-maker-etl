@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Scheduling;
@@ -21,6 +21,8 @@ public static class ServiceCollectionExtensions
     private const int DefaultMaxBandsPerDirection = 200;
     private const int DefaultSoldBackfillDays = 30;
     private const int DefaultMaxBackfillItemPageFetches = 400;
+    private const int DefaultSearchPageMaxAttempts = 5;
+    private const int DefaultSearchPageRetryBaseDelaySeconds = 5;
     private const string DefaultDatabaseFileName = "marketmakeretl.db";
     private const int DefaultTickMinutes = 5;
     private const int DefaultRefreshIntervalHours = 24;
@@ -107,7 +109,9 @@ public static class ServiceCollectionExtensions
             ReadBool(configuration, "Scrape:CollectSold", DefaultCollectSold),
             ReadInt(configuration, "Scrape:MaxBandsPerDirection", DefaultMaxBandsPerDirection),
             ReadInt(configuration, "Scrape:SoldBackfillDays", DefaultSoldBackfillDays),
-            ReadInt(configuration, "Scrape:MaxBackfillItemPageFetches", DefaultMaxBackfillItemPageFetches));
+            ReadInt(configuration, "Scrape:MaxBackfillItemPageFetches", DefaultMaxBackfillItemPageFetches),
+            ReadInt(configuration, "Scrape:SearchPageMaxAttempts", DefaultSearchPageMaxAttempts),
+            ReadInt(configuration, "Scrape:SearchPageRetryBaseDelaySeconds", DefaultSearchPageRetryBaseDelaySeconds));
 
     private static ScheduleOptions BuildScheduleOptions(IConfiguration? configuration) =>
         new(

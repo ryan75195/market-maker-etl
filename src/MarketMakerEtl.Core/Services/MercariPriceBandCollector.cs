@@ -18,12 +18,12 @@ internal sealed record PriceBandCollectionSummary(
 internal sealed record MercariCollectionSettings(
     int MaxBandsPerDirection,
     SoldBackfillPlanner? Backfill,
-    int MaxSearchPageAttempts = 3,
-    TimeSpan? SearchPageRetryDelay = null);
+    int SearchPageMaxAttempts = 5,
+    int SearchPageRetryBaseDelaySeconds = 5);
 
 internal readonly record struct BandOutcome(SearchPageResult Result, bool Pruned, bool OverCapacity);
 
-internal readonly record struct QueuedBand(PriceBand Band, int? ParentReportedCount);
+internal readonly record struct QueuedBand(PriceBand Band);
 
 internal sealed class PriceBandQueue
 {
@@ -39,7 +39,7 @@ internal sealed class PriceBandQueue
 
         foreach (var band in seedBands)
         {
-            Enqueue(new QueuedBand(band, null), SeedPriority);
+            Enqueue(new QueuedBand(band), SeedPriority);
         }
     }
 
@@ -55,7 +55,7 @@ internal sealed class PriceBandQueue
     {
         foreach (var child in parent.Split())
         {
-            Enqueue(new QueuedBand(child, parentReportedCount), -parentReportedCount);
+            Enqueue(new QueuedBand(child), -parentReportedCount);
         }
     }
 
@@ -76,7 +76,6 @@ internal sealed class MercariPriceBandCollector
 {
     private const decimal MinimumBandWidth = 0.01m;
     private const int MinimumCountRequiringSplit = 100;
-    private static readonly TimeSpan DefaultSearchPageRetryDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly IPriceBandSearchUrlService _urls;
     private readonly MercariCollectionSettings _settings;
@@ -97,8 +96,8 @@ internal sealed class MercariPriceBandCollector
         _fetcher = new SearchPageFetcher(
             client,
             parser,
-            settings.MaxSearchPageAttempts,
-            settings.SearchPageRetryDelay ?? DefaultSearchPageRetryDelay,
+            settings.SearchPageMaxAttempts,
+            settings.SearchPageRetryBaseDelaySeconds,
             logger);
     }
 
@@ -168,7 +167,7 @@ internal sealed class MercariPriceBandCollector
         CancellationToken ct)
     {
         var band = queued.Band;
-        var result = await FetchBand(searchTerm, sold, band, queued.ParentReportedCount, ct);
+        var result = await FetchBand(searchTerm, sold, band, ct);
         if (result is null)
         {
             return null;
@@ -221,10 +220,10 @@ internal sealed class MercariPriceBandCollector
     }
 
     private async Task<SearchPageResult?> FetchBand(
-        string searchTerm, bool sold, PriceBand band, int? parentReportedCount, CancellationToken ct)
+        string searchTerm, bool sold, PriceBand band, CancellationToken ct)
     {
         var url = _urls.BuildSearch(searchTerm, sold, band.MinPrice, band.MaxPrice);
-        var outcome = await _fetcher.Fetch(url, band, parentReportedCount, ct);
+        var outcome = await _fetcher.Fetch(url, band, ct);
 
         if (outcome.Failure is { } failure)
         {

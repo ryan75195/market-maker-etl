@@ -140,8 +140,16 @@ public class SearchPageServiceTests
 
         var adapters = new MarketplaceAdapters([(IEbaySearchUrlService)urls], [parser], [itemParser]);
         var service = new SearchPageService(
-            client, adapters, new ScrapeOptions(MaxPages: 1, CollectSold: false, MaxBandsPerDirection: 20),
-            TimeProvider.System, NullLogger<SearchPageService>.Instance);
+            client,
+            adapters,
+            new ScrapeOptions(
+                MaxPages: 1,
+                CollectSold: false,
+                MaxBandsPerDirection: 20,
+                SearchPageMaxAttempts: 3,
+                SearchPageRetryBaseDelaySeconds: 0),
+            TimeProvider.System,
+            NullLogger<SearchPageService>.Instance);
 
         var result = await service.Collect("pokemon card lot", Marketplace.Mercari, new HashSet<string>(), CancellationToken.None);
 

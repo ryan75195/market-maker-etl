@@ -94,7 +94,9 @@ public sealed class SearchPageService : ISearchPageService
         {
             var settings = new MercariCollectionSettings(
                 _options.MaxBandsPerDirection,
-                BuildBackfillPlanner(sold, itemParser, knownSoldListingIds));
+                BuildBackfillPlanner(sold, itemParser, knownSoldListingIds),
+                _options.SearchPageMaxAttempts,
+                _options.SearchPageRetryBaseDelaySeconds);
             var collector = new MercariPriceBandCollector(_client, bandUrls, parser, settings, _logger);
             return await collector.Collect(searchTerm, sold, merged, knownSoldListingIds, ct);
         }

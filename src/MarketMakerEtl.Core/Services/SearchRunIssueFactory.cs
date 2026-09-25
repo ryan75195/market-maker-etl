@@ -125,16 +125,6 @@ internal static class SearchRunIssueFactory
     {
         var range = $"{FormatPrice(failure.MinPrice)}-{FormatPrice(failure.MaxPrice)}";
 
-        if (failure.Kind == SearchPageFailureKind.EmptyResult)
-        {
-            return new ScrapeRunIssueDetails(
-                ListingId: null,
-                IssueType: "SearchPageEmpty",
-                ErrorMessage: $"Search page for '{searchTerm}' ({direction}) band [{range}] repeatedly came back empty despite its parent band reporting {failure.ParentReportedCount} result(s); the band was skipped.",
-                Phase: "Search",
-                HttpStatusCode: null);
-        }
-
         return new ScrapeRunIssueDetails(
             ListingId: null,
             IssueType: "SearchPageFailed",

@@ -42,6 +42,12 @@ internal static class MercariSearchPayloadParser
         return TryGetItems(document.RootElement, out var items) && items.GetArrayLength() == 0;
     }
 
+    public static bool HasSearchResult(string payload)
+    {
+        using var document = JsonDocument.Parse(payload);
+        return TryGetObject(document.RootElement, "data", out var data) && TryGetObject(data, "search", out _);
+    }
+
     private static int? ReadTotalCount(JsonElement root) =>
         TryGetObject(root, "data", out var data)
         && TryGetObject(data, "search", out var search)

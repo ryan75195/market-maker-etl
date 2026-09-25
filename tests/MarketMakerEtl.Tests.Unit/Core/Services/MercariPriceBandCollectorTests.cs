@@ -430,39 +430,30 @@ public class MercariPriceBandCollectorTests
     }
 
     [Test]
-    public async Task Should_keep_collected_results_and_record_no_search_page_failure_when_a_fetch_transiently_fails_then_succeeds()
+    public async Task Should_keep_collected_results_and_record_no_search_page_failure_when_challenge_pages_recover_before_success()
     {
         var listing = new ListingSummary("m1", "M1", 1m, "USD", "https://x/m1", false, null, null, null);
-        var callCount = 0;
         var client = Substitute.For<IScrapeClient>();
-        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_ =>
-        {
-            callCount++;
-            if (callCount == 1)
-            {
-                throw new TimeoutException("Timeout 60000ms exceeded ... navigating to search page");
-            }
-
-            return Task.FromResult("<html/>");
-        });
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("<html/>");
 
         var urls = Substitute.For<IPriceBandSearchUrlService>();
         urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
             .Returns("https://search");
 
+        var parseCallCount = 0;
         var parser = Substitute.For<ISearchPageParser>();
-        parser.Parse(Arg.Any<string>()).Returns(
-            new SearchPageResult([listing], 1),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0));
+        parser.Parse(Arg.Any<string>()).Returns(_ =>
+        {
+            parseCallCount++;
+            if (parseCallCount <= 2)
+            {
+                throw new UnrecognisedSearchPageException("Cloudflare challenge page");
+            }
 
-        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageRetryDelay: TimeSpan.Zero);
+            return parseCallCount == 3 ? new SearchPageResult([listing], 1) : new SearchPageResult([], 0);
+        });
+
+        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageMaxAttempts: 5, SearchPageRetryBaseDelaySeconds: 0);
         var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
         var merged = new Dictionary<string, ListingSummary>();
 
@@ -476,38 +467,30 @@ public class MercariPriceBandCollectorTests
     }
 
     [Test]
-    public async Task Should_store_other_bands_results_and_record_one_search_page_failure_when_a_band_persistently_fails_to_fetch()
+    public async Task Should_store_sibling_results_and_record_one_search_page_failed_issue_with_the_challenge_message_when_a_band_is_persistently_a_challenge_page()
     {
         var listing = new ListingSummary("m2", "M2", 1m, "USD", "https://x/m2", false, null, null, null);
-        var callCount = 0;
         var client = Substitute.For<IScrapeClient>();
-        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_ =>
-        {
-            callCount++;
-            if (callCount <= 3)
-            {
-                throw new TimeoutException("Timeout 60000ms exceeded ... navigating to search page");
-            }
-
-            return Task.FromResult("<html/>");
-        });
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("<html/>");
 
         var urls = Substitute.For<IPriceBandSearchUrlService>();
         urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
             .Returns("https://search");
 
+        var parseCallCount = 0;
         var parser = Substitute.For<ISearchPageParser>();
-        parser.Parse(Arg.Any<string>()).Returns(
-            new SearchPageResult([listing], 1),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0),
-            new SearchPageResult([], 0));
+        parser.Parse(Arg.Any<string>()).Returns(_ =>
+        {
+            parseCallCount++;
+            if (parseCallCount <= 3)
+            {
+                throw new UnrecognisedSearchPageException("Cloudflare challenge page");
+            }
 
-        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageRetryDelay: TimeSpan.Zero);
+            return parseCallCount == 4 ? new SearchPageResult([listing], 1) : new SearchPageResult([], 0);
+        });
+
+        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageMaxAttempts: 3, SearchPageRetryBaseDelaySeconds: 0);
         var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
         var merged = new Dictionary<string, ListingSummary>();
 
@@ -518,6 +501,7 @@ public class MercariPriceBandCollectorTests
             Assert.That(merged.Keys, Is.EquivalentTo(new[] { "m2" }));
             Assert.That(summary.BandsFetched, Is.EqualTo(9));
             Assert.That(summary.SearchPageFailures, Has.Count.EqualTo(1));
+            Assert.That(summary.SearchPageFailures![0].ErrorMessage, Is.EqualTo("Cloudflare challenge page"));
         });
     }
 
@@ -534,7 +518,7 @@ public class MercariPriceBandCollectorTests
 
         var parser = Substitute.For<ISearchPageParser>();
 
-        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageRetryDelay: TimeSpan.Zero);
+        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageRetryBaseDelaySeconds: 0);
         var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
         var merged = new Dictionary<string, ListingSummary>();
 
@@ -542,112 +526,7 @@ public class MercariPriceBandCollectorTests
             await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None));
     }
 
-    [Test]
-    public async Task Should_keep_sibling_results_and_report_no_issue_when_a_child_band_recovers_after_an_empty_page()
-    {
-        var sibling = new ListingSummary("sib", "Sib", 1m, "USD", "https://x/sib", false, null, null, null);
-        var recovered = new ListingSummary("rec", "Rec", 1m, "USD", "https://x/rec", false, null, null, null);
-        var splitParent = new PriceBand(20.01m, 50m);
-        var children = splitParent.Split();
-        var leftChild = children[0];
-        var rightChild = children[1];
-        var emptyAttempts = 0;
 
-        var client = Substitute.For<IScrapeClient>();
-        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(ci => (string)ci[0]);
-
-        var urls = Substitute.For<IPriceBandSearchUrlService>();
-        urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
-            .Returns(ci => EncodeBand((decimal?)ci[2], (decimal?)ci[3]));
-
-        var parser = Substitute.For<ISearchPageParser>();
-        parser.Parse(Arg.Any<string>()).Returns(ci =>
-        {
-            var url = (string)ci[0];
-            if (url == EncodeBand(splitParent.MinPrice, splitParent.MaxPrice))
-            {
-                return new SearchPageResult([], 200);
-            }
-
-            if (url == EncodeBand(leftChild.MinPrice, leftChild.MaxPrice))
-            {
-                emptyAttempts++;
-                return emptyAttempts == 1 ? new SearchPageResult([], 0) : new SearchPageResult([recovered], 1);
-            }
-
-            if (url == EncodeBand(rightChild.MinPrice, rightChild.MaxPrice))
-            {
-                return new SearchPageResult([sibling], 1);
-            }
-
-            return new SearchPageResult([], 0);
-        });
-
-        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageRetryDelay: TimeSpan.Zero);
-        var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
-        var merged = new Dictionary<string, ListingSummary>();
-
-        var summary = await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(merged.Keys, Is.SupersetOf(new[] { "sib", "rec" }));
-            Assert.That(summary.SearchPageFailures, Is.Null.Or.Empty);
-        });
-    }
-
-    [Test]
-    public async Task Should_keep_sibling_results_and_record_a_search_page_empty_issue_when_a_child_band_is_persistently_empty()
-    {
-        var sibling = new ListingSummary("sib2", "Sib2", 1m, "USD", "https://x/sib2", false, null, null, null);
-        var splitParent = new PriceBand(20.01m, 50m);
-        var children = splitParent.Split();
-        var leftChild = children[0];
-        var rightChild = children[1];
-
-        var client = Substitute.For<IScrapeClient>();
-        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(ci => (string)ci[0]);
-
-        var urls = Substitute.For<IPriceBandSearchUrlService>();
-        urls.BuildSearch(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<decimal?>(), Arg.Any<decimal?>())
-            .Returns(ci => EncodeBand((decimal?)ci[2], (decimal?)ci[3]));
-
-        var parser = Substitute.For<ISearchPageParser>();
-        parser.Parse(Arg.Any<string>()).Returns(ci =>
-        {
-            var url = (string)ci[0];
-            if (url == EncodeBand(splitParent.MinPrice, splitParent.MaxPrice))
-            {
-                return new SearchPageResult([], 200);
-            }
-
-            if (url == EncodeBand(leftChild.MinPrice, leftChild.MaxPrice))
-            {
-                return new SearchPageResult([], 0);
-            }
-
-            if (url == EncodeBand(rightChild.MinPrice, rightChild.MaxPrice))
-            {
-                return new SearchPageResult([sibling], 1);
-            }
-
-            return new SearchPageResult([], 0);
-        });
-
-        var settings = new MercariCollectionSettings(20, Backfill: null, SearchPageRetryDelay: TimeSpan.Zero);
-        var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
-        var merged = new Dictionary<string, ListingSummary>();
-
-        var summary = await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(merged.Keys, Is.SupersetOf(new[] { "sib2" }));
-            Assert.That(summary.SearchPageFailures, Has.Count.EqualTo(1));
-            Assert.That(summary.SearchPageFailures![0].Kind, Is.EqualTo(SearchPageFailureKind.EmptyResult));
-            Assert.That(summary.SearchPageFailures![0].ParentReportedCount, Is.EqualTo(200));
-        });
-    }
 
     [Test]
     public async Task Should_not_retry_or_record_an_issue_when_a_root_seed_band_is_genuinely_empty()
@@ -662,7 +541,7 @@ public class MercariPriceBandCollectorTests
         var parser = Substitute.For<ISearchPageParser>();
         parser.Parse(Arg.Any<string>()).Returns(new SearchPageResult([], 0));
 
-        var settings = new MercariCollectionSettings(9, Backfill: null, SearchPageRetryDelay: TimeSpan.Zero);
+        var settings = new MercariCollectionSettings(9, Backfill: null, SearchPageRetryBaseDelaySeconds: 0);
         var collector = new MercariPriceBandCollector(client, urls, parser, settings, NullLogger.Instance);
         var merged = new Dictionary<string, ListingSummary>();
 
@@ -676,7 +555,6 @@ public class MercariPriceBandCollectorTests
         await client.Received(9).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    private static string EncodeBand(decimal? min, decimal? max) => $"{min}|{max}";
 
     private static MercariPriceBandCollector BuildCollector(int maxBandsPerDirection, params SearchPageResult[] results)
     {

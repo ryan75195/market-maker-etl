@@ -98,16 +98,29 @@ public class MercariSearchPayloadParsesToListingsTests
         });
     }
 
-    [TestCase(ItemsWithoutIdentifiersPayload)]
-    [TestCase(ErrorPayload)]
-    public void Should_report_listings_present_when_a_payload_yields_no_readable_items(string payload)
+    [Test]
+    public void Should_report_listings_present_when_a_payload_yields_no_identifiable_items()
     {
         var parser = new MercariSearchParser();
 
         Assert.Multiple(() =>
         {
-            Assert.That(parser.Parse(payload).Listings, Is.Empty);
-            Assert.That(parser.ContainsListingMarkup(payload), Is.True);
+            Assert.That(parser.Parse(ItemsWithoutIdentifiersPayload).Listings, Is.Empty);
+            Assert.That(parser.ContainsListingMarkup(ItemsWithoutIdentifiersPayload), Is.True);
+        });
+    }
+
+    [Test]
+    public void Should_throw_for_a_payload_without_a_search_object()
+    {
+        var parser = new MercariSearchParser();
+
+        var exception = Assert.Throws<UnrecognisedSearchPageException>(() => parser.Parse(ErrorPayload));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.Message, Does.StartWith("Unrecognised search page"));
+            Assert.That(parser.ContainsListingMarkup(ErrorPayload), Is.True);
         });
     }
 

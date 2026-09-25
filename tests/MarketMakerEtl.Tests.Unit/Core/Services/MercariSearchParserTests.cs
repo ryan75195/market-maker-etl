@@ -140,4 +140,33 @@ public class MercariSearchParserTests
             Assert.That(parser.ContainsListingMarkup("<html><body>No results found</body></html>"), Is.False);
         });
     }
+
+    [Test]
+    public void Should_throw_with_the_challenge_message_for_a_cloudflare_challenge_page()
+    {
+        const string challengePage = """
+            <html>
+              <head><title>Just a moment...</title></head>
+              <body>
+                <script src="/cdn-cgi/challenge-platform/h/g/orchestrate/jsch/v1"></script>
+              </body>
+            </html>
+            """;
+
+        var exception = Assert.Throws<UnrecognisedSearchPageException>(
+            () => new MercariSearchParser().Parse(challengePage));
+
+        Assert.That(exception!.Message, Is.EqualTo("Cloudflare challenge page"));
+    }
+
+    [Test]
+    public void Should_throw_with_the_page_title_for_an_unrecognised_html_page()
+    {
+        const string page = "<html><head><title>Access Denied</title></head><body>blocked</body></html>";
+
+        var exception = Assert.Throws<UnrecognisedSearchPageException>(
+            () => new MercariSearchParser().Parse(page));
+
+        Assert.That(exception!.Message, Is.EqualTo("Unrecognised search page (title: 'Access Denied')"));
+    }
 }

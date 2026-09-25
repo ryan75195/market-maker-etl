@@ -5,4 +5,6 @@ public sealed record ScrapeOptions(
     bool CollectSold,
     int MaxBandsPerDirection = 200,
     int SoldBackfillDays = 30,
-    int MaxBackfillItemPageFetches = 400);
+    int MaxBackfillItemPageFetches = 400,
+    int SearchPageMaxAttempts = 5,
+    int SearchPageRetryBaseDelaySeconds = 5);
