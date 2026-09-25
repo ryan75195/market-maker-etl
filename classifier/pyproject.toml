@@ -1,0 +1,28 @@
+[project]
+name = "mmclassifier"
+version = "0.1.0"
+description = "HTTP sidecar serving fine-tuned Laya ensembles for market-maker-etl listing classification"
+requires-python = ">=3.12"
+dependencies = [
+    "laya==0.3.20",
+    "torch",
+    "fastapi",
+    "uvicorn",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "httpx",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mmclassifier*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
