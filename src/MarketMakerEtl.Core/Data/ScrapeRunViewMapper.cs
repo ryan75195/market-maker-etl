@@ -44,5 +44,6 @@ internal static class ScrapeRunViewMapper
             issue.ErrorMessage,
             issue.Phase,
             issue.HttpStatusCode,
-            issue.CreatedUtc);
+            issue.CreatedUtc,
+            ScrapeRunIssueSeverityClassifier.ToSeverityLabel(issue.IssueType));
 }

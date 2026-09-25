@@ -1,0 +1,33 @@
+{
+  "testGateable": true,
+  "testCommand": "dotnet test tests/MarketMakerEtl.Tests.Unit/MarketMakerEtl.Tests.Unit.csproj --filter \"FullyQualifiedName~ARunWithOnlyInformationalIssuesCompletesCleanlyTests|FullyQualifiedName~ARunWithAFailureIssueEndsCompletedWithErrorsTests|FullyQualifiedName~AnUnknownIssueTypeFailsSafeToCompletedWithErrorsTests|FullyQualifiedName~ScrapeRunIssueViewExposesItsSeverityTests|FullyQualifiedName~ScrapeRunReportStoreTests\"",
+  "rationale": "ScrapeRunCompletion.DetermineStatus previously set CompletedWithErrors whenever any ScrapeRunIssues row existed for a run, with no distinction between the two informational issue types (SoldBackfillWindow, PriceBandCapHit -- both describe expected run behaviour, not a failure) and the five failure types (SearchPageFailed, ItemDetailFetchFailed, ItemDetailParseFailed, SoldBackfillBudgetExhausted, SoldBackfillBandOverflow, SearchYieldedNoResults). Because SoldBackfillWindow and PriceBandCapHit fire on almost every run, every run in the #59/#62/#60 live checks ended CompletedWithErrors regardless of whether anything actually failed, so the status stopped carrying signal. The fix adds a single classification point, a new internal static ScrapeRunIssueSeverityClassifier (src/MarketMakerEtl.Core/Data/ScrapeRunIssueSeverityClassifier.cs) holding a HashSet of the two informational IssueType strings; IsFailure(issueType) returns true for anything not in that set, so an unrecognised future issue type fails safe to 'error' rather than silently being treated as informational. ScrapeRunCompletion.DetermineStatus now selects the ScrapeRunIssues.IssueType values for the run into memory and returns CompletedWithErrors only if ScrapeRunIssueSeverityClassifier.IsFailure is true for at least one of them; Completed rows recording only informational issues now complete as Completed. No issue-recording behaviour changed: SearchRunIssueFactory and ItemDetailFetchService still write every issue type exactly as before, so the informational rows remain in ScrapeRunIssues as run metadata. The optional API-visibility scope item was also implemented: ScrapeRunIssueView gained a trailing string Severity field, populated by ScrapeRunViewMapper.MapIssue calling ScrapeRunIssueSeverityClassifier.ToSeverityLabel(issue.IssueType), which returns the literal string 'info' or 'error' (a plain string rather than a JsonStringEnumConverter-backed enum, since the API's minimal-API JSON pipeline has no enum-to-string converter registered and enums would otherwise serialize as integers). GET /api/jobs/{id}/runs returns ScrapeRunView unchanged in shape apart from this new trailing field on each issue. Failed (thrown-exception runs) is untouched: ScrapeStore.FailRun and ScrapeRunStateService's transition table were not touched by this change.",
+  "shapePaths": [
+    "src/MarketMakerEtl.Core/Data/ScrapeRunIssueSeverityClassifier.cs",
+    "src/MarketMakerEtl.Core/Data/ScrapeRunCompletion.cs",
+    "src/MarketMakerEtl.Core/Models/Runs/ScrapeRunIssueView.cs",
+    "src/MarketMakerEtl.Core/Data/ScrapeRunViewMapper.cs"
+  ],
+  "implementationPaths": [
+    "src/MarketMakerEtl.Core/Data/ScrapeRunIssueSeverityClassifier.cs",
+    "src/MarketMakerEtl.Core/Data/ScrapeRunCompletion.cs",
+    "src/MarketMakerEtl.Core/Models/Runs/ScrapeRunIssueView.cs",
+    "src/MarketMakerEtl.Core/Data/ScrapeRunViewMapper.cs",
+    "tests/MarketMakerEtl.Tests.Unit/Core/Data/ARunWithOnlyInformationalIssuesCompletesCleanlyTests.cs",
+    "tests/MarketMakerEtl.Tests.Unit/Core/Data/ARunWithAFailureIssueEndsCompletedWithErrorsTests.cs",
+    "tests/MarketMakerEtl.Tests.Unit/Core/Data/AnUnknownIssueTypeFailsSafeToCompletedWithErrorsTests.cs",
+    "tests/MarketMakerEtl.Tests.Unit/Core/Data/ScrapeRunIssueViewExposesItsSeverityTests.cs"
+  ],
+  "declaredRedTests": [
+    "ARunWithOnlyInformationalIssuesCompletesCleanlyTests.Should_complete_cleanly_when_every_issue_is_informational",
+    "ARunWithAFailureIssueEndsCompletedWithErrorsTests.Should_end_completed_with_errors_when_a_failure_issue_is_mixed_with_informational_ones",
+    "AnUnknownIssueTypeFailsSafeToCompletedWithErrorsTests.Should_treat_an_unrecognised_issue_type_as_a_failure",
+    "ScrapeRunIssueViewExposesItsSeverityTests.Should_label_an_informational_issue_as_info_and_a_failure_issue_as_error"
+  ],
+  "shapePathCitations": {
+    "src/MarketMakerEtl.Core/Data/ScrapeRunIssueSeverityClassifier.cs": "AC-1,AC-2",
+    "src/MarketMakerEtl.Core/Data/ScrapeRunCompletion.cs": "AC-1,AC-2",
+    "src/MarketMakerEtl.Core/Models/Runs/ScrapeRunIssueView.cs": "scope-3",
+    "src/MarketMakerEtl.Core/Data/ScrapeRunViewMapper.cs": "scope-3"
+  }
+}
