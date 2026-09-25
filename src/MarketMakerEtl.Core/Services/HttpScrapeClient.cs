@@ -33,13 +33,20 @@ public sealed class HttpScrapeClient : IScrapeClient
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(_options.FetchTimeout);
 
-        var jobId = await StartJob(url, deadline.Token);
-        await WaitForTerminal(jobId, deadline.Token);
-        var item = await GetFirstResult(jobId, deadline.Token);
-        var html = await DownloadContent(item, url, deadline.Token);
+        try
+        {
+            var jobId = await StartJob(url, deadline.Token);
+            await WaitForTerminal(jobId, deadline.Token);
+            var item = await GetFirstResult(jobId, deadline.Token);
+            var html = await DownloadContent(item, url, deadline.Token);
 
-        _logger.LogDebug("Fetched {Url} ({Length} bytes)", url, html.Length);
-        return html;
+            _logger.LogDebug("Fetched {Url} ({Length} bytes)", url, html.Length);
+            return html;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Fetching {url} timed out after {_options.FetchTimeout}.");
+        }
     }
 
     private async Task<string> StartJob(string url, CancellationToken ct)

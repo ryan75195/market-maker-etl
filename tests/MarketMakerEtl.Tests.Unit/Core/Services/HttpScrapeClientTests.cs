@@ -67,6 +67,35 @@ public class HttpScrapeClientTests
     }
 
     [Test]
+    public void Should_throw_a_timeout_exception_naming_the_url_when_the_job_never_reaches_a_terminal_state()
+    {
+        var handler = new StubScrapeHandler(BlobUri, neverTerminates: true);
+        var content = Substitute.For<IScrapeContentStore>();
+        var options = new ScrapeClientOptions(
+            "http://scraper.test", "key", TimeSpan.FromMilliseconds(30), TimeSpan.FromMilliseconds(5));
+        var client = new HttpScrapeClient(new HttpClient(handler), options, content, NullLogger<HttpScrapeClient>.Instance);
+
+        var exception = Assert.ThrowsAsync<TimeoutException>(async () =>
+            await client.GetPageHtml("https://www.ebay.co.uk/sch/i.html", CancellationToken.None));
+
+        Assert.That(exception!.Message, Does.Contain("https://www.ebay.co.uk/sch/i.html"));
+    }
+
+    [Test]
+    public void Should_propagate_operation_cancelled_when_the_callers_token_is_cancelled()
+    {
+        var handler = new StubScrapeHandler(BlobUri, neverTerminates: true);
+        var content = Substitute.For<IScrapeContentStore>();
+        var options = new ScrapeClientOptions(
+            "http://scraper.test", "key", TimeSpan.FromMinutes(5), TimeSpan.FromMilliseconds(5));
+        var client = new HttpScrapeClient(new HttpClient(handler), options, content, NullLogger<HttpScrapeClient>.Instance);
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(30));
+
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+            await client.GetPageHtml("https://www.ebay.co.uk/sch/i.html", cts.Token));
+    }
+
+    [Test]
     public async Task Should_pin_the_new_job_wire_field_names()
     {
         var handler = new StubScrapeHandler(BlobUri);
@@ -116,13 +145,16 @@ public class HttpScrapeClientTests
         private readonly string? _blobUri;
         private readonly bool _failJob;
         private readonly string? _failureReason;
+        private readonly bool _neverTerminates;
         private int _statusCalls;
 
-        public StubScrapeHandler(string? blobUri, bool failJob = false, string? failureReason = null)
+        public StubScrapeHandler(
+            string? blobUri, bool failJob = false, string? failureReason = null, bool neverTerminates = false)
         {
             _blobUri = blobUri;
             _failJob = failJob;
             _failureReason = failureReason;
+            _neverTerminates = neverTerminates;
         }
 
         public string? NewJobBody { get; private set; }
@@ -166,6 +198,11 @@ public class HttpScrapeClientTests
             if (_failJob)
             {
                 return "{\"job\":{\"jobId\":\"job-1\",\"status\":\"failure\"}}";
+            }
+
+            if (_neverTerminates)
+            {
+                return "{\"job\":{\"jobId\":\"job-1\",\"status\":\"processing\"}}";
             }
 
             return _statusCalls == 1
