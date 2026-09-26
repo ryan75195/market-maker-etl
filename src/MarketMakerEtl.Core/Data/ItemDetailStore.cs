@@ -95,9 +95,19 @@ public sealed class ItemDetailStore : IItemDetailStore
             await ApplySoldDetail(db, listing, detail, wasSold, ct);
         }
 
+        IncrementAttemptsWhenSoldWithoutDate(listing);
+
         listing.DetailFetchedUtc = DateTime.UtcNow;
         listing.UpdatedUtc = DateTime.UtcNow;
         await SqliteBusyRetry.ExecuteAsync(() => db.SaveChangesAsync(ct), ct);
+    }
+
+    private static void IncrementAttemptsWhenSoldWithoutDate(ListingEntity listing)
+    {
+        if (listing.IsSold && listing.SoldDate is null)
+        {
+            listing.DetailFetchAttempts += 1;
+        }
     }
 
     private static async Task UpsertItemDetailRawData(

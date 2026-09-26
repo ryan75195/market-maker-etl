@@ -103,6 +103,85 @@ public class ItemDetailStoreTests
     }
 
     [Test]
+    public async Task Should_increment_attempts_when_a_successful_sold_fetch_yields_no_sold_date()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "sold-no-date-fetch", detailFetched: false, isSold: true);
+        var detail = BuildItemPageListing(status: "Sold") with { SoldDate = null };
+
+        await store.ApplyItemDetail(listingEntityId, detail, CancellationToken.None);
+
+        var listing = await GetListing(listingEntityId);
+        Assert.Multiple(() =>
+        {
+            Assert.That(listing.SoldDate, Is.Null);
+            Assert.That(listing.DetailFetchAttempts, Is.EqualTo(1));
+            Assert.That(listing.DetailFetchedUtc, Is.Not.Null);
+            Assert.That(listing.DescriptionStatus, Is.EqualTo("ok"));
+        });
+    }
+
+    [Test]
+    public async Task Should_not_increment_attempts_when_a_successful_sold_fetch_yields_a_real_sold_date()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "sold-with-date-fetch", detailFetched: false, isSold: true);
+        var detail = BuildItemPageListing(status: "Sold");
+
+        await store.ApplyItemDetail(listingEntityId, detail, CancellationToken.None);
+
+        var listing = await GetListing(listingEntityId);
+        Assert.That(listing.DetailFetchAttempts, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task Should_stop_reselecting_a_sold_listing_without_a_date_once_attempts_reach_the_maximum()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "family-sold-no-date-cap", detailFetched: false, isSold: true);
+        var detail = BuildItemPageListing(status: "Sold") with { SoldDate = null };
+
+        for (var attempt = 0; attempt < MaxAttempts; attempt++)
+        {
+            var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+            Assert.That(targets.Select(t => t.Id), Does.Contain(listingEntityId));
+            await store.ApplyItemDetail(listingEntityId, detail, CancellationToken.None);
+        }
+
+        var finalTargets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+        var listing = await GetListing(listingEntityId);
+        Assert.Multiple(() =>
+        {
+            Assert.That(listing.DetailFetchAttempts, Is.EqualTo(MaxAttempts));
+            Assert.That(listing.SoldDate, Is.Null);
+            Assert.That(finalTargets.Select(t => t.Id), Does.Not.Contain(listingEntityId));
+        });
+    }
+
+    [Test]
+    public async Task Should_drop_a_sold_listing_out_of_the_family_backlog_immediately_once_it_gets_a_real_sold_date()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "family-sold-with-date-drop", detailFetched: false, isSold: true);
+        var detail = BuildItemPageListing(status: "Sold");
+
+        await store.ApplyItemDetail(listingEntityId, detail, CancellationToken.None);
+
+        var listing = await GetListing(listingEntityId);
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+        Assert.Multiple(() =>
+        {
+            Assert.That(listing.SoldDate, Is.Not.Null);
+            Assert.That(listing.DetailFetchAttempts, Is.EqualTo(0));
+            Assert.That(targets, Is.Empty);
+        });
+    }
+
+    [Test]
     public async Task Should_increment_attempts_and_stay_eligible_without_marking_failed_on_a_single_failure()
     {
         var store = CreateStore();
