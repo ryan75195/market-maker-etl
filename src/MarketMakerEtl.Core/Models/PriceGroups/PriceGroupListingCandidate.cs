@@ -10,4 +10,6 @@ public sealed record PriceGroupListingCandidate(
     decimal? SoldPrice,
     DateTime? SoldDate,
     DateTime EffectiveSoldDate,
-    IReadOnlyList<PriceGroupAnswer> Answers);
+    IReadOnlyList<PriceGroupAnswer> Answers,
+    string? ShippingPayer = null,
+    decimal? ShippingCost = null);

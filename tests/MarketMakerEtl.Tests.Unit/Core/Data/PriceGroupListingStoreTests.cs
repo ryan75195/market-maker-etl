@@ -80,7 +80,86 @@ public class PriceGroupListingStoreTests
 
         var candidates = await store.GetCandidates(taxonomyVersionId, ["colour"], CancellationToken.None);
 
-        Assert.That(candidates.Single().Answers.Single().NeedsReview, Is.True);
+        var answer = candidates.Single().Answers.Single(a => a.Question == "colour");
+        Assert.That(answer.NeedsReview, Is.True);
+    }
+
+    [Test]
+    public async Task Should_attach_a_normalized_mercari_condition_answer_to_every_candidate()
+    {
+        var store = CreateStore();
+        var taxonomyVersionId = await SeedTaxonomyVersion();
+        var jobId = await SeedJob();
+        var listingId = await SeedListing(
+            jobId, "listing-3", isSold: false, soldPrice: null, soldDaysAgo: null, condition: "Like new");
+        await SeedClassificationRow(listingId, taxonomyVersionId, "colour", "white", 0.95);
+
+        var candidates = await store.GetCandidates(taxonomyVersionId, ["colour"], CancellationToken.None);
+
+        var answer = candidates.Single().Answers.Single(a => a.Question == "mercari_condition");
+        Assert.Multiple(() =>
+        {
+            Assert.That(answer.ResolvedChoice, Is.EqualTo("like_new"));
+            Assert.That(answer.IsApplicable, Is.True);
+            Assert.That(answer.NeedsReview, Is.False);
+        });
+    }
+
+    [Test]
+    public async Task Should_mark_mercari_condition_as_not_applicable_when_the_condition_is_unrecognised()
+    {
+        var store = CreateStore();
+        var taxonomyVersionId = await SeedTaxonomyVersion();
+        var jobId = await SeedJob();
+        var listingId = await SeedListing(
+            jobId, "listing-4", isSold: false, soldPrice: null, soldDaysAgo: null, condition: null);
+        await SeedClassificationRow(listingId, taxonomyVersionId, "colour", "white", 0.95);
+
+        var candidates = await store.GetCandidates(taxonomyVersionId, ["colour"], CancellationToken.None);
+
+        var answer = candidates.Single().Answers.Single(a => a.Question == "mercari_condition");
+        Assert.That(answer.IsApplicable, Is.False);
+    }
+
+    [Test]
+    public async Task Should_return_candidates_when_only_mercari_condition_is_requested()
+    {
+        var store = CreateStore();
+        var taxonomyVersionId = await SeedTaxonomyVersion();
+        var jobId = await SeedJob();
+        var listingId = await SeedListing(
+            jobId, "listing-5", isSold: true, soldPrice: 90m, soldDaysAgo: 1, condition: "Good");
+        await SeedClassificationRow(listingId, taxonomyVersionId, "colour", "white", 0.95);
+
+        var candidates = await store.GetCandidates(taxonomyVersionId, ["mercari_condition"], CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(candidates, Has.Count.EqualTo(1));
+            var answer = candidates.Single().Answers.Single(a => a.Question == "mercari_condition");
+            Assert.That(answer.ResolvedChoice, Is.EqualTo("good"));
+        });
+    }
+
+    [Test]
+    public async Task Should_include_shipping_payer_and_cost_on_the_candidate()
+    {
+        var store = CreateStore();
+        var taxonomyVersionId = await SeedTaxonomyVersion();
+        var jobId = await SeedJob();
+        var listingId = await SeedListing(
+            jobId, "listing-6", isSold: true, soldPrice: 90m, soldDaysAgo: 1,
+            shippingPayer: "seller", shippingCost: 6.5m);
+        await SeedClassificationRow(listingId, taxonomyVersionId, "colour", "white", 0.95);
+
+        var candidates = await store.GetCandidates(taxonomyVersionId, ["colour"], CancellationToken.None);
+
+        var candidate = candidates.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(candidate.ShippingPayer, Is.EqualTo("seller"));
+            Assert.That(candidate.ShippingCost, Is.EqualTo(6.5m));
+        });
     }
 
     private PriceGroupListingStore CreateStore() =>
@@ -121,7 +200,14 @@ public class PriceGroupListingStoreTests
     }
 
     private async Task<int> SeedListing(
-        int jobId, string listingId, bool isSold, decimal? soldPrice, int? soldDaysAgo)
+        int jobId,
+        string listingId,
+        bool isSold,
+        decimal? soldPrice,
+        int? soldDaysAgo,
+        string? condition = null,
+        string? shippingPayer = null,
+        decimal? shippingCost = null)
     {
         await using var db = await _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>().CreateDbContextAsync();
         var listing = new ListingEntity
@@ -133,6 +219,9 @@ public class PriceGroupListingStoreTests
             IsSold = isSold,
             SoldPrice = soldPrice,
             SoldDate = soldDaysAgo.HasValue ? DateTime.UtcNow.AddDays(-soldDaysAgo.Value) : null,
+            Condition = condition,
+            ShippingPayer = shippingPayer,
+            ShippingCost = shippingCost,
             CreatedUtc = DateTime.UtcNow
         };
         db.Listings.Add(listing);

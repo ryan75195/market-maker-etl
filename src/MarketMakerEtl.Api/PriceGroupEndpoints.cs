@@ -28,7 +28,8 @@ public static class PriceGroupEndpoints
         CancellationToken ct,
         int soldDays = DefaultSoldDays,
         bool includeUncertain = false,
-        int minSold = DefaultMinSold)
+        int minSold = DefaultMinSold,
+        string? trim = null)
     {
         var family = await families.GetFamily(familyId, ct);
         if (family is null)
@@ -49,13 +50,18 @@ public static class PriceGroupEndpoints
         var errors = new List<string>();
         var whereMap = ParseWhere(whereClauses, questions, errors);
         ValidateBy(byList, questions, errors);
+        if (!TryParseTrim(trim, out var trimIqr))
+        {
+            errors.Add("trim must be 'iqr'.");
+        }
+
         if (errors.Count > 0)
         {
             return QuestionValidationProblem(errors);
         }
 
         var query = new PriceGroupQuery(
-            family.LatestTaxonomyVersion.Id, whereMap, byList, soldDays, includeUncertain, minSold);
+            family.LatestTaxonomyVersion.Id, whereMap, byList, soldDays, includeUncertain, minSold, trimIqr);
         return Results.Ok(await priceGroups.GetPriceGroups(query, ct));
     }
 
@@ -92,8 +98,25 @@ public static class PriceGroupEndpoints
         return Results.Ok(await priceGroups.GetGroupListings(query, ct));
     }
 
-    private static IReadOnlyDictionary<string, TaxonomyQuestion> LoadQuestions(string questionsJson) =>
-        TaxonomyDocumentParser.Parse(questionsJson).Questions.ToDictionary(q => q.Key, StringComparer.Ordinal);
+    private static IReadOnlyDictionary<string, TaxonomyQuestion> LoadQuestions(string questionsJson)
+    {
+        var questions = TaxonomyDocumentParser.Parse(questionsJson).Questions
+            .ToDictionary(q => q.Key, StringComparer.Ordinal);
+        questions[MercariConditionNormalizer.QuestionKey] = MercariConditionNormalizer.ToTaxonomyQuestion();
+        return questions;
+    }
+
+    private static bool TryParseTrim(string? trim, out bool trimIqr)
+    {
+        if (string.IsNullOrEmpty(trim))
+        {
+            trimIqr = false;
+            return true;
+        }
+
+        trimIqr = string.Equals(trim, "iqr", StringComparison.OrdinalIgnoreCase);
+        return trimIqr;
+    }
 
     private static Dictionary<string, string> ParseWhere(
         string[] where, IReadOnlyDictionary<string, TaxonomyQuestion> questions, List<string> errors)

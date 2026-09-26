@@ -7,4 +7,7 @@ public sealed record PriceGroupListingResult(
     decimal? Price,
     DateTime? SoldDate,
     bool SoldDateIsEstimated,
-    decimal? DeltaFromSoldMedian);
+    decimal? DeltaFromSoldMedian,
+    decimal? LandedPrice = null,
+    decimal? NetProceeds = null,
+    decimal? DeltaLandedFromSoldNetMedian = null);
