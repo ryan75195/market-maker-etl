@@ -39,26 +39,22 @@ public sealed class ItemDetailStore : IItemDetailStore
     public async Task<IReadOnlyList<ListingDetailTarget>> GetBacklogListingsNeedingDetail(
         IReadOnlyCollection<int> jobIds, int limit, int maxAttempts, CancellationToken ct)
     {
-        if (jobIds.Count == 0 || limit <= 0)
-        {
-            return [];
-        }
-
-        var idArray = jobIds.ToArray();
         await using var db = await _factory.CreateDbContextAsync(ct);
-        var listings = await db.Listings
-            .Where(l => idArray.Contains(l.ScrapeJobId) && l.DetailFetchedUtc == null && l.DetailFetchAttempts < maxAttempts)
-            .OrderBy(l => l.DetailFetchAttempts > 0 ? 2 : l.IsSold ? 0 : 1)
-            .ThenByDescending(l => l.PostedUtc)
-            .ThenByDescending(l => l.CreatedUtc)
-            .ThenBy(l => l.DetailFetchAttempts)
-            .ThenBy(l => l.Id)
-            .Take(limit)
-            .ToListAsync(ct);
+        return await DetailBacklogQueries.GetGeneralListingsNeedingDetail(db, jobIds, limit, maxAttempts, ct);
+    }
 
-        return listings
-            .Select(l => new ListingDetailTarget(l.Id, l.ListingId, l.Url, l.ItemStatus, l.Marketplace))
-            .ToList();
+    public async Task<IReadOnlyList<ListingDetailTarget>> GetFamilyBacklogListingsNeedingDetail(
+        IReadOnlyCollection<int> jobIds, int limit, int maxAttempts, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        return await DetailBacklogQueries.GetFamilyListingsNeedingDetail(db, jobIds, limit, maxAttempts, ct);
+    }
+
+    public async Task<int> CountFamilyListingsNeedingDetail(
+        IReadOnlyCollection<int> jobIds, int maxAttempts, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        return await DetailBacklogQueries.CountFamilyListingsNeedingDetail(db, jobIds, maxAttempts, ct);
     }
 
     public async Task<IReadOnlyDictionary<string, int>> GetListingEntityIds(

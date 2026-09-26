@@ -29,6 +29,7 @@ public sealed class DetailBacklogWorker : BackgroundService
             var result = await _detailBacklog.RunTick(ct);
             LogFailures(result);
             LogSummary(result);
+            LogFamilyProgress(result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -71,5 +72,18 @@ public sealed class DetailBacklogWorker : BackgroundService
             result.Attempted,
             result.Succeeded,
             result.Failures.Count);
+    }
+
+    private void LogFamilyProgress(DetailBacklogTickResult result)
+    {
+        if (result.FamilyAttempted == 0 && result.FamilyRemaining == 0)
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Detail backlog tick: family-priority fetches ran {FamilyAttempted}, remaining {FamilyRemaining}",
+            result.FamilyAttempted,
+            result.FamilyRemaining);
     }
 }

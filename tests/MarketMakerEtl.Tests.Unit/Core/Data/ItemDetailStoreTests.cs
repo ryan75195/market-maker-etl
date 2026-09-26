@@ -249,6 +249,87 @@ public class ItemDetailStoreTests
     }
 
     [Test]
+    public async Task Should_order_the_family_backlog_sold_without_a_date_before_never_fetched()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var neverFetched = await SeedListing(jobId, "family-never-fetched", detailFetched: false);
+        var soldWithoutDate = await SeedListing(
+            jobId, "family-sold-no-date", detailFetched: false, isSold: true, soldDate: null);
+
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets.Select(t => t.Id), Is.EqualTo(new[] { soldWithoutDate, neverFetched }));
+    }
+
+    [Test]
+    public async Task Should_include_an_already_fetched_family_listing_that_is_sold_without_a_real_date()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var requeued = await SeedListing(
+            jobId, "family-requeued", detailFetched: true, isSold: true, soldDate: null);
+
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets.Select(t => t.Id), Is.EqualTo(new[] { requeued }));
+    }
+
+    [Test]
+    public async Task Should_exclude_a_family_listing_that_already_has_details_and_a_real_sold_date()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        await SeedListing(
+            jobId, "family-already-detailed", detailFetched: true, isSold: true,
+            soldDate: new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets, Is.Empty);
+    }
+
+    [Test]
+    public async Task Should_exclude_family_listings_that_reached_the_maximum_attempt_count()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        await SeedListing(jobId, "family-exhausted", detailFetched: false, detailFetchAttempts: MaxAttempts);
+        var eligible = await SeedListing(jobId, "family-eligible", detailFetched: false, detailFetchAttempts: MaxAttempts - 1);
+
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets.Select(t => t.Id), Is.EqualTo(new[] { eligible }));
+    }
+
+    [Test]
+    public async Task Should_cap_family_backlog_listings_to_the_requested_limit()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        await SeedListing(jobId, "family-cap-1", detailFetched: false);
+        await SeedListing(jobId, "family-cap-2", detailFetched: false);
+
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 1, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Should_count_family_listings_still_needing_detail()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        await SeedListing(jobId, "family-count-1", detailFetched: false);
+        await SeedListing(jobId, "family-count-2", detailFetched: false);
+        await SeedListing(jobId, "family-count-done", detailFetched: true, isSold: false);
+
+        var remaining = await store.CountFamilyListingsNeedingDetail([jobId], MaxAttempts, CancellationToken.None);
+
+        Assert.That(remaining, Is.EqualTo(2));
+    }
+
+    [Test]
     public async Task Should_enrich_the_existing_sold_history_row_instead_of_adding_a_duplicate_when_already_sold()
     {
         var store = CreateStore();
@@ -382,7 +463,8 @@ public class ItemDetailStoreTests
         bool isSold = false,
         int detailFetchAttempts = 0,
         DateTime? postedUtc = null,
-        DateTime? createdUtc = null)
+        DateTime? createdUtc = null,
+        DateTime? soldDate = null)
     {
         await using var db = await Factory().CreateDbContextAsync();
         var listing = new ListingEntity
@@ -392,6 +474,7 @@ public class ItemDetailStoreTests
             Url = $"https://x/itm/{listingId}",
             ItemStatus = isSold ? "Sold" : "Active",
             IsSold = isSold,
+            SoldDate = soldDate,
             DetailFetchedUtc = detailFetched ? DateTime.UtcNow : null,
             DetailFetchAttempts = detailFetchAttempts,
             PostedUtc = postedUtc,

@@ -5,4 +5,5 @@ public sealed record DetailBacklogOptions(
     int TickMinutes,
     int MaxFetchesPerTick,
     int MaxFetchesPerHour,
-    int MaxDetailFetchAttempts);
+    int MaxDetailFetchAttempts,
+    int FamilyDetailFetchesPerTick = 300);

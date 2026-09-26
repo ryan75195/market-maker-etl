@@ -35,6 +35,7 @@ public static class ServiceCollectionExtensions
     private const int DefaultDetailBacklogTickMinutes = 5;
     private const int DefaultDetailBacklogMaxFetchesPerTick = 30;
     private const int DefaultDetailBacklogMaxFetchesPerHour = 300;
+    private const int DefaultFamilyDetailFetchesPerTick = 300;
     private const string DefaultClassifierBaseUrl = "";
     private const int DefaultClassifierBatchSize = 64;
     private const int DefaultClassifierTickMinutes = 5;
@@ -164,7 +165,8 @@ public static class ServiceCollectionExtensions
             ReadInt(configuration, "DetailBacklog:TickMinutes", DefaultDetailBacklogTickMinutes),
             ReadInt(configuration, "DetailBacklog:MaxFetchesPerTick", DefaultDetailBacklogMaxFetchesPerTick),
             ReadInt(configuration, "DetailBacklog:MaxFetchesPerHour", DefaultDetailBacklogMaxFetchesPerHour),
-            maxDetailFetchAttempts);
+            maxDetailFetchAttempts,
+            ReadInt(configuration, "Scrape:FamilyDetailFetchesPerTick", DefaultFamilyDetailFetchesPerTick));
 
     private static ClassifierOptions BuildClassifierOptions(IConfiguration? configuration) =>
         new(
