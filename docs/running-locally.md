@@ -209,6 +209,7 @@ is environment-variable only):
 | `ContentStore:ConnectionString` | Azure Storage connection string for scraped HTML blobs |
 | `ContentStore:ContainerName` | Blob container name for scraped HTML — **must be exactly `html`**. AIOWebScraper's `AzureJobRepository` hardcodes `blobs.GetBlobContainerClient("html")` when it writes scraped content; any other value here makes `BlobScrapeContentStore.BuildBlobName` throw `Blob uri '...' does not point into the '<configured>' container` even though the underlying fetch succeeded |
 | `Database:ConnectionString` | SQLite connection string for MarketMakerEtl's own database |
+| `Database:BusyTimeoutMs` | `PRAGMA busy_timeout` (milliseconds) applied to every connection so a writer waits for a lock instead of failing immediately with `SQLITE_BUSY`; default `10000` |
 | `Schedule:TickMinutes` | How often `JobQueueingWorker` checks for due jobs |
 | `Schedule:RefreshIntervalHours` | How often `ListingRefreshWorker` refreshes active listings |
 | `Scrape:MaxPages` | Max eBay search result pages per direction |
