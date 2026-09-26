@@ -82,6 +82,25 @@ public static class FamilyEndpoints
         IProductFamilyStore families,
         CancellationToken ct)
     {
+        var invalid = ValidateUpdateRequest(request);
+        if (invalid is not null)
+        {
+            return invalid;
+        }
+
+        var updated = await families.UpdateFamily(
+            familyId,
+            request.Name,
+            request.ModelName,
+            request.DealGroupBy,
+            request.DealMinDiscount,
+            request.DealMinSold,
+            ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+
+    private static IResult? ValidateUpdateRequest(UpdateProductFamilyRequest request)
+    {
         if (request.ModelName is not null)
         {
             var invalid = ValidateModelName(request.ModelName);
@@ -91,8 +110,37 @@ public static class FamilyEndpoints
             }
         }
 
-        var updated = await families.UpdateFamily(familyId, request.Name, request.ModelName, ct);
-        return updated is null ? Results.NotFound() : Results.Ok(updated);
+        return ValidateDealSettings(request.DealGroupBy, request.DealMinDiscount, request.DealMinSold);
+    }
+
+    private static IResult? ValidateDealSettings(string? dealGroupBy, decimal? dealMinDiscount, int? dealMinSold)
+    {
+        var errors = new List<string>();
+
+        if (dealGroupBy is { Length: > 0 } && !IsValidDealGroupBy(dealGroupBy))
+        {
+            errors.Add("DealGroupBy must be a comma-separated list of question keys.");
+        }
+
+        if (dealMinDiscount is decimal minDiscount && (minDiscount <= 0m || minDiscount > 1m))
+        {
+            errors.Add("DealMinDiscount must be greater than 0 and at most 1.");
+        }
+
+        if (dealMinSold is int minSold && minSold < 1)
+        {
+            errors.Add("DealMinSold must be at least 1.");
+        }
+
+        return errors.Count == 0
+            ? null
+            : Results.ValidationProblem(new Dictionary<string, string[]> { ["DealSettings"] = errors.ToArray() });
+    }
+
+    private static bool IsValidDealGroupBy(string dealGroupBy)
+    {
+        var questions = dealGroupBy.Split(',', StringSplitOptions.TrimEntries);
+        return questions.Length > 0 && questions.All(q => q.Length > 0) && questions.Distinct().Count() == questions.Length;
     }
 
     private static async Task<IResult> AddTaxonomyVersion(

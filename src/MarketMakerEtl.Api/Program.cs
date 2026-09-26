@@ -189,6 +189,7 @@ app.MapClassificationEndpoints();
 app.MapReviewEndpoints();
 app.MapPriceGroupEndpoints();
 app.MapHealthEndpoints();
+app.MapDealSignalEndpoints();
 
 await app.RunAsync();
 
@@ -279,5 +280,10 @@ namespace MarketMakerEtl.Api
 
     public sealed record CreateProductFamilyRequest(string Key, string Name, string ModelName);
 
-    public sealed record UpdateProductFamilyRequest(string? Name, string? ModelName);
+    public sealed record UpdateProductFamilyRequest(
+        string? Name,
+        string? ModelName,
+        string? DealGroupBy = null,
+        decimal? DealMinDiscount = null,
+        int? DealMinSold = null);
 }

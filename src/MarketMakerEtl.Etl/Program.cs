@@ -12,6 +12,7 @@ builder.Services.AddHostedService<ListingRefreshWorker>();
 builder.Services.AddHostedService<DetailBacklogWorker>();
 builder.Services.AddHostedService<ClassificationWorker>();
 builder.Services.AddHostedService<StaleJobMonitorWorker>();
+builder.Services.AddHostedService<DealScanWorker>();
 var host = builder.Build();
 
 using (var scope = host.Services.CreateScope())

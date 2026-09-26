@@ -6,4 +6,7 @@ public sealed record ProductFamilyView(
     string Name,
     string ModelName,
     DateTime CreatedUtc,
-    TaxonomyVersionView? LatestTaxonomyVersion);
+    TaxonomyVersionView? LatestTaxonomyVersion,
+    string? DealGroupBy = null,
+    decimal DealMinDiscount = 0.20m,
+    int DealMinSold = 5);

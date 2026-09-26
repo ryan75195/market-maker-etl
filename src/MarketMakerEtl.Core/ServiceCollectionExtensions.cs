@@ -76,6 +76,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(BuildClassifierOptions(configuration));
         services.AddSingleton(BuildClassificationReviewOptions(configuration));
         services.AddSingleton(PriceGroupOptionsFactory.Build(configuration));
+        services.AddSingleton(DealsOptionsFactory.Build(configuration));
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite(BuildDatabaseConnectionString(configuration)));
 
@@ -121,7 +122,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IClassificationReviewStore, ClassificationReviewStore>();
         services.AddSingleton<IPriceGroupListingStore, PriceGroupListingStore>();
         services.AddSingleton<IPriceGroupQueryService, PriceGroupQueryService>();
-        return services.AddCoreHealthServices();
+        return services.AddCoreHealthServices().AddDealServices();
     }
 
     private static IServiceCollection AddCoreHealthServices(this IServiceCollection services)

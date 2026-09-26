@@ -45,7 +45,14 @@ public sealed class ProductFamilyStore : IProductFamilyStore
         return MapToView(family, null);
     }
 
-    public async Task<ProductFamilyView?> UpdateFamily(int familyId, string? name, string? modelName, CancellationToken ct)
+    public async Task<ProductFamilyView?> UpdateFamily(
+        int familyId,
+        string? name,
+        string? modelName,
+        string? dealGroupBy,
+        decimal? dealMinDiscount,
+        int? dealMinSold,
+        CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var family = await db.ProductFamilies.FindAsync([familyId], ct);
@@ -54,15 +61,7 @@ public sealed class ProductFamilyStore : IProductFamilyStore
             return null;
         }
 
-        if (name is not null)
-        {
-            family.Name = name;
-        }
-
-        if (modelName is not null)
-        {
-            family.ModelName = modelName;
-        }
+        ApplyUpdates(family, name, modelName, dealGroupBy, dealMinDiscount, dealMinSold);
 
         await db.SaveChangesAsync(ct);
         var latest = await LoadLatestVersion(db, familyId, ct);
@@ -162,6 +161,40 @@ public sealed class ProductFamilyStore : IProductFamilyStore
         return jobs.Select(JobViewFactory.ToView).ToList();
     }
 
+    private static void ApplyUpdates(
+        ProductFamilyEntity family,
+        string? name,
+        string? modelName,
+        string? dealGroupBy,
+        decimal? dealMinDiscount,
+        int? dealMinSold)
+    {
+        if (name is not null)
+        {
+            family.Name = name;
+        }
+
+        if (modelName is not null)
+        {
+            family.ModelName = modelName;
+        }
+
+        if (dealGroupBy is not null)
+        {
+            family.DealGroupBy = dealGroupBy.Length == 0 ? null : dealGroupBy;
+        }
+
+        if (dealMinDiscount is decimal minDiscount)
+        {
+            family.DealMinDiscount = minDiscount;
+        }
+
+        if (dealMinSold is int minSold)
+        {
+            family.DealMinSold = minSold;
+        }
+    }
+
     private static async Task<TaxonomyVersionView?> LoadLatestVersion(EtlDbContext db, int familyId, CancellationToken ct)
     {
         var entity = await db.TaxonomyVersions
@@ -181,7 +214,16 @@ public sealed class ProductFamilyStore : IProductFamilyStore
     }
 
     private static ProductFamilyView MapToView(ProductFamilyEntity family, TaxonomyVersionView? latest) =>
-        new(family.Id, family.Key, family.Name, family.ModelName, family.CreatedUtc, latest);
+        new(
+            family.Id,
+            family.Key,
+            family.Name,
+            family.ModelName,
+            family.CreatedUtc,
+            latest,
+            family.DealGroupBy,
+            family.DealMinDiscount,
+            family.DealMinSold);
 
     private static TaxonomyVersionView MapToVersionView(TaxonomyVersionEntity version) =>
         new(version.Id, version.ProductFamilyId, version.Version, version.QuestionsJson, version.CreatedUtc);
