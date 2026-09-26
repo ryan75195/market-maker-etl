@@ -20,6 +20,22 @@ dotnet build
 dotnet test
 ```
 
+## Running locally
+
+`scripts/run-local.ps1` starts, stops, and reports the status of the local
+stack (classifier sidecar, Api, Etl, and optionally a scraper start script).
+Copy `scripts/run-config.example.json` to `.local/run-config.json` (gitignored)
+and fill in machine-specific paths, then:
+
+```powershell
+./scripts/run-local.ps1 -Start
+./scripts/run-local.ps1 -Status
+./scripts/run-local.ps1 -Stop
+```
+
+See [docs/running-locally.md](./docs/running-locally.md) for configuration
+details and the full manual pipeline (including the external scraper repo).
+
 ## Development lifecycle
 
 See [CLAUDE.md](./CLAUDE.md) for the full lifecycle (issue → branch → commit → PR).

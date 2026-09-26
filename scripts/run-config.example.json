@@ -1,0 +1,11 @@
+{
+  "databasePath": ".local/data/marketmaker.db",
+  "modelsDir": "C:\\path\\to\\market-maker-classifier\\models",
+  "pythonExe": "C:\\path\\to\\venv\\Scripts\\python.exe",
+  "apiPort": 5299,
+  "classifierPort": 8765,
+  "scraperBaseUrl": "http://localhost:7071",
+  "scraperStartScript": null,
+  "classifierPreload": [],
+  "extraEnv": {}
+}
