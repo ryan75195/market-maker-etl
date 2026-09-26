@@ -10,6 +10,8 @@ public static class DealSignalEndpoints
     {
         app.MapGet("/api/families/{familyId:int}/deals", GetDeals);
 
+        app.MapGet("/api/families/{familyId:int}/deals/performance", GetDealsPerformance);
+
         return app;
     }
 
@@ -29,5 +31,21 @@ public static class DealSignalEndpoints
 
         var deals = await signals.GetSignals(familyId, since, take, ct);
         return Results.Ok(deals);
+    }
+
+    private static async Task<IResult> GetDealsPerformance(
+        int familyId,
+        IProductFamilyStore families,
+        IDealSignalStore signals,
+        CancellationToken ct)
+    {
+        var family = await families.GetFamily(familyId, ct);
+        if (family is null)
+        {
+            return Results.NotFound();
+        }
+
+        var performance = await signals.GetPerformance(familyId, ct);
+        return Results.Ok(performance);
     }
 }

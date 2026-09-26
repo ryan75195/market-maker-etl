@@ -11,6 +11,8 @@ internal static class DealServiceCollectionExtensions
         services.AddSingleton<IDealSignalStore, DealSignalStore>();
         services.AddHttpClient<IDealWebhookClient, HttpDealWebhookClient>();
         services.AddSingleton<IDealSignalService, DealSignalService>();
+        services.AddSingleton<IDealSignalBacktestStore, DealSignalBacktestStore>();
+        services.AddSingleton<IDealSignalBacktestService, DealSignalBacktestService>();
         return services;
     }
 }

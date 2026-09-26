@@ -355,6 +355,83 @@ public class PriceGroupQueryServiceTests
         });
     }
 
+    [Test]
+    public async Task Should_only_count_sales_strictly_after_the_window_start_and_up_to_the_window_end()
+    {
+        var groupKey = new Dictionary<string, string> { ["colour"] = "white" };
+        var windowStart = Now.UtcDateTime;
+        var candidates = new List<PriceGroupListingCandidate>
+        {
+            BuildCandidateAt(1, "white", windowStart),
+            BuildCandidateAt(2, "white", windowStart.AddDays(5)),
+            BuildCandidateAt(3, "white", windowStart.AddDays(14)),
+            BuildCandidateAt(4, "white", windowStart.AddDays(15))
+        };
+        var service = BuildService(candidates);
+
+        var result = await service.GetForwardWindowStats(
+            new PriceGroupForwardWindowQuery(1, groupKey, windowStart, windowStart.AddDays(14), false),
+            CancellationToken.None);
+
+        Assert.That(result.SoldCount, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task Should_flag_used_estimated_dates_when_a_sale_in_the_window_has_no_real_sold_date()
+    {
+        var groupKey = new Dictionary<string, string> { ["colour"] = "white" };
+        var windowStart = Now.UtcDateTime;
+        var candidates = new List<PriceGroupListingCandidate>
+        {
+            BuildCandidateAt(1, "white", windowStart.AddDays(3), soldDateIsEstimated: true)
+        };
+        var service = BuildService(candidates);
+
+        var result = await service.GetForwardWindowStats(
+            new PriceGroupForwardWindowQuery(1, groupKey, windowStart, windowStart.AddDays(14), false),
+            CancellationToken.None);
+
+        Assert.That(result.UsedEstimatedDates, Is.True);
+    }
+
+    [Test]
+    public async Task Should_compute_the_net_median_of_sales_within_the_forward_window()
+    {
+        var groupKey = new Dictionary<string, string> { ["colour"] = "white" };
+        var windowStart = Now.UtcDateTime;
+        var candidates = new List<PriceGroupListingCandidate>
+        {
+            BuildCandidateAt(1, "white", windowStart.AddDays(1), soldPrice: 90m),
+            BuildCandidateAt(2, "white", windowStart.AddDays(2), soldPrice: 100m),
+            BuildCandidateAt(3, "white", windowStart.AddDays(3), soldPrice: 110m)
+        };
+        var service = BuildService(candidates, new PriceGroupOptions(0m, 0m));
+
+        var result = await service.GetForwardWindowStats(
+            new PriceGroupForwardWindowQuery(1, groupKey, windowStart, windowStart.AddDays(14), false),
+            CancellationToken.None);
+
+        Assert.That(result.NetMedian, Is.EqualTo(100m));
+    }
+
+    private static PriceGroupListingCandidate BuildCandidateAt(
+        int listingId,
+        string colour,
+        DateTime soldAtUtc,
+        decimal soldPrice = 100m,
+        bool soldDateIsEstimated = false) =>
+        new(
+            listingId,
+            $"Listing {listingId}",
+            $"https://example.test/{listingId}",
+            "USD",
+            true,
+            null,
+            soldPrice,
+            soldDateIsEstimated ? null : soldAtUtc,
+            soldAtUtc,
+            [new PriceGroupAnswer("colour", colour, true, false, 1)]);
+
     private static IReadOnlyDictionary<string, string> EmptyWhere { get; } =
         new Dictionary<string, string>();
 

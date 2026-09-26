@@ -13,4 +13,9 @@ public sealed record DealSignalView(
     int SoldCount,
     decimal? SoldP25,
     decimal Discount,
-    DateTime CreatedUtc);
+    DateTime CreatedUtc,
+    decimal? ForwardNetMedian = null,
+    int? ForwardSoldCount = null,
+    decimal? RealisedMargin = null,
+    double? ListingSoldWithinHours = null,
+    bool UsedEstimatedDates = false);

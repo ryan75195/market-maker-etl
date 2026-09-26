@@ -64,6 +64,17 @@ public sealed class PriceGroupQueryService : IPriceGroupQueryService
         return PriceGroupHistoryCalculator.Build(matching, query, _timeProvider.GetUtcNow().UtcDateTime, _options);
     }
 
+    public async Task<PriceGroupForwardWindowResult> GetForwardWindowStats(
+        PriceGroupForwardWindowQuery query, CancellationToken ct)
+    {
+        var candidates = await _store.GetCandidates(query.TaxonomyVersionId, query.GroupKey.Keys.ToList(), ct);
+        var matching = candidates
+            .Where(c => MatchesWhere(c, query.TaxonomyVersionId, query.GroupKey, includeUncertain: false))
+            .ToList();
+
+        return PriceGroupForwardWindowCalculator.Build(matching, query, _options);
+    }
+
     private void AddToGroup(
         PriceGroupListingCandidate candidate,
         PriceGroupQuery query,

@@ -23,4 +23,16 @@ public sealed class DealSignalEntity
     public decimal Discount { get; set; }
 
     public DateTime CreatedUtc { get; set; }
+
+    public decimal? ForwardNetMedian { get; set; }
+
+    public int? ForwardSoldCount { get; set; }
+
+    public decimal? RealisedMargin { get; set; }
+
+    public double? ListingSoldWithinHours { get; set; }
+
+    public bool UsedEstimatedDates { get; set; }
+
+    public int? EvaluationWindowDays { get; set; }
 }
