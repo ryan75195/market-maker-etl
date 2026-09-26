@@ -193,8 +193,8 @@ replay rows.
 ```powershell
 python -m mmclassifier.build `
   --taxonomy E:\data\market-maker-classifier\taxonomies\iphone-15.json `
-  --labels "E:\data\market-maker-classifier\labels\iphone-15\labels_*.json" `
-  --labels-format pilot `
+  --labels "pilot:E:\data\market-maker-classifier\labels\iphone-15\labels_*.json" `
+  --labels "export:E:\data\market-maker-classifier\labels\iphone-15\reviewed.jsonl" `
   --replay E:\data\market-maker-classifier\labels\train.jsonl `
   --replay-count 3000 `
   --val-listings 40 `
@@ -204,8 +204,7 @@ python -m mmclassifier.build `
 | Flag | Meaning |
 |---|---|
 | `--taxonomy` | Path to the family's taxonomy JSON (`questions.<name>.{instructions,criteria,askWhen?}`). |
-| `--labels` | A file or glob of labelled listings. |
-| `--labels-format` | `pilot` (default) or `export`, see below. |
+| `--labels` | Repeatable. `<format>:<pattern>`, e.g. `pilot:labels_*.json` or `export:reviewed.jsonl`. All sources are loaded and merged, de-duplicated by listing id; when the same id appears in more than one source, the source given later on the command line wins. |
 | `--replay` | JSONL of historical rows (already `{src, state, q, gold}`) mixed in for regularisation. |
 | `--replay-count` | Rows sampled from `--replay` (capped at the pool size). |
 | `--val-listings` | Listings held out for validation, split with a fixed seed before any row expansion. |
@@ -272,6 +271,52 @@ per-question ensemble accuracy, an accuracy split between answers with averaged 
 or above 0.9 and those below it, the fraction of answers below 0.9 ("flagged"), and the list
 of mistakes.
 
+### `python -m mmclassifier.retrain`
+
+Runs `build` → `train` → `evaluate` end to end for an existing family and, optionally, promotes
+the result. It never overwrites or deletes a model directory — it always trains into a fresh
+`<models-dir>\<family-key>-<yyyyMMddHHmm>` directory and only reads from the family's current
+model directory to score it.
+
+```powershell
+python -m mmclassifier.retrain `
+  --family-key iphone-15 `
+  --api http://localhost:5000 `
+  --taxonomy E:\data\market-maker-classifier\taxonomies\iphone-15.json `
+  --base-labels "E:\data\market-maker-classifier\labels\iphone-15\labels_*.json" `
+  --replay E:\data\market-maker-classifier\labels\train.jsonl `
+  --test "E:\data\market-maker-classifier\labels\iphone-15\test_labels_*.json" `
+  --models-dir E:\data\market-maker-classifier\models `
+  --init E:\data\market-maker-classifier\models\base-hist\seed7.pt `
+  --promote
+```
+
+| Flag | Meaning |
+|---|---|
+| `--family-key` | The family's `Key` in the .NET API, used to look it up via `GET /api/families` and to name the new model directory. |
+| `--api` | Base URL of the .NET API (e.g. `http://localhost:5000`). |
+| `--taxonomy` | Taxonomy JSON, same as `build`/`evaluate`. |
+| `--base-labels` | A `pilot`-format glob of labelled listings, merged with the review queue's export fetched from the API (the fetched export wins on a shared listing id — it reflects the latest human corrections). |
+| `--replay` | Same as `build --replay`. |
+| `--test` | A `pilot`-format glob of held-out test listings, scored against both the candidate and the family's current model. |
+| `--models-dir` | Same `MODELS_DIR` the sidecar serves from; the candidate is written to a fresh subdirectory of it. |
+| `--init` | Base checkpoint state dict to fine-tune from, same as `train --init`. |
+| `--promote` | When set, calls `PUT /api/families/{id}` with the candidate's directory name as `modelName`, but only if the comparison passes (see below). |
+
+Steps:
+1. Fetches `GET /api/families`, finds the family by `--family-key`, and reads its current
+   `modelName`.
+2. Fetches `GET /api/families/{id}/labels.jsonl` and writes it into the new candidate
+   directory, then builds the training data from `--base-labels` plus that export.
+3. Trains the candidate with `mmclassifier.train`'s recipe.
+4. Evaluates the candidate and the family's *current* model (read-only — it never writes into
+   the current model's directory) on the same `--test` set.
+5. Writes `comparison.json` next to the candidate's `seed*.pt` files with both models'
+   per-question accuracy, their means, and any question that dropped.
+6. With `--promote`: promotes only when the candidate's mean per-question accuracy is at least
+   the current model's **and** no individual question's accuracy dropped by more than 2.0
+   points. Otherwise it leaves the family on its current model.
+
 ## Adding a product family
 
 1. **Write the taxonomy** (`taxonomies\<family>.json`): one `questions.<name>` entry per
@@ -291,13 +336,24 @@ of mistakes.
    in the same label format.
 4. **Build, train, evaluate:**
    ```powershell
-   python -m mmclassifier.build --taxonomy ... --labels ... --replay ... --out <dir>\data
+   python -m mmclassifier.build --taxonomy ... --labels pilot:... --replay ... --out <dir>\data
    python -m mmclassifier.train --init <base-hist seed>.pt --data <dir>\data --out <dir>
    python -m mmclassifier.evaluate --model-dir <dir> --taxonomy ... --test ...
    ```
 5. **Copy to `MODELS_DIR`.** Once the evaluation looks right, copy (don't move, keep the
    working directory around for reproducing) `<dir>` into `MODELS_DIR/<family-name>` so the
    sidecar can serve it.
+6. **Create the family and point it at the model.** `POST /api/families` with the family's
+   `key`, `name` and `modelName` (the directory name copied into `MODELS_DIR` above). Later,
+   `PUT /api/families/{id}` (accepting `name` and/or `modelName`, both optional) switches the
+   family over to a different model directory without recreating it — `modelName` must match
+   `[a-z0-9-]+`.
 
 Always start from `base-hist`'s `seed7.pt`, never from another family's fine-tuned model —
 see the transfer-accuracy warning under `mmclassifier.train` above.
+
+**Retraining an existing family** should go through `python -m mmclassifier.retrain
+--promote` (see above) instead of the manual steps above — it builds from the latest reviewed
+labels, trains into a fresh directory, evaluates the candidate against the family's current
+model on the same test set, and only calls `PUT /api/families/{id}` when the candidate is not
+worse.

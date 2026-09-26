@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from mmclassifier.labels import load_export_labels, load_labels, load_pilot_labels
+from mmclassifier.labels import (
+    load_export_labels,
+    load_label_sources,
+    load_labels,
+    load_pilot_labels,
+    parse_label_source,
+)
 
 
 def _write_json(path: Path, data) -> None:
@@ -128,3 +134,77 @@ def test_load_labels_rejects_unknown_format():
 def test_missing_glob_match_raises(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
         load_pilot_labels(str(tmp_path / "nope_*.json"))
+
+
+def test_parse_label_source_splits_format_and_pattern():
+    assert parse_label_source("pilot:C:\\data\\labels_*.json") == ("pilot", "C:\\data\\labels_*.json")
+
+
+def test_parse_label_source_keeps_only_first_colon_in_pattern():
+    assert parse_label_source("export:http://host:8080/labels.jsonl") == (
+        "export",
+        "http://host:8080/labels.jsonl",
+    )
+
+
+def test_parse_label_source_rejects_a_source_with_no_pattern():
+    with pytest.raises(ValueError):
+        parse_label_source("pilot")
+
+
+def test_load_label_sources_merges_multiple_formats(tmp_path: Path):
+    _write_json(
+        tmp_path / "pool.json",
+        [
+            {"id": "m1", "title": "t1", "category": "c", "brand": "b", "description": "d"},
+            {"id": "m2", "title": "t2", "category": "c", "brand": "b", "description": "d"},
+        ],
+    )
+    _write_json(
+        tmp_path / "labels_0.json",
+        [
+            {"id": "m1", "item_type": "phone", "ambiguous": ""},
+            {"id": "m2", "item_type": "case", "ambiguous": ""},
+        ],
+    )
+    export_path = tmp_path / "export.jsonl"
+    export_path.write_text(
+        json.dumps(
+            {
+                "listingId": "m3",
+                "taxonomyVersion": 1,
+                "state": {"title": "t3", "mercari_category": "c", "brand": "b", "description": "d"},
+                "answers": {"item_type": "phone"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    listings = load_label_sources([f"pilot:{tmp_path / 'labels_*.json'}", f"export:{export_path}"])
+
+    assert {listing.id for listing in listings} == {"m1", "m2", "m3"}
+
+
+def test_load_label_sources_lets_a_later_source_win_on_duplicate_id(tmp_path: Path):
+    _write_json(
+        tmp_path / "pool.json",
+        [{"id": "m1", "title": "t1", "category": "c", "brand": "b", "description": "d"}],
+    )
+    _write_json(tmp_path / "labels_0.json", [{"id": "m1", "item_type": "phone", "ambiguous": ""}])
+    export_path = tmp_path / "export.jsonl"
+    export_path.write_text(
+        json.dumps(
+            {
+                "listingId": "m1",
+                "taxonomyVersion": 1,
+                "state": {"title": "t1", "mercari_category": "c", "brand": "b", "description": "d"},
+                "answers": {"item_type": "case"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    listings = load_label_sources([f"pilot:{tmp_path / 'labels_*.json'}", f"export:{export_path}"])
+
+    assert len(listings) == 1
+    assert listings[0].answers == {"item_type": "case"}

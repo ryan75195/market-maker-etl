@@ -3,13 +3,15 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 from mmclassifier.labels import load_labels
 from mmclassifier.rows import LabelledListing, normalize_state
 from mmclassifier.taxonomy import all_question_names, is_applicable, load_taxonomy, question_spec
 
 CONFIDENCE_THRESHOLD = 0.9
+
+EnsembleLoader = Callable[[str, Path, str], Any]
 
 
 def build_questions(taxonomy: Dict[str, Any]) -> Dict[str, Any]:
@@ -99,6 +101,23 @@ def print_report(report: Dict[str, Any]) -> None:
         print(f"  {mistake}")
 
 
+def evaluate_model(
+    model_dir: Path,
+    taxonomy: Dict[str, Any],
+    listings: List[LabelledListing],
+    device: str,
+    batch_size: int,
+    ensemble_loader: EnsembleLoader,
+) -> Dict[str, Any]:
+    questions = build_questions(taxonomy)
+    states = [normalize_state(listing.state) for listing in listings]
+
+    ensemble = ensemble_loader(model_dir.name, model_dir, device)
+    predictions = ensemble.predict(states, questions, batch_size=batch_size)
+
+    return score_predictions(taxonomy, listings, predictions)
+
+
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m mmclassifier.evaluate")
     parser.add_argument("--model-dir", required=True, type=Path)
@@ -111,29 +130,28 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: List[str] | None = None) -> None:
+def run(args: argparse.Namespace) -> Dict[str, Any]:
     import torch
 
     from mmclassifier.models import load_laya_ensemble
 
-    args = parse_args(argv)
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
 
     taxonomy = load_taxonomy(args.taxonomy)
     listings = load_labels(args.test, args.labels_format)
-    questions = build_questions(taxonomy)
-    states = [normalize_state(listing.state) for listing in listings]
-
-    ensemble = load_laya_ensemble(args.model_dir.name, args.model_dir, device)
-    predictions = ensemble.predict(states, questions, batch_size=args.batch_size)
-
-    report = score_predictions(taxonomy, listings, predictions)
+    report = evaluate_model(args.model_dir, taxonomy, listings, device, args.batch_size, load_laya_ensemble)
 
     out_path = args.out or (args.model_dir / "evaluation.json")
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     print_report(report)
     print(f"wrote {out_path}")
+    return report
+
+
+def main(argv: List[str] | None = None) -> None:
+    args = parse_args(argv)
+    run(args)
 
 
 if __name__ == "__main__":

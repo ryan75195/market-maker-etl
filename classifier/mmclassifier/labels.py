@@ -81,3 +81,19 @@ def load_labels(pattern: str, labels_format: str) -> List[LabelledListing]:
     except KeyError as exc:
         raise ValueError(f"Unknown labels format: {labels_format!r}") from exc
     return loader(pattern)
+
+
+def parse_label_source(source: str) -> tuple[str, str]:
+    labels_format, separator, pattern = source.partition(":")
+    if not separator or not pattern:
+        raise ValueError(f"Label source must be '<format>:<pattern>', got: {source!r}")
+    return labels_format, pattern
+
+
+def load_label_sources(sources: List[str]) -> List[LabelledListing]:
+    merged: Dict[str, LabelledListing] = {}
+    for source in sources:
+        labels_format, pattern = parse_label_source(source)
+        for listing in load_labels(pattern, labels_format):
+            merged[listing.id] = listing
+    return list(merged.values())

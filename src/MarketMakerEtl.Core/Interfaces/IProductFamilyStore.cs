@@ -6,6 +6,8 @@ public interface IProductFamilyStore
 {
     Task<ProductFamilyView?> CreateFamily(string key, string name, string modelName, CancellationToken ct);
 
+    Task<ProductFamilyView?> UpdateFamily(int familyId, string? name, string? modelName, CancellationToken ct);
+
     Task<IReadOnlyList<ProductFamilyView>> GetFamilies(CancellationToken ct);
 
     Task<ProductFamilyView?> GetFamily(int familyId, CancellationToken ct);

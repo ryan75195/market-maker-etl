@@ -64,6 +64,46 @@ public class ProductFamilyStoreTests
     }
 
     [Test]
+    public async Task Should_update_a_familys_name_and_model_name()
+    {
+        var store = CreateStore();
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
+
+        var updated = await store.UpdateFamily(family.Id, "PS5 Controller v2", "ps5-controller-v2", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(updated!.Name, Is.EqualTo("PS5 Controller v2"));
+            Assert.That(updated.ModelName, Is.EqualTo("ps5-controller-v2"));
+        });
+    }
+
+    [Test]
+    public async Task Should_leave_fields_unchanged_when_updating_with_nulls()
+    {
+        var store = CreateStore();
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
+
+        var updated = await store.UpdateFamily(family.Id, null, null, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(updated!.Name, Is.EqualTo("PS5 Controller"));
+            Assert.That(updated.ModelName, Is.EqualTo("ps5-controller"));
+        });
+    }
+
+    [Test]
+    public async Task Should_return_null_when_updating_an_unknown_family()
+    {
+        var store = CreateStore();
+
+        var updated = await store.UpdateFamily(999999, "New Name", null, CancellationToken.None);
+
+        Assert.That(updated, Is.Null);
+    }
+
+    [Test]
     public async Task Should_list_every_family_with_its_latest_taxonomy_version()
     {
         var store = CreateStore();

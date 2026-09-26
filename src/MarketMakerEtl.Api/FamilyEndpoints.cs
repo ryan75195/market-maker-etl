@@ -16,6 +16,8 @@ public static class FamilyEndpoints
 
         app.MapGet("/api/families/{familyId:int}", GetFamily);
 
+        app.MapPut("/api/families/{familyId:int}", UpdateFamily);
+
         app.MapPost("/api/families/{familyId:int}/taxonomies", AddTaxonomyVersion);
 
         app.MapGet("/api/families/{familyId:int}/taxonomies/{version:int}", GetTaxonomyVersion);
@@ -74,6 +76,25 @@ public static class FamilyEndpoints
             : Results.Created($"/api/families/{family.Id}", family);
     }
 
+    private static async Task<IResult> UpdateFamily(
+        int familyId,
+        UpdateProductFamilyRequest request,
+        IProductFamilyStore families,
+        CancellationToken ct)
+    {
+        if (request.ModelName is not null)
+        {
+            var invalid = ValidateModelName(request.ModelName);
+            if (invalid is not null)
+            {
+                return invalid;
+            }
+        }
+
+        var updated = await families.UpdateFamily(familyId, request.Name, request.ModelName, ct);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+
     private static async Task<IResult> AddTaxonomyVersion(
         int familyId,
         HttpRequest request,
@@ -118,6 +139,17 @@ public static class FamilyEndpoints
             : Results.ValidationProblem(new Dictionary<string, string[]>
             {
                 ["Key"] = ["Key must be kebab-case."]
+            });
+    }
+
+    private static IResult? ValidateModelName(string modelName)
+    {
+        var isSafeDirectoryName = Regex.IsMatch(modelName, "^[a-z0-9-]+$");
+        return isSafeDirectoryName
+            ? null
+            : Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["ModelName"] = ["ModelName must match [a-z0-9-]+."]
             });
     }
 
