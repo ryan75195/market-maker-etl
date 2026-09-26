@@ -69,7 +69,7 @@ public class ProductFamilyStoreTests
         var store = CreateStore();
         var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
 
-        var updated = await store.UpdateFamily(family.Id, "PS5 Controller v2", "ps5-controller-v2", CancellationToken.None);
+        var updated = await store.UpdateFamily(family.Id, "PS5 Controller v2", "ps5-controller-v2", null, null, null, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -84,7 +84,7 @@ public class ProductFamilyStoreTests
         var store = CreateStore();
         var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
 
-        var updated = await store.UpdateFamily(family.Id, null, null, CancellationToken.None);
+        var updated = await store.UpdateFamily(family.Id, null, null, null, null, null, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -98,9 +98,53 @@ public class ProductFamilyStoreTests
     {
         var store = CreateStore();
 
-        var updated = await store.UpdateFamily(999999, "New Name", null, CancellationToken.None);
+        var updated = await store.UpdateFamily(999999, "New Name", null, null, null, null, CancellationToken.None);
 
         Assert.That(updated, Is.Null);
+    }
+
+    [Test]
+    public async Task Should_default_deal_settings_on_a_newly_created_family()
+    {
+        var store = CreateStore();
+
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(family.DealGroupBy, Is.Null);
+            Assert.That(family.DealMinDiscount, Is.EqualTo(0.20m));
+            Assert.That(family.DealMinSold, Is.EqualTo(5));
+        });
+    }
+
+    [Test]
+    public async Task Should_update_deal_settings()
+    {
+        var store = CreateStore();
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
+
+        var updated = await store.UpdateFamily(
+            family.Id, null, null, "model,storage", 0.35m, 3, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(updated!.DealGroupBy, Is.EqualTo("model,storage"));
+            Assert.That(updated.DealMinDiscount, Is.EqualTo(0.35m));
+            Assert.That(updated.DealMinSold, Is.EqualTo(3));
+        });
+    }
+
+    [Test]
+    public async Task Should_disable_deals_by_updating_deal_group_by_to_an_empty_string()
+    {
+        var store = CreateStore();
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
+        await store.UpdateFamily(family.Id, null, null, "model,storage", null, null, CancellationToken.None);
+
+        var updated = await store.UpdateFamily(family.Id, null, null, "", null, null, CancellationToken.None);
+
+        Assert.That(updated!.DealGroupBy, Is.Null);
     }
 
     [Test]

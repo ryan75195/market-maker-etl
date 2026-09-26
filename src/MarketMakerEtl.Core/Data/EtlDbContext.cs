@@ -37,6 +37,8 @@ public sealed class EtlDbContext : DbContext
 
     public DbSet<ListingClassificationEntity> ListingClassifications => Set<ListingClassificationEntity>();
 
+    public DbSet<DealSignalEntity> DealSignals => Set<DealSignalEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureScrapeJobs(modelBuilder);
@@ -53,6 +55,7 @@ public sealed class EtlDbContext : DbContext
         ConfigureSellersAndRawData(modelBuilder);
         ConfigureProductFamilies(modelBuilder);
         ConfigureListingClassifications(modelBuilder);
+        ConfigureDealSignals(modelBuilder);
     }
 
     private static void ConfigureScrapeJobs(ModelBuilder modelBuilder)
@@ -161,6 +164,8 @@ public sealed class EtlDbContext : DbContext
             entity.Property(e => e.Key).IsRequired().HasMaxLength(64);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
             entity.Property(e => e.ModelName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.DealMinDiscount).HasDefaultValue(ProductFamilyEntity.DefaultDealMinDiscount);
+            entity.Property(e => e.DealMinSold).HasDefaultValue(ProductFamilyEntity.DefaultDealMinSold);
             entity.HasIndex(e => e.Key).IsUnique();
         });
 
@@ -192,6 +197,30 @@ public sealed class EtlDbContext : DbContext
             entity.HasOne<ListingEntity>()
                 .WithMany()
                 .HasForeignKey(e => e.ListingEntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<TaxonomyVersionEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.TaxonomyVersionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureDealSignals(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<DealSignalEntity>(entity =>
+        {
+            entity.ToTable("DealSignals");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.GroupKeyJson).IsRequired();
+            entity.HasIndex(e => new { e.ListingEntityId, e.LandedPrice }).IsUnique();
+            entity.HasIndex(e => new { e.ProductFamilyId, e.CreatedUtc });
+            entity.HasOne<ListingEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.ListingEntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<ProductFamilyEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.ProductFamilyId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<TaxonomyVersionEntity>()
                 .WithMany()
