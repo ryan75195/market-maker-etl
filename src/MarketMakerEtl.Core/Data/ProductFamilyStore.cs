@@ -1,6 +1,7 @@
 using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Families;
+using MarketMakerEtl.Core.Models.Jobs;
 using Microsoft.EntityFrameworkCore;
 
 namespace MarketMakerEtl.Core.Data;
@@ -149,6 +150,16 @@ public sealed class ProductFamilyStore : IProductFamilyStore
         job.ProductFamilyId = productFamilyId;
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    public async Task<IReadOnlyList<JobView>> GetJobsWithFamily(CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var jobs = await db.ScrapeJobs.IncludeCategories()
+            .Where(j => j.ProductFamilyId != null)
+            .OrderBy(j => j.Id)
+            .ToListAsync(ct);
+        return jobs.Select(JobViewFactory.ToView).ToList();
     }
 
     private static async Task<TaxonomyVersionView?> LoadLatestVersion(EtlDbContext db, int familyId, CancellationToken ct)

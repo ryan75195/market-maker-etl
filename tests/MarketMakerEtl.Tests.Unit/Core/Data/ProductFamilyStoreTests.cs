@@ -261,10 +261,24 @@ public class ProductFamilyStoreTests
         Assert.That(result, Is.False);
     }
 
-    private async Task<int> CreateJob()
+    [Test]
+    public async Task Should_return_jobs_with_a_family_whether_enabled_or_not()
+    {
+        var store = CreateStore();
+        var family = (await store.CreateFamily("ps5-controller", "PS5 Controller", "ps5-controller", CancellationToken.None))!;
+        var disabledJobWithFamily = await CreateJob(isEnabled: false);
+        await store.SetJobFamily(disabledJobWithFamily, family.Id, CancellationToken.None);
+        await CreateJob();
+
+        var jobsWithFamily = await store.GetJobsWithFamily(CancellationToken.None);
+
+        Assert.That(jobsWithFamily.Select(j => j.Id), Is.EquivalentTo(new[] { disabledJobWithFamily }));
+    }
+
+    private async Task<int> CreateJob(bool isEnabled = true)
     {
         await using var db = await _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>().CreateDbContextAsync();
-        var job = new ScrapeJobEntity { SearchTerm = "ps5 controller", CreatedUtc = DateTime.UtcNow };
+        var job = new ScrapeJobEntity { SearchTerm = "ps5 controller", IsEnabled = isEnabled, CreatedUtc = DateTime.UtcNow };
         db.ScrapeJobs.Add(job);
         await db.SaveChangesAsync();
         return job.Id;

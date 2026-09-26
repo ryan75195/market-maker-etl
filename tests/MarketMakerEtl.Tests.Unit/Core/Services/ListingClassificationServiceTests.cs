@@ -57,11 +57,10 @@ public class ListingClassificationServiceTests
     [Test]
     public async Task Should_do_nothing_when_the_base_url_is_not_configured()
     {
-        var jobs = Substitute.For<IJobStore>();
         var families = Substitute.For<IProductFamilyStore>();
         var classifications = Substitute.For<IListingClassificationStore>();
         var client = Substitute.For<IListingClassifierClient>();
-        var service = new ListingClassificationService(jobs, families, classifications, client, Options(baseUrl: ""));
+        var service = new ListingClassificationService(families, classifications, client, Options(baseUrl: ""));
 
         var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
@@ -70,18 +69,17 @@ public class ListingClassificationServiceTests
             Assert.That(result.JobsProcessed, Is.EqualTo(0));
             Assert.That(result.ListingsSelected, Is.EqualTo(0));
         });
-        await jobs.DidNotReceive().GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>());
+        await families.DidNotReceive().GetJobsWithFamily(Arg.Any<CancellationToken>());
     }
 
     [Test]
     public async Task Should_classify_pending_listings_for_a_job_with_a_family()
     {
-        var jobs = Substitute.For<IJobStore>();
         var families = Substitute.For<IProductFamilyStore>();
         var classifications = Substitute.For<IListingClassificationStore>();
         var client = Substitute.For<IListingClassifierClient>();
 
-        jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1)]);
+        families.GetJobsWithFamily(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1)]);
         families.GetFamily(1, Arg.Any<CancellationToken>()).Returns(BuildFamily());
         var target = new ListingClassificationTarget(42, "Sony DualSense", "Games", "Accessories", "Controllers", "Sony", "Barely used.");
         classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
@@ -95,7 +93,7 @@ public class ListingClassificationServiceTests
                     ["item_type"] = new("console", 0.95, 1.0, new Dictionary<string, double> { ["console"] = 0.95, ["other"] = 0.05 })
                 })]));
 
-        var service = new ListingClassificationService(jobs, families, classifications, client, Options());
+        var service = new ListingClassificationService(families, classifications, client, Options());
         var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         var sentRequest = (ClassifyRequest)client.ReceivedCalls().Single().GetArguments()[0]!;
@@ -120,12 +118,11 @@ public class ListingClassificationServiceTests
     [Test]
     public async Task Should_treat_a_human_choice_as_authoritative_for_gating_dependent_questions()
     {
-        var jobs = Substitute.For<IJobStore>();
         var families = Substitute.For<IProductFamilyStore>();
         var classifications = Substitute.For<IListingClassificationStore>();
         var client = Substitute.For<IListingClassifierClient>();
 
-        jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1)]);
+        families.GetJobsWithFamily(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1)]);
         families.GetFamily(1, Arg.Any<CancellationToken>()).Returns(BuildPs5Family());
         var target = new ListingClassificationTarget(42, "Sony DualSense", null, null, null, null, null);
         classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
@@ -147,7 +144,7 @@ public class ListingClassificationServiceTests
                     ["colour"] = new("white", 0.9, 1.0, new Dictionary<string, double> { ["white"] = 0.9 })
                 })]));
 
-        var service = new ListingClassificationService(jobs, families, classifications, client, Options());
+        var service = new ListingClassificationService(families, classifications, client, Options());
         await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         await classifications.Received(1).UpsertBatch(
@@ -160,12 +157,11 @@ public class ListingClassificationServiceTests
     [Test]
     public async Task Should_record_a_batch_failure_and_continue_when_the_client_throws()
     {
-        var jobs = Substitute.For<IJobStore>();
         var families = Substitute.For<IProductFamilyStore>();
         var classifications = Substitute.For<IListingClassificationStore>();
         var client = Substitute.For<IListingClassifierClient>();
 
-        jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1)]);
+        families.GetJobsWithFamily(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1)]);
         families.GetFamily(1, Arg.Any<CancellationToken>()).Returns(BuildFamily());
         var target = new ListingClassificationTarget(7, "Title", null, null, null, null, null);
         classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
@@ -173,7 +169,7 @@ public class ListingClassificationServiceTests
         client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
             .Returns<ClassifyResponse>(_ => throw new ListingClassifierException("classifier is down"));
 
-        var service = new ListingClassificationService(jobs, families, classifications, client, Options());
+        var service = new ListingClassificationService(families, classifications, client, Options());
         var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         Assert.Multiple(() =>
@@ -189,12 +185,11 @@ public class ListingClassificationServiceTests
     [Test]
     public async Task Should_stop_further_batches_and_jobs_after_a_batch_times_out()
     {
-        var jobs = Substitute.For<IJobStore>();
         var families = Substitute.For<IProductFamilyStore>();
         var classifications = Substitute.For<IListingClassificationStore>();
         var client = Substitute.For<IListingClassifierClient>();
 
-        jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>())
+        families.GetJobsWithFamily(Arg.Any<CancellationToken>())
             .Returns([BuildJob(productFamilyId: 1, id: 10), BuildJob(productFamilyId: 2, id: 20)]);
         families.GetFamily(1, Arg.Any<CancellationToken>()).Returns(BuildFamily());
         var targets = new[]
@@ -209,7 +204,7 @@ public class ListingClassificationServiceTests
                 "Classifying against http://classifier.test timed out after 120s."));
 
         var reportedFailures = new List<ClassificationBatchFailure>();
-        var service = new ListingClassificationService(jobs, families, classifications, client, Options(batchSize: 1));
+        var service = new ListingClassificationService(families, classifications, client, Options(batchSize: 1));
         var result = await service.ClassifyPending(reportedFailures.Add, CancellationToken.None);
 
         Assert.Multiple(() =>
@@ -229,12 +224,11 @@ public class ListingClassificationServiceTests
     [Test]
     public async Task Should_continue_to_the_next_batch_after_a_non_timeout_failure()
     {
-        var jobs = Substitute.For<IJobStore>();
         var families = Substitute.For<IProductFamilyStore>();
         var classifications = Substitute.For<IListingClassificationStore>();
         var client = Substitute.For<IListingClassifierClient>();
 
-        jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1, id: 10)]);
+        families.GetJobsWithFamily(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1, id: 10)]);
         families.GetFamily(1, Arg.Any<CancellationToken>()).Returns(BuildFamily());
         var targets = new[]
         {
@@ -262,7 +256,7 @@ public class ListingClassificationServiceTests
                 })]));
         });
 
-        var service = new ListingClassificationService(jobs, families, classifications, client, Options(batchSize: 1));
+        var service = new ListingClassificationService(families, classifications, client, Options(batchSize: 1));
         var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         Assert.Multiple(() =>
@@ -278,13 +272,12 @@ public class ListingClassificationServiceTests
     [Test]
     public async Task Should_skip_jobs_without_a_product_family()
     {
-        var jobs = Substitute.For<IJobStore>();
         var families = Substitute.For<IProductFamilyStore>();
         var classifications = Substitute.For<IListingClassificationStore>();
         var client = Substitute.For<IListingClassifierClient>();
-        jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: null)]);
+        families.GetJobsWithFamily(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: null)]);
 
-        var service = new ListingClassificationService(jobs, families, classifications, client, Options());
+        var service = new ListingClassificationService(families, classifications, client, Options());
         var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         Assert.That(result.JobsProcessed, Is.EqualTo(0));
@@ -292,17 +285,48 @@ public class ListingClassificationServiceTests
     }
 
     [Test]
-    public async Task Should_skip_a_job_whose_family_has_no_taxonomy_version_yet()
+    public async Task Should_classify_a_disabled_job_that_has_a_product_family()
     {
-        var jobs = Substitute.For<IJobStore>();
         var families = Substitute.For<IProductFamilyStore>();
         var classifications = Substitute.For<IListingClassificationStore>();
         var client = Substitute.For<IListingClassifierClient>();
-        jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1)]);
+
+        families.GetJobsWithFamily(Arg.Any<CancellationToken>())
+            .Returns([BuildJob(productFamilyId: 1, isEnabled: false)]);
+        families.GetFamily(1, Arg.Any<CancellationToken>()).Returns(BuildFamily());
+        var target = new ListingClassificationTarget(42, "Sony DualSense", null, null, null, null, null);
+        classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
+            .Returns([target]);
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ClassifyResponse(
+                "ps5-controller",
+                3,
+                [new ClassifyResult(new Dictionary<string, ClassifyAnswer>
+                {
+                    ["item_type"] = new("console", 0.95, 1.0, new Dictionary<string, double> { ["console"] = 0.95 })
+                })]));
+
+        var service = new ListingClassificationService(families, classifications, client, Options());
+        var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.JobsProcessed, Is.EqualTo(1));
+            Assert.That(result.ListingsClassified, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task Should_skip_a_job_whose_family_has_no_taxonomy_version_yet()
+    {
+        var families = Substitute.For<IProductFamilyStore>();
+        var classifications = Substitute.For<IListingClassificationStore>();
+        var client = Substitute.For<IListingClassifierClient>();
+        families.GetJobsWithFamily(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1)]);
         families.GetFamily(1, Arg.Any<CancellationToken>())
             .Returns(new ProductFamilyView(1, "ps5-controller", "PS5 Controller", "ps5-controller", DateTime.UtcNow, null));
 
-        var service = new ListingClassificationService(jobs, families, classifications, client, Options());
+        var service = new ListingClassificationService(families, classifications, client, Options());
         var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
 
         Assert.That(result.JobsProcessed, Is.EqualTo(0));
@@ -310,8 +334,8 @@ public class ListingClassificationServiceTests
             Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
-    private static JobView BuildJob(int? productFamilyId, int id = 10) =>
-        new(id, "ps5 controller", Marketplace.Mercari, null, 24, true, null, null, DateTime.UtcNow, [], productFamilyId);
+    private static JobView BuildJob(int? productFamilyId, int id = 10, bool isEnabled = true) =>
+        new(id, "ps5 controller", Marketplace.Mercari, null, 24, isEnabled, null, null, DateTime.UtcNow, [], productFamilyId);
 
     private static ProductFamilyView BuildFamily() =>
         new(

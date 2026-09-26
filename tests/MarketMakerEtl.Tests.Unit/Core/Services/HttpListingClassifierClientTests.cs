@@ -54,6 +54,22 @@ public class HttpListingClassifierClientTests
     }
 
     [Test]
+    public async Task Should_pin_the_classifier_request_wire_format()
+    {
+        var handler = new StubClassifierHandler(_ => Json(SuccessBody));
+        var client = new HttpListingClassifierClient(new HttpClient(handler), Options());
+
+        await client.Classify(BuildRequest(), CancellationToken.None);
+
+        const string expectedBody =
+            "{\"model\":\"ps5-controller\"," +
+            "\"questions\":{\"item_type\":{\"type\":\"choice\",\"instructions\":\"What is this?\"," +
+            "\"criteria\":{\"a\":\"A.\",\"b\":\"B.\"}}}," +
+            "\"states\":[{\"title\":\"Test title\"}]}";
+        Assert.That(handler.RequestBody, Is.EqualTo(expectedBody));
+    }
+
+    [Test]
     public async Task Should_parse_the_pinned_live_classifier_response()
     {
         var fixture = await File.ReadAllTextAsync(Path.Combine(

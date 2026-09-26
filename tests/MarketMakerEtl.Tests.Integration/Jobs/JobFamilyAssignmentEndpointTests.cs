@@ -13,7 +13,7 @@ public class JobFamilyAssignmentEndpointTests : JobsApiTestBase
     public async Task Should_assign_and_clear_a_jobs_family()
     {
         var jobResponse = await Client.PostAsJsonAsync("/api/jobs", new CreateJobRequest("ps5 controller"));
-        var job = await jobResponse.Content.ReadFromJsonAsync<JobView>();
+        var job = await jobResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         var familyResponse = await Client.PostAsJsonAsync(
             "/api/families",
@@ -23,12 +23,12 @@ public class JobFamilyAssignmentEndpointTests : JobsApiTestBase
         var assignResponse = await Client.PutAsJsonAsync(
             $"/api/jobs/{job!.Id}/family",
             new SetJobFamilyRequest(family!.Id));
-        var assigned = await assignResponse.Content.ReadFromJsonAsync<JobView>();
+        var assigned = await assignResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         var clearResponse = await Client.PutAsJsonAsync(
             $"/api/jobs/{job.Id}/family",
             new SetJobFamilyRequest(null));
-        var cleared = await clearResponse.Content.ReadFromJsonAsync<JobView>();
+        var cleared = await clearResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
@@ -43,7 +43,7 @@ public class JobFamilyAssignmentEndpointTests : JobsApiTestBase
     public async Task Should_return_not_found_when_assigning_an_unknown_job_or_family()
     {
         var jobResponse = await Client.PostAsJsonAsync("/api/jobs", new CreateJobRequest("ps5 controller"));
-        var job = await jobResponse.Content.ReadFromJsonAsync<JobView>();
+        var job = await jobResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         var unknownJobResponse = await Client.PutAsJsonAsync(
             "/api/jobs/999999/family",

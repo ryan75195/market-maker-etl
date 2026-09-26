@@ -10,20 +10,17 @@ public sealed class ListingClassificationService : IListingClassificationService
 {
     private const string ChoiceType = "choice";
 
-    private readonly IJobStore _jobs;
     private readonly IProductFamilyStore _families;
     private readonly IListingClassificationStore _classifications;
     private readonly IListingClassifierClient _client;
     private readonly ClassifierOptions _options;
 
     public ListingClassificationService(
-        IJobStore jobs,
         IProductFamilyStore families,
         IListingClassificationStore classifications,
         IListingClassifierClient client,
         ClassifierOptions options)
     {
-        _jobs = jobs;
         _families = families;
         _classifications = classifications;
         _client = client;
@@ -38,7 +35,7 @@ public sealed class ListingClassificationService : IListingClassificationService
             return new ClassificationTickResult(0, 0, 0, []);
         }
 
-        var jobs = (await _jobs.GetEffectivelyEnabledJobs(ct))
+        var jobs = (await _families.GetJobsWithFamily(ct))
             .Where(job => job.ProductFamilyId.HasValue)
             .ToList();
 

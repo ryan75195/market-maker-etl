@@ -127,7 +127,7 @@ public class ReviewEndpointsTests : JobsApiTestBase
 
         var putResponse = await Client.PutAsJsonAsync(
             $"/api/listings/{listing}/classification/item_type", new SetChoiceRequest("console"));
-        var updated = await putResponse.Content.ReadFromJsonAsync<ListingClassificationView>();
+        var updated = await putResponse.Content.ReadFromJsonAsync<ListingClassificationView>(TestJsonOptions.Default);
         var queueResponse = await Client.GetAsync($"/api/families/{seed.FamilyId}/review");
         var queue = await queueResponse.Content.ReadFromJsonAsync<List<ClassificationReviewItem>>();
 
@@ -150,7 +150,7 @@ public class ReviewEndpointsTests : JobsApiTestBase
 
         var putResponse = await Client.PutAsJsonAsync(
             $"/api/listings/{listing}/classification/item_type", new SetChoiceRequest("console"));
-        var updated = await putResponse.Content.ReadFromJsonAsync<ListingClassificationView>();
+        var updated = await putResponse.Content.ReadFromJsonAsync<ListingClassificationView>(TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
@@ -168,7 +168,7 @@ public class ReviewEndpointsTests : JobsApiTestBase
         await SeedRow(listing, seed.VersionId, "item_type", ClassificationSource.Model, 0.5, "console");
 
         var response = await Client.PostAsync($"/api/listings/{listing}/classification/item_type/confirm", null);
-        var updated = await response.Content.ReadFromJsonAsync<ListingClassificationView>();
+        var updated = await response.Content.ReadFromJsonAsync<ListingClassificationView>(TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {

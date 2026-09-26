@@ -26,7 +26,7 @@ public class ClassificationEndpointsTests : JobsApiTestBase
         var listingEntityId = await SeedClassifiedListing();
 
         var response = await Client.GetAsync($"/api/listings/{listingEntityId}/classification");
-        var classification = await response.Content.ReadFromJsonAsync<ListingClassificationView>();
+        var classification = await response.Content.ReadFromJsonAsync<ListingClassificationView>(TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
@@ -36,6 +36,17 @@ public class ClassificationEndpointsTests : JobsApiTestBase
             Assert.That(classification.Answers.Single().Question, Is.EqualTo("item_type"));
             Assert.That(classification.Answers.Single().Choice, Is.EqualTo("console"));
         });
+    }
+
+    [Test]
+    public async Task Should_serialise_the_classification_source_as_a_string()
+    {
+        var listingEntityId = await SeedClassifiedListing();
+
+        var response = await Client.GetAsync($"/api/listings/{listingEntityId}/classification");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.That(body, Does.Contain("\"source\":\"Model\""));
     }
 
     private async Task<int> SeedClassifiedListing()
