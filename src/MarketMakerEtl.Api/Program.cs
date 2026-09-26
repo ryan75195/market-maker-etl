@@ -188,6 +188,7 @@ app.MapFamilyEndpoints();
 app.MapClassificationEndpoints();
 app.MapReviewEndpoints();
 app.MapPriceGroupEndpoints();
+app.MapHealthEndpoints();
 
 await app.RunAsync();
 

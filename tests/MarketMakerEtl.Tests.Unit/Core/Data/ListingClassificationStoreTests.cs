@@ -192,6 +192,34 @@ public class ListingClassificationStoreTests
     }
 
     [Test]
+    public async Task Should_count_a_listing_that_has_never_been_classified()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var taxonomyVersionId = await SeedTaxonomyVersion();
+        await SeedListing(jobId, "never-classified-count", null);
+
+        var count = await store.CountListingsNeedingClassification(jobId, taxonomyVersionId, CancellationToken.None);
+
+        Assert.That(count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Should_not_count_a_listing_that_is_up_to_date()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var taxonomyVersionId = await SeedTaxonomyVersion();
+        var classifiedUtc = DateTime.UtcNow;
+        var listingId = await SeedListing(jobId, "up-to-date-count", classifiedUtc.AddDays(-1));
+        await SeedClassificationRow(listingId, taxonomyVersionId, "item_type", ClassificationSource.Model, classifiedUtc);
+
+        var count = await store.CountListingsNeedingClassification(jobId, taxonomyVersionId, CancellationToken.None);
+
+        Assert.That(count, Is.EqualTo(0));
+    }
+
+    [Test]
     public async Task Should_return_null_when_the_listing_has_no_classification_rows()
     {
         var store = CreateStore();
