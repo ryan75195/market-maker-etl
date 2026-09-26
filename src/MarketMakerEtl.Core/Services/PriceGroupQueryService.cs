@@ -53,6 +53,17 @@ public sealed class PriceGroupQueryService : IPriceGroupQueryService
         return results.Take(query.Take).ToList();
     }
 
+    public async Task<IReadOnlyList<PriceGroupHistoryBucket>> GetPriceGroupHistory(
+        PriceGroupHistoryQuery query, CancellationToken ct)
+    {
+        var candidates = await _store.GetCandidates(query.TaxonomyVersionId, query.Where.Keys.ToList(), ct);
+        var matching = candidates
+            .Where(c => MatchesWhere(c, query.TaxonomyVersionId, query.Where, includeUncertain: false))
+            .ToList();
+
+        return PriceGroupHistoryCalculator.Build(matching, query, _timeProvider.GetUtcNow().UtcDateTime, _options);
+    }
+
     private void AddToGroup(
         PriceGroupListingCandidate candidate,
         PriceGroupQuery query,

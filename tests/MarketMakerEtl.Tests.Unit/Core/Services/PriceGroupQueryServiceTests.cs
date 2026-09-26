@@ -331,6 +331,30 @@ public class PriceGroupQueryServiceTests
         });
     }
 
+    [Test]
+    public async Task Should_bucket_sold_price_history_by_week_including_empty_buckets()
+    {
+        var where = new Dictionary<string, string> { ["colour"] = "white" };
+        var candidates = new List<PriceGroupListingCandidate>
+        {
+            BuildCandidate(1, "white", isSold: true, soldPrice: 100m, soldDaysAgo: 1),
+            BuildCandidate(2, "white", isSold: true, soldPrice: 120m, soldDaysAgo: 2)
+        };
+        var service = BuildService(candidates);
+
+        var buckets = await service.GetPriceGroupHistory(
+            new PriceGroupHistoryQuery(
+                1, where, PriceGroupHistoryBucketGranularity.Week, 3, PriceGroupHistoryBasis.Listed, false, false),
+            CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(buckets, Has.Count.EqualTo(3));
+            Assert.That(buckets.Sum(b => b.SoldCount), Is.EqualTo(2));
+            Assert.That(buckets.Any(b => b.SoldCount == 0), Is.True);
+        });
+    }
+
     private static IReadOnlyDictionary<string, string> EmptyWhere { get; } =
         new Dictionary<string, string>();
 

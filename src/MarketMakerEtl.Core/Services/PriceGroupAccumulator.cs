@@ -4,9 +4,7 @@ namespace MarketMakerEtl.Core.Services;
 
 internal sealed class PriceGroupAccumulator
 {
-    public const int MinSoldCountForIqrTrim = 8;
-
-    private readonly List<SoldObservation> _soldObservations = [];
+    private readonly List<PriceGroupSoldObservation> _soldObservations = [];
     private readonly List<decimal> _activePrices = [];
     private readonly List<decimal> _activeLandedPrices = [];
     private readonly PriceGroupOptions _options;
@@ -38,8 +36,8 @@ internal sealed class PriceGroupAccumulator
     public PriceGroupSummary ToSummary(bool trimIqr)
     {
         var trimResult = trimIqr
-            ? TrimSoldObservations(_soldObservations)
-            : new SoldTrimResult(_soldObservations, 0);
+            ? PriceGroupIqrTrimmer.Trim(_soldObservations)
+            : new PriceGroupIqrTrimResult(_soldObservations, 0);
         var listedPrices = trimResult.Kept.Select(o => o.ListedPrice).ToList();
         var netProceeds = trimResult.Kept.Select(o => o.NetProceeds).ToList();
 
@@ -68,7 +66,7 @@ internal sealed class PriceGroupAccumulator
     {
         var netProceeds = PriceGroupNetCalculator.ComputeNetProceeds(
             soldPrice, candidate.ShippingPayer, candidate.ShippingCost, _options);
-        _soldObservations.Add(new SoldObservation(soldPrice, netProceeds));
+        _soldObservations.Add(new PriceGroupSoldObservation(soldPrice, netProceeds));
         CountShippingUnknown(candidate.ShippingPayer);
     }
 
@@ -87,29 +85,4 @@ internal sealed class PriceGroupAccumulator
             _shippingUnknownCount++;
         }
     }
-
-    private static SoldTrimResult TrimSoldObservations(List<SoldObservation> observations)
-    {
-        if (observations.Count < MinSoldCountForIqrTrim)
-        {
-            return new SoldTrimResult(observations, 0);
-        }
-
-        var listedPrices = observations.Select(o => o.ListedPrice).ToList();
-        var q1 = PriceGroupPercentileCalculator.Percentile(listedPrices, 0.25)!.Value;
-        var q3 = PriceGroupPercentileCalculator.Percentile(listedPrices, 0.75)!.Value;
-        var iqr = q3 - q1;
-        var lowerBound = q1 - (1.5m * iqr);
-        var upperBound = q3 + (1.5m * iqr);
-
-        var kept = observations
-            .Where(o => o.ListedPrice >= lowerBound && o.ListedPrice <= upperBound)
-            .ToList();
-
-        return new SoldTrimResult(kept, observations.Count - kept.Count);
-    }
-
-    private sealed record SoldObservation(decimal ListedPrice, decimal NetProceeds);
-
-    private sealed record SoldTrimResult(List<SoldObservation> Kept, int TrimmedCount);
 }
