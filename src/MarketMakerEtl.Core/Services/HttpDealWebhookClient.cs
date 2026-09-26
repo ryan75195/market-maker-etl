@@ -36,21 +36,24 @@ public sealed class HttpDealWebhookClient : IDealWebhookClient
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
-                    "Deal webhook returned {StatusCode} for {WebhookUrl}",
+                    "Deal webhook returned {StatusCode} for host {WebhookHost}",
                     (int)response.StatusCode,
-                    _options.WebhookUrl);
+                    ResolveHost());
             }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             _logger.LogWarning(
-                "Deal webhook to {WebhookUrl} timed out after {TimeoutSeconds}s",
-                _options.WebhookUrl,
+                "Deal webhook to host {WebhookHost} timed out after {TimeoutSeconds}s",
+                ResolveHost(),
                 RequestTimeout.TotalSeconds);
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Deal webhook to {WebhookUrl} failed", _options.WebhookUrl);
+            _logger.LogWarning(ex, "Deal webhook to host {WebhookHost} failed", ResolveHost());
         }
     }
+
+    private string ResolveHost() =>
+        Uri.TryCreate(_options.WebhookUrl, UriKind.Absolute, out var uri) ? uri.Host : "unknown";
 }

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using MarketMakerEtl.Core.Models.Deals;
 using MarketMakerEtl.Core.Services;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -68,8 +69,68 @@ public class HttpDealWebhookClientTests
         Assert.That(async () => await client.Notify(Payload, CancellationToken.None), Throws.Nothing);
     }
 
+    [Test]
+    public async Task Should_never_log_the_full_webhook_url_on_a_server_error()
+    {
+        const string secretUrl = "https://discord.com/api/webhooks/12345/super-secret-token";
+        var handler = new StubWebhookHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            Content = new StringContent("boom", Encoding.UTF8, "text/plain")
+        });
+        var logger = new CapturingLogger();
+        var client = new HttpDealWebhookClient(new HttpClient(handler), new DealsOptions(10, secretUrl), logger);
+
+        await client.Notify(Payload, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(logger.Messages, Is.Not.Empty);
+            Assert.That(logger.Messages, Has.None.Contains(secretUrl));
+            Assert.That(logger.Messages, Has.None.Contains("super-secret-token"));
+            Assert.That(logger.Messages, Has.Some.Contains("discord.com"));
+        });
+    }
+
+    [Test]
+    public async Task Should_never_log_the_full_webhook_url_on_a_timeout()
+    {
+        const string secretUrl = "https://discord.com/api/webhooks/12345/super-secret-token";
+        var handler = new StubWebhookHandler(neverResponds: true);
+        var logger = new CapturingLogger();
+        var client = new HttpDealWebhookClient(new HttpClient(handler), new DealsOptions(10, secretUrl), logger);
+
+        await client.Notify(Payload, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(logger.Messages, Is.Not.Empty);
+            Assert.That(logger.Messages, Has.None.Contains(secretUrl));
+            Assert.That(logger.Messages, Has.None.Contains("super-secret-token"));
+            Assert.That(logger.Messages, Has.Some.Contains("discord.com"));
+        });
+    }
+
     private static HttpDealWebhookClient CreateClient(HttpMessageHandler handler, string? webhookUrl) =>
         new(new HttpClient(handler), new DealsOptions(10, webhookUrl), NullLogger<HttpDealWebhookClient>.Instance);
+
+    private sealed class CapturingLogger : ILogger<HttpDealWebhookClient>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+        }
+    }
 
     private sealed class StubWebhookHandler : HttpMessageHandler
     {
