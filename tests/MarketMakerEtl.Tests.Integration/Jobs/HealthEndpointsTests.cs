@@ -49,7 +49,7 @@ public class HealthEndpointsTests
         var client = CreateClient(classifierReachable: true);
         await CreateHealthyJob(client);
 
-        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health");
+        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
@@ -66,7 +66,7 @@ public class HealthEndpointsTests
         var client = CreateClient(classifierReachable: true);
         await CreateJob(client, "stale search", intervalHours: 1);
 
-        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health");
+        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
@@ -82,7 +82,7 @@ public class HealthEndpointsTests
         var job = await CreateJob(client, "failed search", intervalHours: 24);
         await SeedRun(job.Id, ScrapeRunStatus.Failed, DateTime.UtcNow);
 
-        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health");
+        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
@@ -98,7 +98,7 @@ public class HealthEndpointsTests
         var client = CreateClient(classifierReachable: false);
         await CreateFamily(client, "ps5-controller");
 
-        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health");
+        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
@@ -130,7 +130,7 @@ public class HealthEndpointsTests
     {
         var response = await client.PostAsJsonAsync(
             "/api/jobs", new CreateJobRequest(searchTerm, Marketplace.Mercari, null, intervalHours, true, []));
-        return (await response.Content.ReadFromJsonAsync<JobView>())!;
+        return (await response.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default))!;
     }
 
     private async Task<JobView> CreateHealthyJob(HttpClient client)

@@ -9,20 +9,17 @@ namespace MarketMakerEtl.Core.Services;
 public sealed class FamilyBacklogHealthService : IFamilyBacklogHealthService
 {
     private readonly IProductFamilyStore _families;
-    private readonly IJobStore _jobs;
     private readonly IListingClassificationStore _classifications;
     private readonly IClassificationReviewStore _reviews;
     private readonly ClassificationReviewOptions _reviewOptions;
 
     public FamilyBacklogHealthService(
         IProductFamilyStore families,
-        IJobStore jobs,
         IListingClassificationStore classifications,
         IClassificationReviewStore reviews,
         ClassificationReviewOptions reviewOptions)
     {
         _families = families;
-        _jobs = jobs;
         _classifications = classifications;
         _reviews = reviews;
         _reviewOptions = reviewOptions;
@@ -49,7 +46,7 @@ public sealed class FamilyBacklogHealthService : IFamilyBacklogHealthService
 
     private async Task<IReadOnlyDictionary<int, List<JobView>>> LoadJobsByFamily(CancellationToken ct)
     {
-        var jobs = await _jobs.GetEffectivelyEnabledJobs(ct);
+        var jobs = await _families.GetJobsWithFamily(ct);
         return jobs
             .Where(job => job.ProductFamilyId.HasValue)
             .GroupBy(job => job.ProductFamilyId!.Value)
