@@ -73,7 +73,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(TimeProvider.System);
         var detailFetchOptions = BuildDetailFetchOptions(configuration);
         services.AddSingleton(detailFetchOptions);
-        services.AddSingleton(BuildDetailBacklogOptions(configuration, detailFetchOptions.MaxDetailFetchAttempts));
+        services.AddSingleton(BuildDetailBacklogOptions(
+            configuration, detailFetchOptions.MaxDetailFetchAttempts, detailFetchOptions.MaxConcurrentDetailFetches));
         services.AddSingleton(BuildClassifierOptions(configuration));
         services.AddSingleton(BuildClassificationReviewOptions(configuration));
         services.AddSingleton(PriceGroupOptionsFactory.Build(configuration));
@@ -172,14 +173,15 @@ public static class ServiceCollectionExtensions
             ReadInt(configuration, "Scrape:MaxDetailFetchAttempts", DefaultMaxDetailFetchAttempts));
 
     private static DetailBacklogOptions BuildDetailBacklogOptions(
-        IConfiguration? configuration, int maxDetailFetchAttempts) =>
+        IConfiguration? configuration, int maxDetailFetchAttempts, int maxConcurrentDetailFetches) =>
         new(
             ReadBool(configuration, "DetailBacklog:Enabled", DefaultDetailBacklogEnabled),
             ReadInt(configuration, "DetailBacklog:TickMinutes", DefaultDetailBacklogTickMinutes),
             ReadInt(configuration, "DetailBacklog:MaxFetchesPerTick", DefaultDetailBacklogMaxFetchesPerTick),
             ReadInt(configuration, "DetailBacklog:MaxFetchesPerHour", DefaultDetailBacklogMaxFetchesPerHour),
             maxDetailFetchAttempts,
-            ReadInt(configuration, "Scrape:FamilyDetailFetchesPerTick", DefaultFamilyDetailFetchesPerTick));
+            ReadInt(configuration, "Scrape:FamilyDetailFetchesPerTick", DefaultFamilyDetailFetchesPerTick),
+            maxConcurrentDetailFetches);
 
     private static ClassifierOptions BuildClassifierOptions(IConfiguration? configuration) =>
         new(

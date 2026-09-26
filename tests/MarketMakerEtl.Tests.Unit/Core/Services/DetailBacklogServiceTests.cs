@@ -161,6 +161,79 @@ public class DetailBacklogServiceTests
     }
 
     [Test]
+    public async Task Should_run_up_to_the_configured_number_of_concurrent_fetches()
+    {
+        var jobId = await CreateJob("concurrency-job");
+        for (var i = 0; i < 6; i++)
+        {
+            await SeedListing(jobId, $"concurrency-{i}");
+        }
+
+        var fetch = new ConcurrencyTrackingDetailFetchService(TimeSpan.FromMilliseconds(50), _ => true);
+        var service = CreateService(
+            fetch, new FakeTimeProvider(StartTime), Options(maxFetchesPerTick: 6, concurrency: 3));
+
+        var result = await service.RunTick(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Succeeded, Is.EqualTo(6));
+            Assert.That(fetch.MaxObservedConcurrency, Is.GreaterThan(1));
+            Assert.That(fetch.MaxObservedConcurrency, Is.LessThanOrEqualTo(3));
+        });
+    }
+
+    [Test]
+    public async Task Should_stop_starting_new_fetches_after_one_full_batch_of_failures_under_concurrency()
+    {
+        var jobId = await CreateJob("outage-concurrent-job");
+        for (var i = 0; i < 12; i++)
+        {
+            await SeedListing(jobId, $"outage-concurrent-{i}");
+        }
+
+        var fetch = new ConcurrencyTrackingDetailFetchService(TimeSpan.FromMilliseconds(10), _ => false);
+        var service = CreateService(
+            fetch, new FakeTimeProvider(StartTime), Options(maxFetchesPerTick: 12, concurrency: 4));
+
+        var result = await service.RunTick(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Selected, Is.EqualTo(12));
+            Assert.That(result.Attempted, Is.EqualTo(4));
+            Assert.That(result.Succeeded, Is.EqualTo(0));
+            Assert.That(result.Failures, Has.Count.EqualTo(4));
+            Assert.That(fetch.Calls, Has.Count.EqualTo(4));
+        });
+    }
+
+    [Test]
+    public async Task Should_never_exceed_the_hourly_budget_even_with_concurrent_fetches()
+    {
+        var jobId = await CreateJob("budget-concurrent-job");
+        for (var i = 0; i < 8; i++)
+        {
+            await SeedListing(jobId, $"budget-concurrent-{i}");
+        }
+
+        var fetch = new ConcurrencyTrackingDetailFetchService(TimeSpan.FromMilliseconds(10), _ => true);
+        var service = CreateService(
+            fetch,
+            new FakeTimeProvider(StartTime),
+            Options(maxFetchesPerTick: 10, maxFetchesPerHour: 5, concurrency: 4));
+
+        var result = await service.RunTick(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Attempted, Is.EqualTo(5));
+            Assert.That(fetch.Calls, Has.Count.EqualTo(5));
+            Assert.That(fetch.MaxObservedConcurrency, Is.LessThanOrEqualTo(4));
+        });
+    }
+
+    [Test]
     public async Task Should_keep_attempting_later_listings_once_a_fetch_has_succeeded_in_the_tick()
     {
         var jobId = await CreateJob("mixed-job");
@@ -273,7 +346,7 @@ public class DetailBacklogServiceTests
     }
 
     private DetailBacklogService CreateService(
-        RecordingDetailFetchService fetch, TimeProvider timeProvider, DetailBacklogOptions options) =>
+        IItemDetailFetchService fetch, TimeProvider timeProvider, DetailBacklogOptions options) =>
         new(_jobs, _detailStore, fetch, options, timeProvider);
 
     private static DetailBacklogOptions Options(
@@ -282,8 +355,9 @@ public class DetailBacklogServiceTests
         int maxFetchesPerTick = 30,
         int maxFetchesPerHour = 300,
         int maxAttempts = 3,
-        int familyFetchesPerTick = 300) =>
-        new(enabled, tickMinutes, maxFetchesPerTick, maxFetchesPerHour, maxAttempts, familyFetchesPerTick);
+        int familyFetchesPerTick = 300,
+        int concurrency = 1) =>
+        new(enabled, tickMinutes, maxFetchesPerTick, maxFetchesPerHour, maxAttempts, familyFetchesPerTick, concurrency);
 
     private async Task<int> CreateJob(string searchTerm)
     {
@@ -364,5 +438,64 @@ public class DetailBacklogServiceTests
         public Task ApplyBackfilledDetails(
             int jobId, IReadOnlyDictionary<string, ItemPageListing> detailsByListingId, CancellationToken ct) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class ConcurrencyTrackingDetailFetchService : IItemDetailFetchService
+    {
+        private readonly TimeSpan _delay;
+        private readonly Func<ListingDetailTarget, bool> _shouldSucceed;
+        private readonly object _lock = new();
+        private int _inFlight;
+
+        public ConcurrencyTrackingDetailFetchService(TimeSpan delay, Func<ListingDetailTarget, bool> shouldSucceed)
+        {
+            _delay = delay;
+            _shouldSucceed = shouldSucceed;
+        }
+
+        public List<ListingDetailTarget> Calls { get; } = [];
+
+        public int MaxObservedConcurrency { get; private set; }
+
+        public Task<IReadOnlyList<ScrapeRunIssueDetails>> FetchDetails(int jobId, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public async Task<ScrapeRunIssueDetails?> FetchListingDetail(ListingDetailTarget target, CancellationToken ct)
+        {
+            lock (_lock)
+            {
+                Calls.Add(target);
+            }
+
+            var current = Interlocked.Increment(ref _inFlight);
+            RecordObservedConcurrency(current);
+
+            try
+            {
+                await Task.Delay(_delay, ct);
+                return _shouldSucceed(target)
+                    ? null
+                    : new ScrapeRunIssueDetails(target.ListingId, "ItemDetailFetchFailed", "boom", "Detail", null);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _inFlight);
+            }
+        }
+
+        public Task ApplyBackfilledDetails(
+            int jobId, IReadOnlyDictionary<string, ItemPageListing> detailsByListingId, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        private void RecordObservedConcurrency(int current)
+        {
+            lock (_lock)
+            {
+                if (current > MaxObservedConcurrency)
+                {
+                    MaxObservedConcurrency = current;
+                }
+            }
+        }
     }
 }

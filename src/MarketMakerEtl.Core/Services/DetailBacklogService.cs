@@ -121,22 +121,29 @@ public sealed class DetailBacklogService : IDetailBacklogService
     private async Task<DetailBacklogTickResult> FetchTargets(
         IReadOnlyList<ListingDetailTarget> targets, CancellationToken ct)
     {
+        var concurrency = Math.Max(1, _options.MaxConcurrentDetailFetches);
         var succeeded = 0;
         var failures = new List<ScrapeRunIssueDetails>();
 
-        foreach (var target in targets)
+        for (var offset = 0; offset < targets.Count; offset += concurrency)
         {
             ct.ThrowIfCancellationRequested();
-            RecordFetchAttempt();
-            var issue = await _detailFetch.FetchListingDetail(target, ct);
 
-            if (issue is null)
+            var batch = targets.Skip(offset).Take(concurrency).ToList();
+            var batchIssues = await Task.WhenAll(batch.Select(target => FetchOne(target, ct)));
+
+            foreach (var issue in batchIssues)
             {
-                succeeded++;
-                continue;
+                if (issue is null)
+                {
+                    succeeded++;
+                }
+                else
+                {
+                    failures.Add(issue);
+                }
             }
 
-            failures.Add(issue);
             if (succeeded == 0)
             {
                 break;
@@ -144,6 +151,12 @@ public sealed class DetailBacklogService : IDetailBacklogService
         }
 
         return new DetailBacklogTickResult(targets.Count, succeeded + failures.Count, succeeded, failures);
+    }
+
+    private Task<ScrapeRunIssueDetails?> FetchOne(ListingDetailTarget target, CancellationToken ct)
+    {
+        RecordFetchAttempt();
+        return _detailFetch.FetchListingDetail(target, ct);
     }
 
     private int RemainingHourlyBudget()
