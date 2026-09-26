@@ -15,6 +15,7 @@ public static class PriceGroupEndpoints
     {
         app.MapGet("/api/families/{familyId:int}/price-groups", GetPriceGroups);
         app.MapGet("/api/families/{familyId:int}/price-groups/listings", GetGroupListings);
+        app.MapPriceGroupHistoryEndpoints();
 
         return app;
     }
@@ -98,7 +99,7 @@ public static class PriceGroupEndpoints
         return Results.Ok(await priceGroups.GetGroupListings(query, ct));
     }
 
-    private static IReadOnlyDictionary<string, TaxonomyQuestion> LoadQuestions(string questionsJson)
+    internal static IReadOnlyDictionary<string, TaxonomyQuestion> LoadQuestions(string questionsJson)
     {
         var questions = TaxonomyDocumentParser.Parse(questionsJson).Questions
             .ToDictionary(q => q.Key, StringComparer.Ordinal);
@@ -106,7 +107,7 @@ public static class PriceGroupEndpoints
         return questions;
     }
 
-    private static bool TryParseTrim(string? trim, out bool trimIqr)
+    internal static bool TryParseTrim(string? trim, out bool trimIqr)
     {
         if (string.IsNullOrEmpty(trim))
         {
@@ -118,7 +119,7 @@ public static class PriceGroupEndpoints
         return trimIqr;
     }
 
-    private static Dictionary<string, string> ParseWhere(
+    internal static Dictionary<string, string> ParseWhere(
         string[] where, IReadOnlyDictionary<string, TaxonomyQuestion> questions, List<string> errors)
     {
         var parsed = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -188,6 +189,6 @@ public static class PriceGroupEndpoints
         }
     }
 
-    private static IResult QuestionValidationProblem(IReadOnlyList<string> errors) =>
+    internal static IResult QuestionValidationProblem(IReadOnlyList<string> errors) =>
         Results.ValidationProblem(new Dictionary<string, string[]> { ["Questions"] = errors.ToArray() });
 }
