@@ -46,14 +46,14 @@ internal sealed class SqlitePragmaConnectionInterceptor(int busyTimeoutMs) : DbC
         return command;
     }
 
-    private string BuildPragmaScript(DbConnection connection)
+    internal string BuildPragmaScript(DbConnection connection)
     {
         var busyTimeoutPragma = string.Create(
             CultureInfo.InvariantCulture,
             $"PRAGMA busy_timeout = {busyTimeoutMs};");
 
         return CanEnableWal(connection)
-            ? $"PRAGMA journal_mode = 'WAL'; {busyTimeoutPragma}"
+            ? $"{busyTimeoutPragma} PRAGMA journal_mode = 'WAL';"
             : busyTimeoutPragma;
     }
 
