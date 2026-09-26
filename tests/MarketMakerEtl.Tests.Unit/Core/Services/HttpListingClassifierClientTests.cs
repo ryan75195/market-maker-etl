@@ -134,6 +134,59 @@ public class HttpListingClassifierClientTests
             await client.Classify(BuildRequest(), cts.Token));
     }
 
+    [Test]
+    public async Task Should_report_reachable_with_loaded_models_on_a_successful_health_check()
+    {
+        var handler = new StubClassifierHandler(_ => Json("""{"device":"cpu","models":{"ps5-controller":2}}"""));
+        var client = new HttpListingClassifierClient(new HttpClient(handler), Options());
+
+        var health = await client.CheckHealth(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(health.Reachable, Is.True);
+            Assert.That(health.BaseUrl, Is.EqualTo("http://classifier.test"));
+            Assert.That(health.LoadedModels, Does.Contain("ps5-controller"));
+        });
+    }
+
+    [Test]
+    public async Task Should_report_unreachable_when_the_health_endpoint_returns_a_non_success_status()
+    {
+        var handler = new StubClassifierHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var client = new HttpListingClassifierClient(new HttpClient(handler), Options());
+
+        var health = await client.CheckHealth(CancellationToken.None);
+
+        Assert.That(health.Reachable, Is.False);
+    }
+
+    [Test]
+    public async Task Should_report_unreachable_when_the_health_check_times_out()
+    {
+        var handler = new StubClassifierHandler(neverResponds: true);
+        var client = new HttpListingClassifierClient(new HttpClient(handler), Options());
+
+        var health = await client.CheckHealth(CancellationToken.None);
+
+        Assert.That(health.Reachable, Is.False);
+    }
+
+    [Test]
+    public async Task Should_report_unreachable_without_calling_out_when_the_base_url_is_empty()
+    {
+        var handler = new StubClassifierHandler(_ => throw new InvalidOperationException("should not be called"));
+        var client = new HttpListingClassifierClient(new HttpClient(handler), Options() with { BaseUrl = "" });
+
+        var health = await client.CheckHealth(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(health.Reachable, Is.False);
+            Assert.That(health.LoadedModels, Is.Empty);
+        });
+    }
+
     private static ClassifyRequest BuildRequest() =>
         new(
             "ps5-controller",

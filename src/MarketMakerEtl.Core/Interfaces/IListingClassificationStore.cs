@@ -7,6 +7,8 @@ public interface IListingClassificationStore
     Task<IReadOnlyList<ListingClassificationTarget>> GetListingsNeedingClassification(
         int scrapeJobId, int latestTaxonomyVersionId, int limit, CancellationToken ct);
 
+    Task<int> CountListingsNeedingClassification(int scrapeJobId, int latestTaxonomyVersionId, CancellationToken ct);
+
     Task UpsertBatch(IReadOnlyList<ListingClassificationBatchItem> batch, CancellationToken ct);
 
     Task<ListingClassificationView?> GetClassification(int listingEntityId, CancellationToken ct);

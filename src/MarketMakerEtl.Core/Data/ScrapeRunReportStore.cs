@@ -49,4 +49,27 @@ public sealed class ScrapeRunReportStore : IScrapeRunReportStore
 
         return views;
     }
+
+    public async Task<JobLastRunView?> GetLastRun(int jobId, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var latest = await db.ScrapeRuns
+            .Where(run => run.JobId == jobId)
+            .OrderByDescending(run => run.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (latest is null)
+        {
+            return null;
+        }
+
+        var lastCompletedRunUtc = await db.ScrapeRuns
+            .Where(run => run.JobId == jobId && run.CompletedUtc != null)
+            .OrderByDescending(run => run.CompletedUtc)
+            .Select(run => (DateTime?)run.CompletedUtc)
+            .FirstOrDefaultAsync(ct);
+
+        return new JobLastRunView(
+            Enum.Parse<ScrapeRunStatus>(latest.Status), latest.StartedUtc, latest.CompletedUtc, lastCompletedRunUtc);
+    }
 }

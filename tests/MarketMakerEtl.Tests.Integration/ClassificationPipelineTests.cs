@@ -210,5 +210,8 @@ public class ClassificationPipelineTests
             var results = request.States.Select(_ => new ClassifyResult(answers)).ToList();
             return Task.FromResult(new ClassifyResponse(request.Model, 3, results));
         }
+
+        public Task<ClassifierHealthCheckResult> CheckHealth(CancellationToken ct) =>
+            Task.FromResult(new ClassifierHealthCheckResult("http://stub", true, []));
     }
 }

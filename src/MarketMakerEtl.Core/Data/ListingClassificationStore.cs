@@ -23,7 +23,25 @@ public sealed class ListingClassificationStore : IListingClassificationStore
         }
 
         await using var db = await _factory.CreateDbContextAsync(ct);
-        var candidates = await db.Listings
+        var candidates = await BuildNeedingClassificationQuery(db, scrapeJobId, latestTaxonomyVersionId)
+            .OrderByDescending(l => l.IsSold)
+            .ThenBy(l => l.Id)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return candidates.Select(MapToTarget).ToList();
+    }
+
+    public async Task<int> CountListingsNeedingClassification(
+        int scrapeJobId, int latestTaxonomyVersionId, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        return await BuildNeedingClassificationQuery(db, scrapeJobId, latestTaxonomyVersionId).CountAsync(ct);
+    }
+
+    private static IQueryable<ListingEntity> BuildNeedingClassificationQuery(
+        EtlDbContext db, int scrapeJobId, int latestTaxonomyVersionId) =>
+        db.Listings
             .Where(l => l.ScrapeJobId == scrapeJobId)
             .Select(l => new
             {
@@ -43,14 +61,7 @@ public sealed class ListingClassificationStore : IListingClassificationStore
                 x.HasStaleVersion ||
                 (x.Listing.DetailFetchedUtc != null &&
                     (x.MaxClassifiedUtc == null || x.Listing.DetailFetchedUtc > x.MaxClassifiedUtc)))
-            .OrderByDescending(x => x.Listing.IsSold)
-            .ThenBy(x => x.Listing.Id)
-            .Take(limit)
-            .Select(x => x.Listing)
-            .ToListAsync(ct);
-
-        return candidates.Select(MapToTarget).ToList();
-    }
+            .Select(x => x.Listing);
 
     public async Task UpsertBatch(IReadOnlyList<ListingClassificationBatchItem> batch, CancellationToken ct)
     {

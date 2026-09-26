@@ -121,6 +121,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IClassificationReviewStore, ClassificationReviewStore>();
         services.AddSingleton<IPriceGroupListingStore, PriceGroupListingStore>();
         services.AddSingleton<IPriceGroupQueryService, PriceGroupQueryService>();
+        return services.AddCoreHealthServices();
+    }
+
+    private static IServiceCollection AddCoreHealthServices(this IServiceCollection services)
+    {
+        services.AddSingleton<IJobHealthService, JobHealthService>();
+        services.AddSingleton<IFamilyBacklogHealthService, FamilyBacklogHealthService>();
+        services.AddSingleton<ISystemHealthService, SystemHealthService>();
         return services;
     }
 

@@ -82,16 +82,65 @@ public class ScrapeRunReportStoreTests
         });
     }
 
-    private static async Task<int> SeedRun(IDbContextFactory<EtlDbContext> factory, int jobId)
+    [Test]
+    public async Task Should_return_null_when_the_job_has_no_runs()
+    {
+        var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        var store = new ScrapeRunReportStore(factory);
+
+        var lastRun = await store.GetLastRun(999, CancellationToken.None);
+
+        Assert.That(lastRun, Is.Null);
+    }
+
+    [Test]
+    public async Task Should_report_the_most_recently_started_run_regardless_of_its_status()
+    {
+        var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        await SeedRun(factory, jobId: 7, status: ScrapeRunStatus.Completed, completedUtc: DateTime.UtcNow.AddHours(-2));
+        var latestRunId = await SeedRun(factory, jobId: 7, status: ScrapeRunStatus.Running, completedUtc: null);
+        var store = new ScrapeRunReportStore(factory);
+
+        var lastRun = await store.GetLastRun(7, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(lastRun, Is.Not.Null);
+            Assert.That(lastRun!.Status, Is.EqualTo(ScrapeRunStatus.Running));
+            Assert.That(lastRun.CompletedUtc, Is.Null);
+        });
+        Assert.That(latestRunId, Is.GreaterThan(0));
+    }
+
+    [Test]
+    public async Task Should_report_the_last_completed_run_separately_from_an_in_progress_latest_run()
+    {
+        var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        var completedUtc = DateTime.UtcNow.AddHours(-3);
+        await SeedRun(factory, jobId: 9, status: ScrapeRunStatus.Completed, completedUtc: completedUtc);
+        await SeedRun(factory, jobId: 9, status: ScrapeRunStatus.Running, completedUtc: null);
+        var store = new ScrapeRunReportStore(factory);
+
+        var lastRun = await store.GetLastRun(9, CancellationToken.None);
+
+        Assert.That(lastRun!.LastCompletedRunUtc, Is.EqualTo(completedUtc).Within(TimeSpan.FromSeconds(1)));
+    }
+
+    private static async Task<int> SeedRun(
+        IDbContextFactory<EtlDbContext> factory,
+        int jobId,
+        ScrapeRunStatus status = ScrapeRunStatus.Completed,
+        DateTime? completedUtc = null)
     {
         await using var db = await factory.CreateDbContextAsync();
         var run = new ScrapeRunEntity
         {
             JobId = jobId,
             SearchTerm = "ps5",
-            Status = nameof(ScrapeRunStatus.Completed),
+            Status = status.ToString(),
             TriggerType = nameof(TriggerType.Manual),
-            StartedUtc = DateTime.UtcNow
+            StartedUtc = DateTime.UtcNow,
+            CompletedUtc = completedUtc
         };
         db.ScrapeRuns.Add(run);
         await db.SaveChangesAsync();
