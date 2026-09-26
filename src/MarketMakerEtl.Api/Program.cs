@@ -18,6 +18,9 @@ using (var scope = app.Services.CreateScope())
     await factory.ApplyMigrations();
 }
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.MapGet("/health", () => Results.Ok(new HealthResponse("healthy")));
 
 app.MapPost("/api/scrape/jobs", async (

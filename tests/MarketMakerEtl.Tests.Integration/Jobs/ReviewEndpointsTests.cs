@@ -60,6 +60,65 @@ public class ReviewEndpointsTests : JobsApiTestBase
     }
 
     [Test]
+    public async Task Should_serve_the_review_page_as_html()
+    {
+        var response = await Client.GetAsync("/review/");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(response.Content.Headers.ContentType?.MediaType, Is.EqualTo("text/html"));
+        });
+    }
+
+    [Test]
+    public async Task Should_include_image_description_and_condition_fields_on_a_review_item()
+    {
+        var seed = await SeedFamily();
+        var listing = await SeedListing(seed.JobId, "m-media", entity =>
+        {
+            entity.PrimaryImageUrl = "https://example.test/primary.jpg";
+            entity.ImageUrls = """["https://example.test/1.jpg","https://example.test/2.jpg"]""";
+            entity.Description = "A great controller.";
+            entity.Condition = "Used";
+            entity.Category0Name = "Video Games";
+        });
+        await SeedRow(listing, seed.VersionId, "item_type", ClassificationSource.Model, 0.5, "console");
+
+        var response = await Client.GetAsync($"/api/families/{seed.FamilyId}/review");
+        var items = await response.Content.ReadFromJsonAsync<List<ClassificationReviewItem>>();
+        var item = items!.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(item.PrimaryImageUrl, Is.EqualTo("https://example.test/primary.jpg"));
+            Assert.That(item.ImageUrls, Is.EqualTo(new[] { "https://example.test/1.jpg", "https://example.test/2.jpg" }));
+            Assert.That(item.Description, Is.EqualTo("A great controller."));
+            Assert.That(item.Condition, Is.EqualTo("Used"));
+            Assert.That(item.CategoryPath, Is.EqualTo("Video Games"));
+        });
+    }
+
+    [Test]
+    public async Task Should_filter_the_review_queue_by_a_comma_separated_list_of_questions()
+    {
+        var seed = await SeedFamily();
+        var listing = await SeedListing(seed.JobId, "m-comma-questions");
+        await SeedRow(listing, seed.VersionId, "item_type", ClassificationSource.Model, 0.5, "dualsense_standard");
+        await SeedRow(listing, seed.VersionId, "edition", ClassificationSource.Model, 0.5, "standard_colour");
+        await SeedRow(listing, seed.VersionId, "colour", ClassificationSource.Model, 0.5, "white");
+
+        var response = await Client.GetAsync($"/api/families/{seed.FamilyId}/review?question=item_type,colour");
+        var items = await response.Content.ReadFromJsonAsync<List<ClassificationReviewItem>>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(items!.Select(i => i.Question), Is.EquivalentTo(new[] { "item_type", "colour" }));
+        });
+    }
+
+    [Test]
     public async Task Should_remove_a_listing_from_the_queue_after_a_human_answer_is_written()
     {
         var seed = await SeedFamily();
@@ -227,7 +286,7 @@ public class ReviewEndpointsTests : JobsApiTestBase
         return new SeededFamily(family.Id, job.Id, version.Id);
     }
 
-    private async Task<int> SeedListing(int jobId, string listingId)
+    private async Task<int> SeedListing(int jobId, string listingId, Action<ListingEntity>? listingSetup = null)
     {
         var dbContextFactory = Factory.Services.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         await using var db = await dbContextFactory.CreateDbContextAsync();
@@ -242,6 +301,7 @@ public class ReviewEndpointsTests : JobsApiTestBase
             IsSold = false,
             CreatedUtc = DateTime.UtcNow
         };
+        listingSetup?.Invoke(listing);
         db.Listings.Add(listing);
         await db.SaveChangesAsync();
         return listing.Id;

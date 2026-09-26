@@ -9,6 +9,7 @@ namespace MarketMakerEtl.Api;
 public static class ReviewEndpoints
 {
     private const int DefaultReviewTake = 50;
+    private const int MaxReviewImages = 4;
 
     public static WebApplication MapReviewEndpoints(this WebApplication app)
     {
@@ -40,7 +41,7 @@ public static class ReviewEndpoints
         }
 
         var rows = await reviews.GetReviewQueue(
-            familyId, family.LatestTaxonomyVersion.Id, question, options.ReviewThreshold, take, ct);
+            familyId, family.LatestTaxonomyVersion.Id, ParseQuestions(question), options.ReviewThreshold, take, ct);
         var taxonomy = TaxonomyDocumentParser.Parse(family.LatestTaxonomyVersion.QuestionsJson);
         var items = BuildReviewItems(rows, taxonomy);
 
@@ -86,6 +87,11 @@ public static class ReviewEndpoints
         return Results.Text(body, "application/jsonl");
     }
 
+    private static IReadOnlyList<string>? ParseQuestions(string? question) =>
+        string.IsNullOrWhiteSpace(question)
+            ? null
+            : question.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
     private static IReadOnlyList<ClassificationReviewItem> BuildReviewItems(
         IReadOnlyList<ClassificationReviewRow> rows, TaxonomyDocument taxonomy)
     {
@@ -120,6 +126,11 @@ public static class ReviewEndpoints
             row.Url,
             row.Price,
             row.IsSold,
+            row.PrimaryImageUrl,
+            BuildImageUrls(row.ImageUrlsJson),
+            ReviewDescriptionTruncator.Truncate(row.Description),
+            row.Condition,
+            BuildCategoryPath(row),
             row.Question,
             questionDef.Instructions,
             options,
@@ -127,6 +138,25 @@ public static class ReviewEndpoints
             row.Confidence,
             row.Agreement,
             sortedProbabilities);
+    }
+
+    private static IReadOnlyList<string> BuildImageUrls(string? imageUrlsJson)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrlsJson))
+        {
+            return [];
+        }
+
+        var urls = JsonSerializer.Deserialize<List<string>>(imageUrlsJson) ?? [];
+        return urls.Take(MaxReviewImages).ToList();
+    }
+
+    private static string? BuildCategoryPath(ClassificationReviewRow row)
+    {
+        var names = new[] { row.Category0Name, row.Category1Name, row.Category2Name }
+            .Where(name => !string.IsNullOrWhiteSpace(name));
+        var path = string.Join(" > ", names);
+        return path.Length == 0 ? null : path;
     }
 
     private static string BuildExportLine(ClassificationExportListing listing, double threshold)

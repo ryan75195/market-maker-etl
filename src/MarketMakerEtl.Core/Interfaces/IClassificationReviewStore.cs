@@ -6,7 +6,7 @@ namespace MarketMakerEtl.Core.Interfaces;
 public interface IClassificationReviewStore
 {
     Task<IReadOnlyList<ClassificationReviewRow>> GetReviewQueue(
-        int productFamilyId, int latestTaxonomyVersionId, string? question, double threshold, int take, CancellationToken ct);
+        int productFamilyId, int latestTaxonomyVersionId, IReadOnlyList<string>? questions, double threshold, int take, CancellationToken ct);
 
     Task<IReadOnlyList<ClassificationReviewCount>> GetReviewSummary(
         int productFamilyId, int latestTaxonomyVersionId, double threshold, CancellationToken ct);

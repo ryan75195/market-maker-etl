@@ -1,0 +1,159 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0.75rem;
+  max-width: 640px;
+  margin-inline: auto;
+}
+
+header h1 {
+  font-size: 1.25rem;
+  margin: 0 0 0.5rem;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.controls label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  gap: 0.2rem;
+}
+
+.controls input,
+.controls select {
+  font-size: 1rem;
+  padding: 0.35rem;
+}
+
+.remaining {
+  font-weight: bold;
+  margin-left: auto;
+}
+
+.error {
+  background: #fdd;
+  color: #900;
+  border: 1px solid #900;
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+}
+
+.empty {
+  font-style: italic;
+}
+
+.images {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.35rem;
+}
+
+.images img {
+  width: 100%;
+  height: auto;
+  border-radius: 0.25rem;
+  object-fit: cover;
+  aspect-ratio: 1;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #555;
+  margin-bottom: 0.5rem;
+}
+
+.sold-badge {
+  color: #900;
+  font-weight: bold;
+}
+
+.description {
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+}
+
+h3 {
+  font-size: 1rem;
+  margin-top: 1rem;
+}
+
+#options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+#options li {
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+#options li.model-choice {
+  border-color: #2a6;
+  background: rgba(34, 170, 102, 0.1);
+}
+
+#options .option-key {
+  font-weight: bold;
+  min-width: 1.5rem;
+}
+
+#options .option-probability {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: #555;
+}
+
+.hint {
+  font-size: 0.8rem;
+  color: #777;
+  margin-top: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .meta,
+  #options .option-probability,
+  .hint {
+    color: #aaa;
+  }
+
+  #options li {
+    border-color: #444;
+  }
+
+  .error {
+    background: #400;
+    color: #fbb;
+    border-color: #fbb;
+  }
+}

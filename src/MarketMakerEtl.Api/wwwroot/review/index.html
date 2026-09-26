@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Review Queue</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header>
+  <h1>Review Queue</h1>
+  <div class="controls">
+    <label>
+      Family
+      <select id="family-select"></select>
+    </label>
+    <label>
+      Question filter
+      <input id="question-filter" type="text" placeholder="e.g. item_type,edition" />
+    </label>
+    <span id="remaining-count" class="remaining">Remaining: -</span>
+  </div>
+</header>
+
+<main>
+  <p id="error" class="error" hidden></p>
+  <p id="empty" class="empty" hidden>Nothing left to review.</p>
+
+  <section id="item" hidden>
+    <div id="images" class="images"></div>
+
+    <h2><a id="title-link" href="#" target="_blank" rel="noopener noreferrer"></a></h2>
+    <div class="meta">
+      <span id="price"></span>
+      <span id="sold-badge" class="sold-badge" hidden>SOLD</span>
+      <span id="condition"></span>
+      <span id="category-path"></span>
+    </div>
+    <p id="description" class="description"></p>
+
+    <h3 id="instructions"></h3>
+    <ol id="options"></ol>
+
+    <p class="hint">Keys: 1-9 choose an option, Enter confirms the model's choice, S skips, U undoes the last action.</p>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

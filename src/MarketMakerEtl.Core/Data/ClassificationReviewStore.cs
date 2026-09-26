@@ -17,7 +17,7 @@ public sealed class ClassificationReviewStore : IClassificationReviewStore
     }
 
     public async Task<IReadOnlyList<ClassificationReviewRow>> GetReviewQueue(
-        int productFamilyId, int latestTaxonomyVersionId, string? question, double threshold, int take, CancellationToken ct)
+        int productFamilyId, int latestTaxonomyVersionId, IReadOnlyList<string>? questions, double threshold, int take, CancellationToken ct)
     {
         if (take <= 0)
         {
@@ -25,7 +25,7 @@ public sealed class ClassificationReviewStore : IClassificationReviewStore
         }
 
         await using var db = await _factory.CreateDbContextAsync(ct);
-        var candidates = await BuildModelCandidateQuery(db, productFamilyId, latestTaxonomyVersionId, question).ToListAsync(ct);
+        var candidates = await BuildModelCandidateQuery(db, productFamilyId, latestTaxonomyVersionId, questions).ToListAsync(ct);
 
         return candidates
             .Where(x => ClassificationReviewPolicy.NeedsReview(x.Classification, threshold))
@@ -39,7 +39,7 @@ public sealed class ClassificationReviewStore : IClassificationReviewStore
         int productFamilyId, int latestTaxonomyVersionId, double threshold, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
-        var candidates = await BuildModelCandidateQuery(db, productFamilyId, latestTaxonomyVersionId, question: null).ToListAsync(ct);
+        var candidates = await BuildModelCandidateQuery(db, productFamilyId, latestTaxonomyVersionId, questions: null).ToListAsync(ct);
 
         return candidates
             .Select(x => x.Classification)
@@ -114,14 +114,14 @@ public sealed class ClassificationReviewStore : IClassificationReviewStore
     }
 
     private static IQueryable<ClassificationCandidate> BuildModelCandidateQuery(
-        EtlDbContext db, int productFamilyId, int latestTaxonomyVersionId, string? question) =>
+        EtlDbContext db, int productFamilyId, int latestTaxonomyVersionId, IReadOnlyList<string>? questions) =>
         from c in db.ListingClassifications
         join l in db.Listings on c.ListingEntityId equals l.Id
         join j in db.ScrapeJobs on l.ScrapeJobId equals j.Id
         where j.ProductFamilyId == productFamilyId
             && c.Source == ClassificationSource.Model
             && c.TaxonomyVersionId == latestTaxonomyVersionId
-            && (question == null || c.Question == question)
+            && (questions == null || questions.Contains(c.Question))
         select new ClassificationCandidate(c, l);
 
     private static void ApplyHumanAnswer(
@@ -205,6 +205,13 @@ public sealed class ClassificationReviewStore : IClassificationReviewStore
             listing.Url,
             listing.Price,
             listing.IsSold,
+            listing.PrimaryImageUrl,
+            listing.ImageUrls,
+            listing.Description,
+            listing.Condition,
+            listing.Category0Name,
+            listing.Category1Name,
+            listing.Category2Name,
             classification.Question,
             classification.Choice,
             classification.Confidence,
