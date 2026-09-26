@@ -194,15 +194,158 @@ public class PriceGroupQueryServiceTests
         });
     }
 
+    [Test]
+    public async Task Should_group_listings_by_mercari_condition_answers()
+    {
+        var candidates = new List<PriceGroupListingCandidate>
+        {
+            BuildCandidate(1, "good", isSold: true, soldPrice: 100m, soldDaysAgo: 1, question: "mercari_condition"),
+            BuildCandidate(2, "poor", isSold: true, soldPrice: 20m, soldDaysAgo: 1, question: "mercari_condition")
+        };
+        var service = BuildService(candidates);
+
+        var groups = await service.GetPriceGroups(
+            new PriceGroupQuery(1, EmptyWhere, ["mercari_condition"], 30, false, 1), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(groups, Has.Count.EqualTo(2));
+            Assert.That(groups.Select(g => g.Key["mercari_condition"]), Is.EquivalentTo(["good", "poor"]));
+        });
+    }
+
+    [Test]
+    public async Task Should_compute_sold_net_and_active_landed_stats_honouring_each_shipping_payer_case()
+    {
+        var candidates = new List<PriceGroupListingCandidate>
+        {
+            BuildCandidate(1, "white", isSold: true, soldPrice: 100m, soldDaysAgo: 1, shippingPayer: "seller", shippingCost: 10m),
+            BuildCandidate(2, "white", isSold: true, soldPrice: 200m, soldDaysAgo: 1, shippingPayer: "buyer", shippingCost: 15m),
+            BuildCandidate(3, "white", isSold: true, soldPrice: 150m, soldDaysAgo: 1),
+            BuildCandidate(4, "white", isSold: false, price: 50m, shippingPayer: "buyer", shippingCost: 5m),
+            BuildCandidate(5, "white", isSold: false, price: 80m, shippingPayer: "seller", shippingCost: 5m),
+            BuildCandidate(6, "white", isSold: false, price: 60m)
+        };
+        var service = BuildService(candidates);
+
+        var groups = await service.GetPriceGroups(
+            new PriceGroupQuery(1, EmptyWhere, ["colour"], 30, false, 1), CancellationToken.None);
+
+        var group = groups.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(group.SoldNetMedian, Is.EqualTo(134.5m));
+            Assert.That(group.SoldNetP25, Is.EqualTo(107.0m));
+            Assert.That(group.SoldNetP75, Is.EqualTo(157.0m));
+            Assert.That(group.ActiveLandedMedian, Is.EqualTo(60m));
+            Assert.That(group.ActiveLandedMin, Is.EqualTo(55m));
+            Assert.That(group.ShippingUnknownCount, Is.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public async Task Should_honour_the_configured_fee_rate_and_fixed_fee_in_sold_net_median()
+    {
+        var candidates = new List<PriceGroupListingCandidate>
+        {
+            BuildCandidate(1, "white", isSold: true, soldPrice: 100m, soldDaysAgo: 1, shippingPayer: "seller", shippingCost: 10m)
+        };
+        var service = BuildService(candidates, new PriceGroupOptions(0.20m, 1.00m));
+
+        var groups = await service.GetPriceGroups(
+            new PriceGroupQuery(1, EmptyWhere, ["colour"], 30, false, 1), CancellationToken.None);
+
+        Assert.That(groups.Single().SoldNetMedian, Is.EqualTo(69m));
+    }
+
+    [Test]
+    public async Task Should_not_trim_sold_prices_when_the_group_is_below_the_iqr_threshold()
+    {
+        var soldPrices = new decimal[] { 100m, 101m, 99m, 102m, 98m, 103m, 500m };
+        var candidates = soldPrices
+            .Select((price, index) => BuildCandidate(index + 1, "white", isSold: true, soldPrice: price, soldDaysAgo: 1))
+            .ToList();
+        var service = BuildService(candidates);
+
+        var groups = await service.GetPriceGroups(
+            new PriceGroupQuery(1, EmptyWhere, ["colour"], 30, false, 1, TrimIqr: true), CancellationToken.None);
+
+        var group = groups.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(group.SoldCount, Is.EqualTo(7));
+            Assert.That(group.TrimmedCount, Is.EqualTo(0));
+        });
+    }
+
+    [Test]
+    public async Task Should_trim_outlier_sold_prices_at_the_iqr_threshold_and_report_trimmed_count()
+    {
+        var soldPrices = new decimal[] { 100m, 101m, 99m, 102m, 98m, 103m, 97m, 500m };
+        var candidates = soldPrices
+            .Select((price, index) => BuildCandidate(index + 1, "white", isSold: true, soldPrice: price, soldDaysAgo: 1))
+            .ToList();
+        var service = BuildService(candidates);
+
+        var untrimmed = await service.GetPriceGroups(
+            new PriceGroupQuery(1, EmptyWhere, ["colour"], 30, false, 1), CancellationToken.None);
+        var trimmed = await service.GetPriceGroups(
+            new PriceGroupQuery(1, EmptyWhere, ["colour"], 30, false, 1, TrimIqr: true), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(untrimmed.Single().SoldCount, Is.EqualTo(8));
+            Assert.That(untrimmed.Single().TrimmedCount, Is.EqualTo(0));
+            Assert.That(trimmed.Single().SoldCount, Is.EqualTo(7));
+            Assert.That(trimmed.Single().TrimmedCount, Is.EqualTo(1));
+            Assert.That(trimmed.Single().SoldMax, Is.EqualTo(103m));
+        });
+    }
+
+    [Test]
+    public async Task Should_include_landed_price_net_proceeds_and_delta_in_group_listings()
+    {
+        var where = new Dictionary<string, string> { ["colour"] = "white" };
+        var candidates = new List<PriceGroupListingCandidate>
+        {
+            BuildCandidate(1, "white", isSold: true, soldPrice: 100m, soldDaysAgo: 1, shippingPayer: "seller", shippingCost: 10m),
+            BuildCandidate(2, "white", isSold: false, price: 150m, shippingPayer: "buyer", shippingCost: 20m),
+            BuildCandidate(3, "white", isSold: false, price: 90m)
+        };
+        var service = BuildService(candidates);
+
+        var listings = await service.GetGroupListings(
+            new PriceGroupListingsQuery(1, where, PriceGroupListingStatus.Active, 50, 30, false),
+            CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            var near = listings.Single(l => l.ListingId == 3);
+            var far = listings.Single(l => l.ListingId == 2);
+            Assert.That(near.LandedPrice, Is.EqualTo(90m));
+            Assert.That(near.NetProceeds, Is.EqualTo(80.5m));
+            Assert.That(near.DeltaLandedFromSoldNetMedian, Is.EqualTo(10.5m));
+            Assert.That(far.LandedPrice, Is.EqualTo(170m));
+            Assert.That(far.NetProceeds, Is.EqualTo(134.5m));
+            Assert.That(far.DeltaLandedFromSoldNetMedian, Is.EqualTo(90.5m));
+        });
+    }
+
     private static IReadOnlyDictionary<string, string> EmptyWhere { get; } =
         new Dictionary<string, string>();
 
-    private static PriceGroupQueryService BuildService(IReadOnlyList<PriceGroupListingCandidate> candidates)
+    private static readonly PriceGroupOptions DefaultOptions = new(0.10m, 0.50m);
+
+    private static PriceGroupQueryService BuildService(IReadOnlyList<PriceGroupListingCandidate> candidates) =>
+        BuildService(candidates, DefaultOptions);
+
+    private static PriceGroupQueryService BuildService(
+        IReadOnlyList<PriceGroupListingCandidate> candidates, PriceGroupOptions options)
     {
         var store = Substitute.For<IPriceGroupListingStore>();
         store.GetCandidates(Arg.Any<int>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(candidates);
-        return new PriceGroupQueryService(store, new FakeTimeProvider(Now));
+        return new PriceGroupQueryService(store, new FakeTimeProvider(Now), options);
     }
 
     private static PriceGroupListingCandidate BuildCandidate(
@@ -215,7 +358,10 @@ public class PriceGroupQueryServiceTests
         decimal? price = null,
         bool isApplicable = true,
         bool needsReview = false,
-        int taxonomyVersionId = 1)
+        int taxonomyVersionId = 1,
+        string question = "colour",
+        string? shippingPayer = null,
+        decimal? shippingCost = null)
     {
         var soldDate = soldDaysAgo.HasValue ? Now.UtcDateTime.AddDays(-soldDaysAgo.Value) : (DateTime?)null;
         var effectiveSoldDate = Now.UtcDateTime.AddDays(-(effectiveSoldDaysAgo ?? soldDaysAgo ?? 0));
@@ -229,6 +375,8 @@ public class PriceGroupQueryServiceTests
             soldPrice,
             soldDate,
             effectiveSoldDate,
-            [new PriceGroupAnswer("colour", colour, isApplicable, needsReview, taxonomyVersionId)]);
+            [new PriceGroupAnswer(question, colour, isApplicable, needsReview, taxonomyVersionId)],
+            shippingPayer,
+            shippingCost);
     }
 }

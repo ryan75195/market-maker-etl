@@ -98,6 +98,68 @@ public class PriceGroupEndpointsTests : JobsApiTestBase
         });
     }
 
+    [Test]
+    public async Task Should_group_listings_by_mercari_condition()
+    {
+        var seeded = await SeedFamilyWithTaxonomy();
+        await SeedClassifiedListing(
+            seeded, "good-1", colour: "white", isSold: true, soldPrice: 100m, soldDaysAgo: 1, condition: "Good");
+        await SeedClassifiedListing(
+            seeded, "good-2", colour: "white", isSold: true, soldPrice: 120m, soldDaysAgo: 1, condition: "Good");
+        await SeedClassifiedListing(
+            seeded, "poor-1", colour: "white", isSold: true, soldPrice: 20m, soldDaysAgo: 1, condition: "Poor");
+
+        var response = await Client.GetAsync($"/api/families/{seeded.FamilyId}/price-groups?by=mercari_condition");
+        var groups = await response.Content.ReadFromJsonAsync<List<PriceGroupSummary>>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(groups, Has.Count.EqualTo(2));
+            Assert.That(groups![0].Key["mercari_condition"], Is.EqualTo("good"));
+            Assert.That(groups[0].SoldCount, Is.EqualTo(2));
+            Assert.That(groups[1].Key["mercari_condition"], Is.EqualTo("poor"));
+            Assert.That(groups[1].SoldCount, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task Should_return_bad_request_for_an_unknown_mercari_condition_option()
+    {
+        var seeded = await SeedFamilyWithTaxonomy();
+
+        var response = await Client.GetAsync(
+            $"/api/families/{seeded.FamilyId}/price-groups?where=mercari_condition:neon");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
+    public async Task Should_include_net_fields_in_the_price_groups_summary()
+    {
+        var seeded = await SeedFamilyWithTaxonomy();
+        await SeedClassifiedListing(
+            seeded, "white-sold", colour: "white", isSold: true, soldPrice: 100m, soldDaysAgo: 1,
+            shippingPayer: "seller", shippingCost: 10m);
+        await SeedClassifiedListing(
+            seeded, "white-active", colour: "white", isSold: false, price: 50m,
+            shippingPayer: "buyer", shippingCost: 5m);
+
+        var response = await Client.GetAsync($"/api/families/{seeded.FamilyId}/price-groups?by=colour");
+        var groups = await response.Content.ReadFromJsonAsync<List<PriceGroupSummary>>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            var group = groups!.Single();
+            Assert.That(group.SoldNetMedian, Is.EqualTo(79.5m));
+            Assert.That(group.ActiveLandedMedian, Is.EqualTo(55m));
+            Assert.That(group.ActiveLandedMin, Is.EqualTo(55m));
+            Assert.That(group.ShippingUnknownCount, Is.EqualTo(0));
+            Assert.That(group.TrimmedCount, Is.EqualTo(0));
+        });
+    }
+
     private async Task<SeededFamily> SeedFamilyWithTaxonomy()
     {
         var dbContextFactory = Factory.Services.GetRequiredService<IDbContextFactory<EtlDbContext>>();
@@ -137,7 +199,10 @@ public class PriceGroupEndpointsTests : JobsApiTestBase
         bool isSold,
         decimal? soldPrice = null,
         int? soldDaysAgo = null,
-        decimal? price = null)
+        decimal? price = null,
+        string? condition = null,
+        string? shippingPayer = null,
+        decimal? shippingCost = null)
     {
         var dbContextFactory = Factory.Services.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         await using var db = await dbContextFactory.CreateDbContextAsync();
@@ -153,6 +218,9 @@ public class PriceGroupEndpointsTests : JobsApiTestBase
             SoldPrice = soldPrice,
             Price = price,
             SoldDate = soldDaysAgo.HasValue ? DateTime.UtcNow.AddDays(-soldDaysAgo.Value) : null,
+            Condition = condition,
+            ShippingPayer = shippingPayer,
+            ShippingCost = shippingCost,
             CreatedUtc = DateTime.UtcNow
         };
         db.Listings.Add(listing);

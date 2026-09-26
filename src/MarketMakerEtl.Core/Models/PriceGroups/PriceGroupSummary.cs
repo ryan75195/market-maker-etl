@@ -11,4 +11,11 @@ public sealed record PriceGroupSummary(
     int ActiveCount,
     decimal? ActiveMedianAsk,
     decimal? ActiveMinAsk,
-    string? Currency);
+    string? Currency,
+    decimal? SoldNetMedian = null,
+    decimal? SoldNetP25 = null,
+    decimal? SoldNetP75 = null,
+    decimal? ActiveLandedMedian = null,
+    decimal? ActiveLandedMin = null,
+    int ShippingUnknownCount = 0,
+    int TrimmedCount = 0);

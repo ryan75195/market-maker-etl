@@ -7,11 +7,13 @@ public sealed class PriceGroupQueryService : IPriceGroupQueryService
 {
     private readonly IPriceGroupListingStore _store;
     private readonly TimeProvider _timeProvider;
+    private readonly PriceGroupOptions _options;
 
-    public PriceGroupQueryService(IPriceGroupListingStore store, TimeProvider timeProvider)
+    public PriceGroupQueryService(IPriceGroupListingStore store, TimeProvider timeProvider, PriceGroupOptions options)
     {
         _store = store;
         _timeProvider = timeProvider;
+        _options = options;
     }
 
     public async Task<IReadOnlyList<PriceGroupSummary>> GetPriceGroups(PriceGroupQuery query, CancellationToken ct)
@@ -27,7 +29,7 @@ public sealed class PriceGroupQueryService : IPriceGroupQueryService
         }
 
         return groups.Values
-            .Select(g => g.ToSummary())
+            .Select(g => g.ToSummary(query.TrimIqr))
             .Where(summary => summary.SoldCount >= query.MinSold)
             .OrderByDescending(summary => summary.SoldCount)
             .ToList();
@@ -43,14 +45,15 @@ public sealed class PriceGroupQueryService : IPriceGroupQueryService
             .ToList();
 
         var soldMedian = ComputeSoldMedian(matching, soldCutoff);
+        var soldNetMedian = ComputeSoldNetMedian(matching, soldCutoff, _options);
         var results = query.Status == PriceGroupListingStatus.Sold
-            ? BuildSoldResults(matching, soldCutoff, soldMedian)
-            : BuildActiveResults(matching, soldMedian);
+            ? BuildSoldResults(matching, soldCutoff, soldMedian, soldNetMedian, _options)
+            : BuildActiveResults(matching, soldMedian, soldNetMedian, _options);
 
         return results.Take(query.Take).ToList();
     }
 
-    private static void AddToGroup(
+    private void AddToGroup(
         PriceGroupListingCandidate candidate,
         PriceGroupQuery query,
         DateTime soldCutoff,
@@ -70,7 +73,7 @@ public sealed class PriceGroupQueryService : IPriceGroupQueryService
         var canonicalKey = string.Join('\u001F', query.By.Select(q => $"{q}={groupKey[q]}"));
         if (!groups.TryGetValue(canonicalKey, out var accumulator))
         {
-            accumulator = new PriceGroupAccumulator(groupKey);
+            accumulator = new PriceGroupAccumulator(groupKey, _options);
             groups[canonicalKey] = accumulator;
         }
 
@@ -138,22 +141,41 @@ public sealed class PriceGroupQueryService : IPriceGroupQueryService
         return PriceGroupPercentileCalculator.Percentile(soldPrices, 0.5);
     }
 
+    private static decimal? ComputeSoldNetMedian(
+        IReadOnlyList<PriceGroupListingCandidate> matching, DateTime soldCutoff, PriceGroupOptions options)
+    {
+        var netProceeds = matching
+            .Where(c => IsSoldWithinWindow(c, soldCutoff))
+            .Select(c => PriceGroupNetCalculator.ComputeNetProceeds(
+                c.SoldPrice!.Value, c.ShippingPayer, c.ShippingCost, options))
+            .ToList();
+
+        return PriceGroupPercentileCalculator.Percentile(netProceeds, 0.5);
+    }
+
     private static bool IsSoldWithinWindow(PriceGroupListingCandidate candidate, DateTime soldCutoff) =>
         candidate.IsSold && candidate.SoldPrice.HasValue && candidate.EffectiveSoldDate >= soldCutoff;
 
     private static List<PriceGroupListingResult> BuildSoldResults(
-        IReadOnlyList<PriceGroupListingCandidate> matching, DateTime soldCutoff, decimal? soldMedian) =>
+        IReadOnlyList<PriceGroupListingCandidate> matching,
+        DateTime soldCutoff,
+        decimal? soldMedian,
+        decimal? soldNetMedian,
+        PriceGroupOptions options) =>
         matching
             .Where(c => IsSoldWithinWindow(c, soldCutoff))
             .OrderByDescending(c => c.EffectiveSoldDate)
-            .Select(c => ToResult(c, c.SoldPrice, c.SoldDate, c.SoldDate is null, soldMedian))
+            .Select(c => ToResult(c, c.SoldPrice, c.SoldDate, c.SoldDate is null, soldMedian, soldNetMedian, options))
             .ToList();
 
     private static List<PriceGroupListingResult> BuildActiveResults(
-        IReadOnlyList<PriceGroupListingCandidate> matching, decimal? soldMedian) =>
+        IReadOnlyList<PriceGroupListingCandidate> matching,
+        decimal? soldMedian,
+        decimal? soldNetMedian,
+        PriceGroupOptions options) =>
         matching
             .Where(c => !c.IsSold && c.Price.HasValue)
-            .Select(c => ToResult(c, c.Price, null, false, soldMedian))
+            .Select(c => ToResult(c, c.Price, null, false, soldMedian, soldNetMedian, options))
             .OrderBy(r => r.DeltaFromSoldMedian ?? decimal.MaxValue)
             .ToList();
 
@@ -162,13 +184,27 @@ public sealed class PriceGroupQueryService : IPriceGroupQueryService
         decimal? price,
         DateTime? soldDate,
         bool soldDateIsEstimated,
-        decimal? soldMedian) =>
-        new(
+        decimal? soldMedian,
+        decimal? soldNetMedian,
+        PriceGroupOptions options)
+    {
+        var landedPrice = price.HasValue
+            ? PriceGroupNetCalculator.ComputeLandedPrice(price.Value, candidate.ShippingPayer, candidate.ShippingCost)
+            : (decimal?)null;
+        var netProceeds = price.HasValue
+            ? PriceGroupNetCalculator.ComputeNetProceeds(price.Value, candidate.ShippingPayer, candidate.ShippingCost, options)
+            : (decimal?)null;
+
+        return new(
             candidate.ListingId,
             candidate.Title,
             candidate.Url,
             price,
             soldDate,
             soldDateIsEstimated,
-            price.HasValue && soldMedian.HasValue ? price - soldMedian : null);
+            price.HasValue && soldMedian.HasValue ? price - soldMedian : null,
+            landedPrice,
+            netProceeds,
+            landedPrice.HasValue && soldNetMedian.HasValue ? landedPrice - soldNetMedian : null);
+    }
 }

@@ -74,6 +74,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(BuildDetailBacklogOptions(configuration, detailFetchOptions.MaxDetailFetchAttempts));
         services.AddSingleton(BuildClassifierOptions(configuration));
         services.AddSingleton(BuildClassificationReviewOptions(configuration));
+        services.AddSingleton(PriceGroupOptionsFactory.Build(configuration));
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite(BuildDatabaseConnectionString(configuration)));
 

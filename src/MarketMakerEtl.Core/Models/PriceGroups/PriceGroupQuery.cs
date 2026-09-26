@@ -6,4 +6,5 @@ public sealed record PriceGroupQuery(
     IReadOnlyList<string> By,
     int SoldDays,
     bool IncludeUncertain,
-    int MinSold);
+    int MinSold,
+    bool TrimIqr = false);
