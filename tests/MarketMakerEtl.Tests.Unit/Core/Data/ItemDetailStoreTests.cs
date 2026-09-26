@@ -103,6 +103,85 @@ public class ItemDetailStoreTests
     }
 
     [Test]
+    public async Task Should_increment_attempts_when_a_successful_sold_fetch_yields_no_sold_date()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "sold-no-date-fetch", detailFetched: false, isSold: true);
+        var detail = BuildItemPageListing(status: "Sold") with { SoldDate = null };
+
+        await store.ApplyItemDetail(listingEntityId, detail, CancellationToken.None);
+
+        var listing = await GetListing(listingEntityId);
+        Assert.Multiple(() =>
+        {
+            Assert.That(listing.SoldDate, Is.Null);
+            Assert.That(listing.DetailFetchAttempts, Is.EqualTo(1));
+            Assert.That(listing.DetailFetchedUtc, Is.Not.Null);
+            Assert.That(listing.DescriptionStatus, Is.EqualTo("ok"));
+        });
+    }
+
+    [Test]
+    public async Task Should_not_increment_attempts_when_a_successful_sold_fetch_yields_a_real_sold_date()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "sold-with-date-fetch", detailFetched: false, isSold: true);
+        var detail = BuildItemPageListing(status: "Sold");
+
+        await store.ApplyItemDetail(listingEntityId, detail, CancellationToken.None);
+
+        var listing = await GetListing(listingEntityId);
+        Assert.That(listing.DetailFetchAttempts, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task Should_stop_reselecting_a_sold_listing_without_a_date_once_attempts_reach_the_maximum()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "family-sold-no-date-cap", detailFetched: false, isSold: true);
+        var detail = BuildItemPageListing(status: "Sold") with { SoldDate = null };
+
+        for (var attempt = 0; attempt < MaxAttempts; attempt++)
+        {
+            var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+            Assert.That(targets.Select(t => t.Id), Does.Contain(listingEntityId));
+            await store.ApplyItemDetail(listingEntityId, detail, CancellationToken.None);
+        }
+
+        var finalTargets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+        var listing = await GetListing(listingEntityId);
+        Assert.Multiple(() =>
+        {
+            Assert.That(listing.DetailFetchAttempts, Is.EqualTo(MaxAttempts));
+            Assert.That(listing.SoldDate, Is.Null);
+            Assert.That(finalTargets.Select(t => t.Id), Does.Not.Contain(listingEntityId));
+        });
+    }
+
+    [Test]
+    public async Task Should_drop_a_sold_listing_out_of_the_family_backlog_immediately_once_it_gets_a_real_sold_date()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "family-sold-with-date-drop", detailFetched: false, isSold: true);
+        var detail = BuildItemPageListing(status: "Sold");
+
+        await store.ApplyItemDetail(listingEntityId, detail, CancellationToken.None);
+
+        var listing = await GetListing(listingEntityId);
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+        Assert.Multiple(() =>
+        {
+            Assert.That(listing.SoldDate, Is.Not.Null);
+            Assert.That(listing.DetailFetchAttempts, Is.EqualTo(0));
+            Assert.That(targets, Is.Empty);
+        });
+    }
+
+    [Test]
     public async Task Should_increment_attempts_and_stay_eligible_without_marking_failed_on_a_single_failure()
     {
         var store = CreateStore();
@@ -249,6 +328,87 @@ public class ItemDetailStoreTests
     }
 
     [Test]
+    public async Task Should_order_the_family_backlog_sold_without_a_date_before_never_fetched()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var neverFetched = await SeedListing(jobId, "family-never-fetched", detailFetched: false);
+        var soldWithoutDate = await SeedListing(
+            jobId, "family-sold-no-date", detailFetched: false, isSold: true, soldDate: null);
+
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets.Select(t => t.Id), Is.EqualTo(new[] { soldWithoutDate, neverFetched }));
+    }
+
+    [Test]
+    public async Task Should_include_an_already_fetched_family_listing_that_is_sold_without_a_real_date()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var requeued = await SeedListing(
+            jobId, "family-requeued", detailFetched: true, isSold: true, soldDate: null);
+
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets.Select(t => t.Id), Is.EqualTo(new[] { requeued }));
+    }
+
+    [Test]
+    public async Task Should_exclude_a_family_listing_that_already_has_details_and_a_real_sold_date()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        await SeedListing(
+            jobId, "family-already-detailed", detailFetched: true, isSold: true,
+            soldDate: new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets, Is.Empty);
+    }
+
+    [Test]
+    public async Task Should_exclude_family_listings_that_reached_the_maximum_attempt_count()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        await SeedListing(jobId, "family-exhausted", detailFetched: false, detailFetchAttempts: MaxAttempts);
+        var eligible = await SeedListing(jobId, "family-eligible", detailFetched: false, detailFetchAttempts: MaxAttempts - 1);
+
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 10, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets.Select(t => t.Id), Is.EqualTo(new[] { eligible }));
+    }
+
+    [Test]
+    public async Task Should_cap_family_backlog_listings_to_the_requested_limit()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        await SeedListing(jobId, "family-cap-1", detailFetched: false);
+        await SeedListing(jobId, "family-cap-2", detailFetched: false);
+
+        var targets = await store.GetFamilyBacklogListingsNeedingDetail([jobId], 1, MaxAttempts, CancellationToken.None);
+
+        Assert.That(targets, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Should_count_family_listings_still_needing_detail()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        await SeedListing(jobId, "family-count-1", detailFetched: false);
+        await SeedListing(jobId, "family-count-2", detailFetched: false);
+        await SeedListing(jobId, "family-count-done", detailFetched: true, isSold: false);
+
+        var remaining = await store.CountFamilyListingsNeedingDetail([jobId], MaxAttempts, CancellationToken.None);
+
+        Assert.That(remaining, Is.EqualTo(2));
+    }
+
+    [Test]
     public async Task Should_enrich_the_existing_sold_history_row_instead_of_adding_a_duplicate_when_already_sold()
     {
         var store = CreateStore();
@@ -382,7 +542,8 @@ public class ItemDetailStoreTests
         bool isSold = false,
         int detailFetchAttempts = 0,
         DateTime? postedUtc = null,
-        DateTime? createdUtc = null)
+        DateTime? createdUtc = null,
+        DateTime? soldDate = null)
     {
         await using var db = await Factory().CreateDbContextAsync();
         var listing = new ListingEntity
@@ -392,6 +553,7 @@ public class ItemDetailStoreTests
             Url = $"https://x/itm/{listingId}",
             ItemStatus = isSold ? "Sold" : "Active",
             IsSold = isSold,
+            SoldDate = soldDate,
             DetailFetchedUtc = detailFetched ? DateTime.UtcNow : null,
             DetailFetchAttempts = detailFetchAttempts,
             PostedUtc = postedUtc,

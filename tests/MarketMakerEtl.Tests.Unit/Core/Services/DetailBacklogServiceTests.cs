@@ -204,6 +204,74 @@ public class DetailBacklogServiceTests
         });
     }
 
+    [Test]
+    public async Task Should_honour_the_family_detail_budget_per_tick()
+    {
+        var familyJobId = await CreateFamilyJob("family-budget-job");
+        await SeedListing(familyJobId, "family-budget-1");
+        await SeedListing(familyJobId, "family-budget-2");
+        await SeedListing(familyJobId, "family-budget-3");
+        var fetch = new RecordingDetailFetchService(_detailStore, 3, _ => true);
+        var service = CreateService(
+            fetch, new FakeTimeProvider(StartTime), Options(maxFetchesPerTick: 0, familyFetchesPerTick: 1));
+
+        var result = await service.RunTick(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(fetch.Calls, Has.Count.EqualTo(1));
+            Assert.That(result.FamilyAttempted, Is.EqualTo(1));
+            Assert.That(result.FamilyRemaining, Is.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public async Task Should_prioritise_family_sold_without_date_listings_over_never_fetched_ones()
+    {
+        var familyJobId = await CreateFamilyJob("family-priority-job");
+        await SeedListing(familyJobId, "family-priority-active");
+        await SeedListing(familyJobId, "family-priority-sold", isSold: true);
+        var fetch = new RecordingDetailFetchService(_detailStore, 3, _ => true);
+        var service = CreateService(
+            fetch, new FakeTimeProvider(StartTime), Options(maxFetchesPerTick: 0, familyFetchesPerTick: 1));
+
+        await service.RunTick(CancellationToken.None);
+
+        Assert.That(fetch.Calls.Select(t => t.ListingId), Is.EqualTo(new[] { "family-priority-sold" }));
+    }
+
+    [Test]
+    public async Task Should_requeue_an_already_fetched_family_listing_that_became_sold_but_leave_non_family_jobs_alone()
+    {
+        var familyJobId = await CreateFamilyJob("family-requeue-job");
+        var nonFamilyJobId = await CreateJob("non-family-requeue-job");
+        await SeedListing(familyJobId, "family-requeue", isSold: true, detailFetched: true);
+        await SeedListing(nonFamilyJobId, "non-family-requeue", isSold: true, detailFetched: true);
+        var fetch = new RecordingDetailFetchService(_detailStore, 3, _ => true);
+        var service = CreateService(fetch, new FakeTimeProvider(StartTime), Options());
+
+        await service.RunTick(CancellationToken.None);
+
+        Assert.That(fetch.Calls.Select(t => t.ListingId), Is.EqualTo(new[] { "family-requeue" }));
+    }
+
+    [Test]
+    public async Task Should_requeue_a_family_listing_after_a_real_active_to_sold_transition_via_upsert()
+    {
+        var familyJobId = await CreateFamilyJob("family-transition-job");
+        await SeedListing(familyJobId, "family-transition", isSold: false, detailFetched: true);
+        var scrapeStore = new ScrapeStore(Factory(), new ScrapeRunStateService());
+        var soldSummary = new ListingSummary(
+            "family-transition", "Title", 50m, "USD", "https://x/itm/family-transition", true, null, null, null);
+        await scrapeStore.UpsertListings(familyJobId, [soldSummary], CancellationToken.None);
+        var fetch = new RecordingDetailFetchService(_detailStore, 3, _ => true);
+        var service = CreateService(fetch, new FakeTimeProvider(StartTime), Options());
+
+        await service.RunTick(CancellationToken.None);
+
+        Assert.That(fetch.Calls.Select(t => t.ListingId), Is.EqualTo(new[] { "family-transition" }));
+    }
+
     private DetailBacklogService CreateService(
         RecordingDetailFetchService fetch, TimeProvider timeProvider, DetailBacklogOptions options) =>
         new(_jobs, _detailStore, fetch, options, timeProvider);
@@ -213,13 +281,23 @@ public class DetailBacklogServiceTests
         int tickMinutes = 5,
         int maxFetchesPerTick = 30,
         int maxFetchesPerHour = 300,
-        int maxAttempts = 3) =>
-        new(enabled, tickMinutes, maxFetchesPerTick, maxFetchesPerHour, maxAttempts);
+        int maxAttempts = 3,
+        int familyFetchesPerTick = 300) =>
+        new(enabled, tickMinutes, maxFetchesPerTick, maxFetchesPerHour, maxAttempts, familyFetchesPerTick);
 
     private async Task<int> CreateJob(string searchTerm)
     {
         var job = await _jobs.CreateJob(new JobDetails(searchTerm, Marketplace.Mercari, null, 24, true, []), CancellationToken.None);
         return job.Id;
+    }
+
+    private async Task<int> CreateFamilyJob(string searchTerm)
+    {
+        var jobId = await CreateJob(searchTerm);
+        var families = new ProductFamilyStore(Factory());
+        var family = await families.CreateFamily($"family-{Guid.NewGuid():N}", "Test Family", "test-model", CancellationToken.None);
+        await families.SetJobFamily(jobId, family!.Id, CancellationToken.None);
+        return jobId;
     }
 
     private async Task EnqueueRun(int jobId)
@@ -228,7 +306,8 @@ public class DetailBacklogServiceTests
         await scrapeStore.EnqueueRun(jobId, "term", TriggerType.Manual, CancellationToken.None);
     }
 
-    private async Task SeedListing(int jobId, string listingId, int attempts = 0, bool isSold = false)
+    private async Task SeedListing(
+        int jobId, string listingId, int attempts = 0, bool isSold = false, bool detailFetched = false)
     {
         await using var db = await Factory().CreateDbContextAsync();
         db.Listings.Add(new ListingEntity
@@ -238,6 +317,7 @@ public class DetailBacklogServiceTests
             Url = $"https://x/itm/{listingId}",
             ItemStatus = isSold ? "Sold" : "Active",
             IsSold = isSold,
+            DetailFetchedUtc = detailFetched ? DateTime.UtcNow : null,
             DetailFetchAttempts = attempts,
             CreatedUtc = DateTime.UtcNow
         });

@@ -1,5 +1,6 @@
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Ebay;
+using MarketMakerEtl.Core.Models.Jobs;
 using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Models.Scraper;
 
@@ -38,39 +39,84 @@ public sealed class DetailBacklogService : IDetailBacklogService
             return EmptyResult;
         }
 
-        var maxThisTick = Math.Min(_options.MaxFetchesPerTick, RemainingHourlyBudget());
-        if (maxThisTick <= 0)
+        var eligibleJobs = await GetEligibleJobs(ct);
+        if (eligibleJobs.Count == 0)
         {
             return EmptyResult;
         }
 
-        var eligibleJobIds = await GetEligibleJobIds(ct);
-        if (eligibleJobIds.Count == 0)
-        {
-            return EmptyResult;
-        }
+        var familyJobIds = eligibleJobs
+            .Where(job => job.ProductFamilyId is not null)
+            .Select(job => job.Id)
+            .ToList();
+        var allJobIds = eligibleJobs.Select(job => job.Id).ToList();
 
-        var targets = await _detailStore.GetBacklogListingsNeedingDetail(
-            eligibleJobIds, maxThisTick, _options.MaxDetailFetchAttempts, ct);
+        var familyResult = await RunFamilyPass(familyJobIds, ct);
+        var generalResult = await RunGeneralPass(allJobIds, ct);
+        var familyRemaining = await _detailStore.CountFamilyListingsNeedingDetail(
+            familyJobIds, _options.MaxDetailFetchAttempts, ct);
 
-        return await FetchTargets(targets, ct);
+        return Combine(familyResult, generalResult, familyRemaining);
     }
 
-    private async Task<IReadOnlyList<int>> GetEligibleJobIds(CancellationToken ct)
+    private async Task<IReadOnlyList<JobView>> GetEligibleJobs(CancellationToken ct)
     {
         var jobs = await _jobs.GetEffectivelyEnabledJobs(ct);
-        var eligible = new List<int>();
+        var eligible = new List<JobView>();
 
         foreach (var job in jobs)
         {
             if (!await _jobs.HasQueuedOrRunningRun(job.Id, ct))
             {
-                eligible.Add(job.Id);
+                eligible.Add(job);
             }
         }
 
         return eligible;
     }
+
+    private async Task<DetailBacklogTickResult> RunFamilyPass(IReadOnlyList<int> familyJobIds, CancellationToken ct)
+    {
+        if (familyJobIds.Count == 0)
+        {
+            return EmptyResult;
+        }
+
+        var maxThisPass = Math.Min(_options.FamilyDetailFetchesPerTick, RemainingHourlyBudget());
+        if (maxThisPass <= 0)
+        {
+            return EmptyResult;
+        }
+
+        var targets = await _detailStore.GetFamilyBacklogListingsNeedingDetail(
+            familyJobIds, maxThisPass, _options.MaxDetailFetchAttempts, ct);
+
+        return await FetchTargets(targets, ct);
+    }
+
+    private async Task<DetailBacklogTickResult> RunGeneralPass(IReadOnlyList<int> allJobIds, CancellationToken ct)
+    {
+        var maxThisPass = Math.Min(_options.MaxFetchesPerTick, RemainingHourlyBudget());
+        if (maxThisPass <= 0)
+        {
+            return EmptyResult;
+        }
+
+        var targets = await _detailStore.GetBacklogListingsNeedingDetail(
+            allJobIds, maxThisPass, _options.MaxDetailFetchAttempts, ct);
+
+        return await FetchTargets(targets, ct);
+    }
+
+    private static DetailBacklogTickResult Combine(
+        DetailBacklogTickResult family, DetailBacklogTickResult general, int familyRemaining) =>
+        new(
+            family.Selected + general.Selected,
+            family.Attempted + general.Attempted,
+            family.Succeeded + general.Succeeded,
+            [.. family.Failures, .. general.Failures],
+            family.Attempted,
+            familyRemaining);
 
     private async Task<DetailBacklogTickResult> FetchTargets(
         IReadOnlyList<ListingDetailTarget> targets, CancellationToken ct)

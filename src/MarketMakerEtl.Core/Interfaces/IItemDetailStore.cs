@@ -10,6 +10,12 @@ public interface IItemDetailStore
     Task<IReadOnlyList<ListingDetailTarget>> GetBacklogListingsNeedingDetail(
         IReadOnlyCollection<int> jobIds, int limit, int maxAttempts, CancellationToken ct);
 
+    Task<IReadOnlyList<ListingDetailTarget>> GetFamilyBacklogListingsNeedingDetail(
+        IReadOnlyCollection<int> jobIds, int limit, int maxAttempts, CancellationToken ct);
+
+    Task<int> CountFamilyListingsNeedingDetail(
+        IReadOnlyCollection<int> jobIds, int maxAttempts, CancellationToken ct);
+
     Task<IReadOnlyDictionary<string, int>> GetListingEntityIds(
         int jobId, IReadOnlyCollection<string> listingIds, CancellationToken ct);
 

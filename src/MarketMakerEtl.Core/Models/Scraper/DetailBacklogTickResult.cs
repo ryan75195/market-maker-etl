@@ -6,4 +6,6 @@ public sealed record DetailBacklogTickResult(
     int Selected,
     int Attempted,
     int Succeeded,
-    IReadOnlyList<ScrapeRunIssueDetails> Failures);
+    IReadOnlyList<ScrapeRunIssueDetails> Failures,
+    int FamilyAttempted = 0,
+    int FamilyRemaining = 0);
