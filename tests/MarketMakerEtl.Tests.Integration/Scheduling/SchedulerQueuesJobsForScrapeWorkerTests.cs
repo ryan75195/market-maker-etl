@@ -88,7 +88,7 @@ public class SchedulerQueuesJobsForScrapeWorkerTests
         var createResponse = await _client.PostAsJsonAsync(
             "/api/jobs",
             new CreateJobRequest(SearchTerm, Marketplace.Ebay, IntervalHours: 1));
-        var created = await createResponse.Content.ReadFromJsonAsync<JobView>();
+        var created = await createResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         using var scope = _factory.Services.CreateScope();
         var jobScheduling = scope.ServiceProvider.GetRequiredService<IJobSchedulingService>();
@@ -99,7 +99,8 @@ public class SchedulerQueuesJobsForScrapeWorkerTests
         var worker = new ScrapeWorker(scrapeStore, scrapeRuns, NullLogger<ScrapeWorker>.Instance);
         var processed = await worker.RunOnce(CancellationToken.None);
 
-        var jobAfterQueueing = await _client.GetFromJsonAsync<JobView>($"/api/jobs/{created!.Id}");
+        var jobAfterQueueing = await _client.GetFromJsonAsync<JobView>(
+            $"/api/jobs/{created!.Id}", TestJsonOptions.Default);
         var listings = await _client.GetFromJsonAsync<List<ListingSummary>>(
             $"/api/scrape/jobs/{created.Id}/listings");
 
@@ -119,7 +120,7 @@ public class SchedulerQueuesJobsForScrapeWorkerTests
         var createResponse = await _client.PostAsJsonAsync(
             "/api/jobs",
             new CreateJobRequest(SearchTerm, Marketplace.Ebay, IntervalHours: 24));
-        await createResponse.Content.ReadFromJsonAsync<JobView>();
+        await createResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         using (var firstScope = _factory.Services.CreateScope())
         {

@@ -1,4 +1,5 @@
 using MarketMakerEtl.Core.Models.Families;
+using MarketMakerEtl.Core.Models.Jobs;
 
 namespace MarketMakerEtl.Core.Interfaces;
 
@@ -21,4 +22,6 @@ public interface IProductFamilyStore
     Task<TaxonomyVersionView?> GetTaxonomyVersionById(int taxonomyVersionId, CancellationToken ct);
 
     Task<bool> SetJobFamily(int jobId, int? productFamilyId, CancellationToken ct);
+
+    Task<IReadOnlyList<JobView>> GetJobsWithFamily(CancellationToken ct);
 }

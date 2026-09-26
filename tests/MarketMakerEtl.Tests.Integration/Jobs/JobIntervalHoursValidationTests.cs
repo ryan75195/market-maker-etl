@@ -15,7 +15,7 @@ public class JobIntervalHoursValidationTests : JobsApiTestBase
             "/api/jobs",
             new CreateJobRequest("labubu", IntervalHours: 0));
 
-        var jobsAfter = await Client.GetFromJsonAsync<List<JobView>>("/api/jobs");
+        var jobsAfter = await Client.GetFromJsonAsync<List<JobView>>("/api/jobs", TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
@@ -38,13 +38,13 @@ public class JobIntervalHoursValidationTests : JobsApiTestBase
     public async Task Should_reject_updating_a_job_with_interval_hours_below_one()
     {
         var createResponse = await Client.PostAsJsonAsync("/api/jobs", new CreateJobRequest("labubu"));
-        var created = await createResponse.Content.ReadFromJsonAsync<JobView>();
+        var created = await createResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         var updateResponse = await Client.PutAsJsonAsync(
             $"/api/jobs/{created!.Id}",
             new UpdateJobRequest("labubu", created.Marketplace, null, -1, true, null));
 
-        var reread = await Client.GetFromJsonAsync<JobView>($"/api/jobs/{created.Id}");
+        var reread = await Client.GetFromJsonAsync<JobView>($"/api/jobs/{created.Id}", TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {

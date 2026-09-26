@@ -15,21 +15,21 @@ public class JobCrudEndpointsTests : JobsApiTestBase
         var createResponse = await Client.PostAsJsonAsync(
             "/api/jobs",
             new CreateJobRequest("nintendo switch oled", Marketplace.Mercari, "OLED model only", 12, true, null));
-        var created = await createResponse.Content.ReadFromJsonAsync<JobView>();
+        var created = await createResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
-        var listResponse = await Client.GetFromJsonAsync<List<JobView>>("/api/jobs");
-        var readResponse = await Client.GetFromJsonAsync<JobView>($"/api/jobs/{created!.Id}");
+        var listResponse = await Client.GetFromJsonAsync<List<JobView>>("/api/jobs", TestJsonOptions.Default);
+        var readResponse = await Client.GetFromJsonAsync<JobView>($"/api/jobs/{created!.Id}", TestJsonOptions.Default);
 
         var updateResponse = await Client.PutAsJsonAsync(
             $"/api/jobs/{created.Id}",
             new UpdateJobRequest("nintendo switch v2", Marketplace.Mercari, "Any model", 6, true, null));
-        var updated = await updateResponse.Content.ReadFromJsonAsync<JobView>();
+        var updated = await updateResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         var disableResponse = await Client.PostAsync($"/api/jobs/{created.Id}/disable", null);
-        var disabled = await disableResponse.Content.ReadFromJsonAsync<JobView>();
+        var disabled = await disableResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         var enableResponse = await Client.PostAsync($"/api/jobs/{created.Id}/enable", null);
-        var enabled = await enableResponse.Content.ReadFromJsonAsync<JobView>();
+        var enabled = await enableResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         var deleteResponse = await Client.DeleteAsync($"/api/jobs/{created.Id}");
         var afterDeleteResponse = await Client.GetAsync($"/api/jobs/{created.Id}");

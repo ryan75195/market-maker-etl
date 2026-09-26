@@ -13,15 +13,16 @@ public class JobRunEndpointQueuesOnlyOnRequestTests : JobsApiTestBase
     public async Task Should_queue_a_run_only_when_the_run_endpoint_is_called()
     {
         var createResponse = await Client.PostAsJsonAsync("/api/jobs", new CreateJobRequest("labubu"));
-        var created = await createResponse.Content.ReadFromJsonAsync<JobView>();
+        var created = await createResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         var runBeforeQueueing = await Client.GetAsync("/api/scrape/runs/1");
 
         var runResponse = await Client.PostAsync($"/api/jobs/{created!.Id}/run", null);
         var runBody = await runResponse.Content.ReadFromJsonAsync<EnqueueRunResponse>();
 
-        var queuedRun = await Client.GetFromJsonAsync<ScrapeRunView>($"/api/scrape/runs/{runBody!.RunId}");
-        var jobAfterRun = await Client.GetFromJsonAsync<JobView>($"/api/jobs/{created.Id}");
+        var queuedRun = await Client.GetFromJsonAsync<ScrapeRunView>(
+            $"/api/scrape/runs/{runBody!.RunId}", TestJsonOptions.Default);
+        var jobAfterRun = await Client.GetFromJsonAsync<JobView>($"/api/jobs/{created.Id}", TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {

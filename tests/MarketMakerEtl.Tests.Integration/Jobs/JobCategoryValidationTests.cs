@@ -15,7 +15,7 @@ public class JobCategoryValidationTests : JobsApiTestBase
             "/api/jobs",
             new CreateJobRequest("labubu", CategoryIds: [999]));
 
-        var jobsAfter = await Client.GetFromJsonAsync<List<JobView>>("/api/jobs");
+        var jobsAfter = await Client.GetFromJsonAsync<List<JobView>>("/api/jobs", TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
@@ -33,7 +33,7 @@ public class JobCategoryValidationTests : JobsApiTestBase
         var response = await Client.PostAsJsonAsync(
             "/api/jobs",
             new CreateJobRequest("labubu", CategoryIds: [category!.Id]));
-        var created = await response.Content.ReadFromJsonAsync<JobView>();
+        var created = await response.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
@@ -46,13 +46,13 @@ public class JobCategoryValidationTests : JobsApiTestBase
     public async Task Should_reject_updating_a_job_with_an_unknown_category_id()
     {
         var createResponse = await Client.PostAsJsonAsync("/api/jobs", new CreateJobRequest("labubu"));
-        var created = await createResponse.Content.ReadFromJsonAsync<JobView>();
+        var created = await createResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         var updateResponse = await Client.PutAsJsonAsync(
             $"/api/jobs/{created!.Id}",
             new UpdateJobRequest("labubu", created.Marketplace, null, created.IntervalHours, true, [999]));
 
-        var reread = await Client.GetFromJsonAsync<JobView>($"/api/jobs/{created.Id}");
+        var reread = await Client.GetFromJsonAsync<JobView>($"/api/jobs/{created.Id}", TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
@@ -65,13 +65,13 @@ public class JobCategoryValidationTests : JobsApiTestBase
     public async Task Should_reject_setting_an_unknown_category_id_on_a_job()
     {
         var createResponse = await Client.PostAsJsonAsync("/api/jobs", new CreateJobRequest("labubu"));
-        var created = await createResponse.Content.ReadFromJsonAsync<JobView>();
+        var created = await createResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         var setResponse = await Client.PostAsJsonAsync(
             $"/api/jobs/{created!.Id}/categories",
             new SetJobCategoriesRequest([999]));
 
-        var reread = await Client.GetFromJsonAsync<JobView>($"/api/jobs/{created.Id}");
+        var reread = await Client.GetFromJsonAsync<JobView>($"/api/jobs/{created.Id}", TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {

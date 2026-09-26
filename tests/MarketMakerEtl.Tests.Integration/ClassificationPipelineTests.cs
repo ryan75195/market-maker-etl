@@ -78,7 +78,7 @@ public class ClassificationPipelineTests
         await worker.RunOnce(CancellationToken.None);
 
         var response = await _client.GetAsync($"/api/listings/{listingIds[0]}/classification");
-        var classification = await response.Content.ReadFromJsonAsync<ListingClassificationView>();
+        var classification = await response.Content.ReadFromJsonAsync<ListingClassificationView>(TestJsonOptions.Default);
 
         await using var db = await factory.CreateDbContextAsync();
         var storedRowCount = await db.ListingClassifications.CountAsync(
@@ -124,7 +124,7 @@ public class ClassificationPipelineTests
     {
         var response = await _client.PostAsJsonAsync(
             "/api/jobs", new CreateJobRequest(searchTerm, Marketplace.Mercari, null, 24, true, []));
-        return (await response.Content.ReadFromJsonAsync<JobView>())!;
+        return (await response.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default))!;
     }
 
     private async Task SetJobFamily(int jobId, int familyId)
@@ -171,12 +171,11 @@ public class ClassificationPipelineTests
 
     private static ClassificationWorker BuildWorker(IDbContextFactory<EtlDbContext> factory)
     {
-        var jobs = new JobStore(factory);
         var families = new ProductFamilyStore(factory);
         var classifications = new ListingClassificationStore(factory);
         var options = new ClassifierOptions("http://classifier.test", 64, 5, 2000, 120);
         var service = new ListingClassificationService(
-            jobs, families, classifications, new StubClassifierClient(), options);
+            families, classifications, new StubClassifierClient(), options);
         return new ClassificationWorker(service, options, TimeProvider.System, NullLogger<ClassificationWorker>.Instance);
     }
 

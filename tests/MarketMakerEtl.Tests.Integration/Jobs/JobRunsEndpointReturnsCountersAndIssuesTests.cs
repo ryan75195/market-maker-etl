@@ -13,13 +13,13 @@ public class JobRunsEndpointReturnsCountersAndIssuesTests : JobsApiTestBase
     public async Task Should_return_recent_runs_for_the_job_with_their_trigger_and_counters()
     {
         var createResponse = await Client.PostAsJsonAsync("/api/jobs", new CreateJobRequest("labubu"));
-        var created = await createResponse.Content.ReadFromJsonAsync<JobView>();
+        var created = await createResponse.Content.ReadFromJsonAsync<JobView>(TestJsonOptions.Default);
 
         var runResponse = await Client.PostAsync($"/api/jobs/{created!.Id}/run", null);
         var runBody = await runResponse.Content.ReadFromJsonAsync<EnqueueRunResponse>();
 
         var runsResponse = await Client.GetAsync($"/api/jobs/{created.Id}/runs");
-        var runs = await runsResponse.Content.ReadFromJsonAsync<List<ScrapeRunView>>();
+        var runs = await runsResponse.Content.ReadFromJsonAsync<List<ScrapeRunView>>(TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {

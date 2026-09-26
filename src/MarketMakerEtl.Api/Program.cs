@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using System.Text.Json.Serialization;
 using MarketMakerEtl.Api;
 using MarketMakerEtl.Core;
 using MarketMakerEtl.Core.Data;
@@ -10,6 +11,8 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCoreServices(builder.Configuration);
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())

@@ -36,8 +36,8 @@ public sealed class JobStore : IJobStore
     public async Task<IReadOnlyList<JobView>> GetJobs(CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
-        var jobs = await JobsWithCategories(db).OrderBy(j => j.Id).ToListAsync(ct);
-        return jobs.Select(MapToView).ToList();
+        var jobs = await db.ScrapeJobs.IncludeCategories().OrderBy(j => j.Id).ToListAsync(ct);
+        return jobs.Select(JobViewFactory.ToView).ToList();
     }
 
     public async Task<JobView?> GetJob(int jobId, CancellationToken ct)
@@ -123,11 +123,11 @@ public sealed class JobStore : IJobStore
     public async Task<IReadOnlyList<JobView>> GetEffectivelyEnabledJobs(CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
-        var jobs = await JobsWithCategories(db)
+        var jobs = await db.ScrapeJobs.IncludeCategories()
             .WhereEffectivelyEnabled()
             .OrderBy(j => j.Id)
             .ToListAsync(ct);
-        return jobs.Select(MapToView).ToList();
+        return jobs.Select(JobViewFactory.ToView).ToList();
     }
 
     public async Task<bool> HasQueuedOrRunningRun(int jobId, CancellationToken ct)
@@ -138,9 +138,6 @@ public sealed class JobStore : IJobStore
                 && (r.Status == nameof(ScrapeRunStatus.Queued) || r.Status == nameof(ScrapeRunStatus.Running)),
             ct);
     }
-
-    private static IQueryable<ScrapeJobEntity> JobsWithCategories(EtlDbContext db) =>
-        db.ScrapeJobs.Include(j => j.JobCategories).ThenInclude(jc => jc.Category);
 
     private static async Task ApplyCategories(
         EtlDbContext db,
@@ -160,24 +157,7 @@ public sealed class JobStore : IJobStore
 
     private static async Task<JobView?> LoadView(EtlDbContext db, int jobId, CancellationToken ct)
     {
-        var job = await JobsWithCategories(db).FirstOrDefaultAsync(j => j.Id == jobId, ct);
-        return job is null ? null : MapToView(job);
+        var job = await db.ScrapeJobs.IncludeCategories().FirstOrDefaultAsync(j => j.Id == jobId, ct);
+        return job?.ToView();
     }
-
-    private static JobView MapToView(ScrapeJobEntity job) =>
-        new(
-            job.Id,
-            job.SearchTerm,
-            job.Marketplace,
-            job.FilterInstructions,
-            job.IntervalHours,
-            job.IsEnabled,
-            job.LastQueuedUtc,
-            job.LastRunUtc,
-            job.CreatedUtc,
-            job.JobCategories
-                .Where(jc => jc.Category is not null)
-                .Select(jc => new CategoryView(jc.Category!.Id, jc.Category.Name, jc.Category.IsEnabled, jc.Category.CreatedUtc))
-                .ToList(),
-            job.ProductFamilyId);
 }
