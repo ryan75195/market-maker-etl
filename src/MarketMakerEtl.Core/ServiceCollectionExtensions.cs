@@ -42,6 +42,7 @@ public static class ServiceCollectionExtensions
     private const int DefaultClassifierMaxListingsPerTick = 2000;
     private const int DefaultClassifierTimeoutSeconds = 120;
     private const double DefaultClassificationReviewThreshold = 0.9;
+    private const int DefaultBusyTimeoutMs = 10000;
 
     private static readonly TimeSpan DefaultFetchTimeout = TimeSpan.FromMinutes(5);
 
@@ -79,7 +80,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(DealsOptionsFactory.Build(configuration));
         services.AddSingleton(BacktestOptionsFactory.Build(configuration));
         services.AddDbContextFactory<EtlDbContext>(options =>
-            options.UseSqlite(BuildDatabaseConnectionString(configuration)));
+            options.UseSqlite(BuildDatabaseConnectionString(configuration))
+                .AddInterceptors(new SqlitePragmaConnectionInterceptor(BuildBusyTimeoutMs(configuration))));
 
         return services.AddCoreDomainServices();
     }
@@ -189,6 +191,9 @@ public static class ServiceCollectionExtensions
 
     private static ClassificationReviewOptions BuildClassificationReviewOptions(IConfiguration? configuration) =>
         new(ReadDouble(configuration, "Classification:ReviewThreshold", DefaultClassificationReviewThreshold));
+
+    private static int BuildBusyTimeoutMs(IConfiguration? configuration) =>
+        ReadInt(configuration, "Database:BusyTimeoutMs", DefaultBusyTimeoutMs);
 
     private static string BuildDatabaseConnectionString(IConfiguration? configuration)
     {
