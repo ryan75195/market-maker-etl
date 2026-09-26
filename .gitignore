@@ -50,6 +50,9 @@ deploy/.env
 publish/
 data/
 
+## Local run scripts (scripts/run-local.ps1): config, logs, PID files
+.local/
+
 # Source data-access layer is code, not runtime data; the broad data/ rule above hides it.
 !src/MarketMakerEtl.Core/Data/
 !src/MarketMakerEtl.Core/Data/**

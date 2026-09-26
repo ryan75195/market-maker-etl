@@ -6,6 +6,33 @@ and Etl processes. It only lists configuration **setting names** — never
 paste real secret values (proxy credentials, storage keys, API keys) into
 source control, chat, or logs.
 
+## Quick start: `scripts/run-local.ps1`
+
+For everything except the scraper stack (classifier sidecar, Api, and Etl),
+`scripts/run-local.ps1` replaces the manual steps below with a single
+repeatable script:
+
+```powershell
+Copy-Item scripts/run-config.example.json .local/run-config.json
+notepad .local/run-config.json   # fill in databasePath, modelsDir, pythonExe, etc.
+
+./scripts/run-local.ps1 -Start    # builds Api + Etl, starts classifier/Api/Etl hidden, waits for health
+./scripts/run-local.ps1 -Status   # PIDs, alive/dead, and health responses
+./scripts/run-local.ps1 -Stop     # kills the recorded process trees
+```
+
+`.local/run-config.json` is gitignored — it is the only place machine-specific
+paths (model directory, venv `python.exe`, DB path) need to live. The example
+config's `scraperStartScript` field can point at a local script that starts
+the scraper stack described below; leave it `null` to manage the scraper
+stack manually with the steps in this document. Logs land under
+`.local/logs/<name>-<timestamp>.log`, PID records under `.local/pids/`.
+
+The classifier needs a GPU at runtime; for a smoke test, set
+`classifierPreload` to `[]` in the config so no model is loaded eagerly.
+
+## Manual steps
+
 ## Prerequisites
 
 - .NET 10 SDK
