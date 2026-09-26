@@ -1,4 +1,3 @@
-using System.Globalization;
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Classification;
@@ -8,6 +7,7 @@ using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using static MarketMakerEtl.Core.ConfigurationValueReader;
 
 namespace MarketMakerEtl.Core;
 
@@ -205,37 +205,4 @@ public static class ServiceCollectionExtensions
         return Path.Combine(directory, DefaultDatabaseFileName);
     }
 
-    private static string ReadString(IConfiguration? configuration, string key, string fallback)
-    {
-        var value = configuration?[key];
-        return string.IsNullOrWhiteSpace(value) ? fallback : value;
-    }
-
-    private static string? ReadOptionalString(IConfiguration? configuration, string key)
-    {
-        var value = configuration?[key];
-        return string.IsNullOrWhiteSpace(value) ? null : value;
-    }
-
-    private static int ReadInt(IConfiguration? configuration, string key, int fallback)
-    {
-        var value = configuration?[key];
-        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : fallback;
-    }
-
-    private static bool ReadBool(IConfiguration? configuration, string key, bool fallback)
-    {
-        var value = configuration?[key];
-        return bool.TryParse(value, out var parsed) ? parsed : fallback;
-    }
-
-    private static double ReadDouble(IConfiguration? configuration, string key, double fallback)
-    {
-        var value = configuration?[key];
-        return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : fallback;
-    }
 }
