@@ -73,7 +73,7 @@ public class ClassificationReviewStoreTests
         await SeedRow(middle, versionId, "item_type", ClassificationSource.Model, confidence: 0.7);
         await SeedRow(highest, versionId, "item_type", ClassificationSource.Model, confidence: 0.8);
 
-        var queue = await store.GetReviewQueue(familyId, versionId, question: null, threshold: 0.9, take: 2, CancellationToken.None);
+        var queue = await store.GetReviewQueue(familyId, versionId, questions: null, threshold: 0.9, take: 2, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -93,7 +93,7 @@ public class ClassificationReviewStoreTests
         await SeedRow(humanListing, versionId, "item_type", ClassificationSource.Human, confidence: 0.5);
         await SeedRow(notApplicableListing, versionId, "item_type", ClassificationSource.Model, confidence: 0.5, isApplicable: false);
 
-        var queue = await store.GetReviewQueue(familyId, versionId, question: null, threshold: 0.9, take: 50, CancellationToken.None);
+        var queue = await store.GetReviewQueue(familyId, versionId, questions: null, threshold: 0.9, take: 50, CancellationToken.None);
 
         Assert.That(queue, Is.Empty);
     }
@@ -107,9 +107,54 @@ public class ClassificationReviewStoreTests
         await SeedRow(listing, versionId, "item_type", ClassificationSource.Model, confidence: 0.5);
         await SeedRow(listing, versionId, "edition", ClassificationSource.Model, confidence: 0.5);
 
-        var queue = await store.GetReviewQueue(familyId, versionId, question: "edition", threshold: 0.9, take: 50, CancellationToken.None);
+        var queue = await store.GetReviewQueue(familyId, versionId, questions: ["edition"], threshold: 0.9, take: 50, CancellationToken.None);
 
         Assert.That(queue.Single().Question, Is.EqualTo("edition"));
+    }
+
+    [Test]
+    public async Task Should_filter_the_review_queue_by_multiple_questions()
+    {
+        var store = CreateStore();
+        var (familyId, jobId, versionId) = await SeedFamily();
+        var listing = await SeedListing(jobId, "m-multi-question");
+        await SeedRow(listing, versionId, "item_type", ClassificationSource.Model, confidence: 0.5);
+        await SeedRow(listing, versionId, "edition", ClassificationSource.Model, confidence: 0.5);
+        await SeedRow(listing, versionId, "colour", ClassificationSource.Model, confidence: 0.5);
+
+        var queue = await store.GetReviewQueue(
+            familyId, versionId, questions: ["item_type", "colour"], threshold: 0.9, take: 50, CancellationToken.None);
+
+        Assert.That(queue.Select(row => row.Question), Is.EquivalentTo(new[] { "item_type", "colour" }));
+    }
+
+    [Test]
+    public async Task Should_include_listing_media_and_category_fields_in_the_review_row()
+    {
+        var store = CreateStore();
+        var (familyId, jobId, versionId) = await SeedFamily();
+        var listing = await SeedListing(jobId, "m-media", listingSetup: entity =>
+        {
+            entity.PrimaryImageUrl = "https://example.test/primary.jpg";
+            entity.ImageUrls = """["https://example.test/1.jpg","https://example.test/2.jpg"]""";
+            entity.Description = "A great controller.";
+            entity.Condition = "Used";
+            entity.Category0Name = "Video Games";
+            entity.Category1Name = "Controllers";
+        });
+        await SeedRow(listing, versionId, "item_type", ClassificationSource.Model, confidence: 0.5);
+
+        var row = (await store.GetReviewQueue(familyId, versionId, questions: null, threshold: 0.9, take: 50, CancellationToken.None)).Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.PrimaryImageUrl, Is.EqualTo("https://example.test/primary.jpg"));
+            Assert.That(row.ImageUrlsJson, Does.Contain("1.jpg"));
+            Assert.That(row.Description, Is.EqualTo("A great controller."));
+            Assert.That(row.Condition, Is.EqualTo("Used"));
+            Assert.That(row.Category0Name, Is.EqualTo("Video Games"));
+            Assert.That(row.Category1Name, Is.EqualTo("Controllers"));
+        });
     }
 
     [Test]
@@ -136,7 +181,7 @@ public class ClassificationReviewStoreTests
         var listing = await SeedListing(jobId, "m-stale-version");
         await SeedRow(listing, oldVersionId, "item_type", ClassificationSource.Model, confidence: 0.5);
 
-        var queue = await store.GetReviewQueue(familyId, newVersionId, question: null, threshold: 0.9, take: 50, CancellationToken.None);
+        var queue = await store.GetReviewQueue(familyId, newVersionId, questions: null, threshold: 0.9, take: 50, CancellationToken.None);
         var summary = await store.GetReviewSummary(familyId, newVersionId, threshold: 0.9, CancellationToken.None);
 
         Assert.Multiple(() =>
@@ -272,7 +317,7 @@ public class ClassificationReviewStoreTests
         return version.Id;
     }
 
-    private async Task<int> SeedListing(int jobId, string listingId)
+    private async Task<int> SeedListing(int jobId, string listingId, Action<ListingEntity>? listingSetup = null)
     {
         await using var db = await _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>().CreateDbContextAsync();
         var listing = new ListingEntity
@@ -285,6 +330,7 @@ public class ClassificationReviewStoreTests
             IsSold = false,
             CreatedUtc = DateTime.UtcNow
         };
+        listingSetup?.Invoke(listing);
         db.Listings.Add(listing);
         await db.SaveChangesAsync();
         return listing.Id;
