@@ -77,6 +77,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(BuildClassificationReviewOptions(configuration));
         services.AddSingleton(PriceGroupOptionsFactory.Build(configuration));
         services.AddSingleton(DealsOptionsFactory.Build(configuration));
+        services.AddSingleton(BacktestOptionsFactory.Build(configuration));
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite(BuildDatabaseConnectionString(configuration)));
 

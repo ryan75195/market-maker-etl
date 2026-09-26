@@ -6,17 +6,20 @@ namespace MarketMakerEtl.Etl.Workers;
 public sealed class DealScanWorker : BackgroundService
 {
     private readonly IDealSignalService _deals;
+    private readonly IDealSignalBacktestService _backtest;
     private readonly DealsOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<DealScanWorker> _logger;
 
     public DealScanWorker(
         IDealSignalService deals,
+        IDealSignalBacktestService backtest,
         DealsOptions options,
         TimeProvider timeProvider,
         ILogger<DealScanWorker> logger)
     {
         _deals = deals;
+        _backtest = backtest;
         _options = options;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -32,6 +35,15 @@ public sealed class DealScanWorker : BackgroundService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Deal scan tick failed");
+        }
+
+        try
+        {
+            await _backtest.EvaluateSignals(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Deal backtest tick failed");
         }
     }
 

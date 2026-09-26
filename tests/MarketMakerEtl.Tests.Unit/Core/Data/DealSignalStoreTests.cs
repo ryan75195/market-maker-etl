@@ -114,6 +114,65 @@ public class DealSignalStoreTests
         });
     }
 
+    [Test]
+    public async Task Should_summarise_performance_across_evaluated_signals_and_discount_buckets()
+    {
+        var store = CreateStore();
+        var (familyId, taxonomyVersionId, listingId) = await SeedFamilyAndListing();
+        await SeedEvaluatedSignal(familyId, taxonomyVersionId, listingId, 60m, 0.25m, margin: 10m, hours: 5);
+        await SeedEvaluatedSignal(familyId, taxonomyVersionId, listingId, 50m, 0.55m, margin: -5m, hours: 15);
+        await SeedUnevaluatedSignal(familyId, taxonomyVersionId, listingId, 40m, 0.60m);
+
+        var performance = await store.GetPerformance(familyId, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(performance.Overall.EvaluatedCount, Is.EqualTo(2));
+            Assert.That(performance.Overall.PositiveMarginShare, Is.EqualTo(0.5));
+            Assert.That(performance.Buckets.Single(b => b.Range == "20-30").Summary.EvaluatedCount, Is.EqualTo(1));
+            Assert.That(performance.Buckets.Single(b => b.Range == "50+").Summary.EvaluatedCount, Is.EqualTo(1));
+            Assert.That(performance.Buckets.Single(b => b.Range == "30-50").Summary.EvaluatedCount, Is.EqualTo(0));
+        });
+    }
+
+    private async Task SeedEvaluatedSignal(
+        int familyId, int taxonomyVersionId, int listingId, decimal landedPrice, decimal discount, decimal margin, double hours)
+    {
+        await using var db = await _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>().CreateDbContextAsync();
+        db.DealSignals.Add(new DealSignalEntity
+        {
+            ListingEntityId = listingId,
+            ProductFamilyId = familyId,
+            TaxonomyVersionId = taxonomyVersionId,
+            GroupKeyJson = """{"model":"dualsense"}""",
+            LandedPrice = landedPrice,
+            Discount = discount,
+            CreatedUtc = DateTime.UtcNow.AddDays(-20),
+            ForwardSoldCount = 4,
+            ForwardNetMedian = landedPrice + margin,
+            RealisedMargin = margin,
+            ListingSoldWithinHours = hours
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedUnevaluatedSignal(
+        int familyId, int taxonomyVersionId, int listingId, decimal landedPrice, decimal discount)
+    {
+        await using var db = await _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>().CreateDbContextAsync();
+        db.DealSignals.Add(new DealSignalEntity
+        {
+            ListingEntityId = listingId,
+            ProductFamilyId = familyId,
+            TaxonomyVersionId = taxonomyVersionId,
+            GroupKeyJson = """{"model":"dualsense"}""",
+            LandedPrice = landedPrice,
+            Discount = discount,
+            CreatedUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+    }
+
     private async Task<SeededFamily> SeedFamilyAndListing()
     {
         await using var db = await _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>().CreateDbContextAsync();

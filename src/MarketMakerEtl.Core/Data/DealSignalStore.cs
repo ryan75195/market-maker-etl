@@ -2,6 +2,7 @@ using System.Text.Json;
 using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Deals;
+using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace MarketMakerEtl.Core.Data;
@@ -50,6 +51,19 @@ public sealed class DealSignalStore : IDealSignalStore
         return rows.Select(r => MapToView(r, listings.GetValueOrDefault(r.ListingEntityId))).ToList();
     }
 
+    public async Task<DealPerformanceReport> GetPerformance(int productFamilyId, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var evaluated = await db.DealSignals
+            .Where(s => s.ProductFamilyId == productFamilyId && s.ForwardSoldCount != null)
+            .ToListAsync(ct);
+
+        var outcomes = evaluated
+            .Select(s => new DealSignalOutcome(s.Discount, s.RealisedMargin, s.ListingSoldWithinHours))
+            .ToList();
+        return DealPerformanceCalculator.Build(outcomes);
+    }
+
     private static Task<List<DealSignalEntity>> LoadRows(
         EtlDbContext db, int productFamilyId, DateTime? since, int take, CancellationToken ct)
     {
@@ -94,6 +108,11 @@ public sealed class DealSignalStore : IDealSignalStore
             entity.SoldCount,
             entity.SoldP25,
             entity.Discount,
-            entity.CreatedUtc);
+            entity.CreatedUtc,
+            entity.ForwardNetMedian,
+            entity.ForwardSoldCount,
+            entity.RealisedMargin,
+            entity.ListingSoldWithinHours,
+            entity.UsedEstimatedDates);
     }
 }

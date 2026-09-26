@@ -103,11 +103,63 @@ public class DealSignalEndpointsTests : JobsApiTestBase
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
     }
 
+    [Test]
+    public async Task Should_evaluate_a_backtest_signal_and_return_the_expected_performance_json()
+    {
+        var family = await CreateFamily("ps5-controller-deals-performance");
+        await Client.PutAsJsonAsync(
+            $"/api/families/{family.Id}",
+            new UpdateProductFamilyRequest(null, null, "model", 0.20m, 2));
+        var seeded = await SeedTaxonomyAndListings(family.Id);
+        var createdUtc = DateTime.UtcNow.AddDays(-20);
+
+        var flaggedListingId = await GetListingIdByPrice(seeded.JobId, 70m);
+        await AddSoldListingWithDate(seeded.JobId, seeded.TaxonomyVersionId, 90m, createdUtc.AddDays(2));
+        await AddSoldListingWithDate(seeded.JobId, seeded.TaxonomyVersionId, 100m, createdUtc.AddDays(4));
+        await AddSoldListingWithDate(seeded.JobId, seeded.TaxonomyVersionId, 110m, createdUtc.AddDays(6));
+        await SeedBacktestSignal(
+            family.Id, seeded.TaxonomyVersionId, flaggedListingId, createdUtc, discount: 0.25m, landedPrice: 70m);
+
+        await RunDealBacktest();
+        var performance = await Client.GetFromJsonAsync<DealPerformanceReport>(
+            $"/api/families/{family.Id}/deals/performance");
+
+        var expectedNetMedian = MedianSoldNetProceeds();
+        var expectedMargin = expectedNetMedian - 70m;
+        Assert.Multiple(() =>
+        {
+            Assert.That(performance, Is.Not.Null);
+            Assert.That(performance!.Overall.EvaluatedCount, Is.EqualTo(1));
+            Assert.That(performance.Overall.PositiveMarginShare, Is.EqualTo(1.0));
+            Assert.That(performance.Overall.MedianMargin, Is.EqualTo(expectedMargin));
+            Assert.That(performance.Overall.MedianListingSoldWithinHours, Is.Null);
+            Assert.That(performance.Buckets.Single(b => b.Range == "20-30").Summary.EvaluatedCount, Is.EqualTo(1));
+            Assert.That(performance.Buckets.Single(b => b.Range == "20-30").Summary.MedianMargin, Is.EqualTo(expectedMargin));
+            Assert.That(performance.Buckets.Single(b => b.Range == "30-50").Summary.EvaluatedCount, Is.EqualTo(0));
+            Assert.That(performance.Buckets.Single(b => b.Range == "50+").Summary.EvaluatedCount, Is.EqualTo(0));
+        });
+    }
+
+    [Test]
+    public async Task Should_return_not_found_for_deals_performance_on_an_unknown_family()
+    {
+        var response = await Client.GetAsync("/api/families/999999/deals/performance");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
     private async Task<DealScanTickResult> RunDealScan()
     {
         using var scope = Factory.Services.CreateScope();
         var deals = scope.ServiceProvider.GetRequiredService<IDealSignalService>();
         return await deals.ScanForDeals(CancellationToken.None);
+    }
+
+    private async Task<DealBacktestTickResult> RunDealBacktest()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var backtest = scope.ServiceProvider.GetRequiredService<IDealSignalBacktestService>();
+        return await backtest.EvaluateSignals(CancellationToken.None);
     }
 
     private async Task<ProductFamilyView> CreateFamily(string key)
@@ -176,6 +228,55 @@ public class DealSignalEndpointsTests : JobsApiTestBase
         db.Listings.Add(listing);
         await db.SaveChangesAsync();
         await AddClassification(db, listing.Id, taxonomyVersionId);
+    }
+
+    private async Task AddSoldListingWithDate(int jobId, int taxonomyVersionId, decimal soldPrice, DateTime soldDate)
+    {
+        var dbContextFactory = Factory.Services.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        var listing = new ListingEntity
+        {
+            ListingId = $"m{Guid.NewGuid():N}"[..12],
+            ScrapeJobId = jobId,
+            Marketplace = Marketplace.Mercari,
+            Title = $"Forward sold listing {soldPrice}",
+            Currency = "USD",
+            IsSold = true,
+            SoldPrice = soldPrice,
+            SoldDate = soldDate,
+            CreatedUtc = soldDate
+        };
+        db.Listings.Add(listing);
+        await db.SaveChangesAsync();
+        await AddClassification(db, listing.Id, taxonomyVersionId);
+    }
+
+    private async Task<int> GetListingIdByPrice(int jobId, decimal price)
+    {
+        var dbContextFactory = Factory.Services.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.Listings
+            .Where(l => l.ScrapeJobId == jobId && l.Price == price)
+            .Select(l => l.Id)
+            .SingleAsync();
+    }
+
+    private async Task SeedBacktestSignal(
+        int familyId, int taxonomyVersionId, int listingId, DateTime createdUtc, decimal discount, decimal landedPrice)
+    {
+        var dbContextFactory = Factory.Services.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        db.DealSignals.Add(new DealSignalEntity
+        {
+            ListingEntityId = listingId,
+            ProductFamilyId = familyId,
+            TaxonomyVersionId = taxonomyVersionId,
+            GroupKeyJson = """{"model":"dualsense"}""",
+            LandedPrice = landedPrice,
+            Discount = discount,
+            CreatedUtc = createdUtc
+        });
+        await db.SaveChangesAsync();
     }
 
     private static async Task AddActiveListing(EtlDbContext db, int jobId, int taxonomyVersionId, decimal price)

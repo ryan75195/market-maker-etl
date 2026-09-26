@@ -8,4 +8,6 @@ public interface IDealSignalStore
 
     Task<IReadOnlyList<DealSignalView>> GetSignals(
         int productFamilyId, DateTime? since, int take, CancellationToken ct);
+
+    Task<DealPerformanceReport> GetPerformance(int productFamilyId, CancellationToken ct);
 }

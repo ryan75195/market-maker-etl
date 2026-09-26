@@ -9,4 +9,6 @@ public interface IPriceGroupQueryService
     Task<IReadOnlyList<PriceGroupListingResult>> GetGroupListings(PriceGroupListingsQuery query, CancellationToken ct);
 
     Task<IReadOnlyList<PriceGroupHistoryBucket>> GetPriceGroupHistory(PriceGroupHistoryQuery query, CancellationToken ct);
+
+    Task<PriceGroupForwardWindowResult> GetForwardWindowStats(PriceGroupForwardWindowQuery query, CancellationToken ct);
 }
