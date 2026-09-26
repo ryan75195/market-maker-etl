@@ -44,6 +44,30 @@ public sealed class ProductFamilyStore : IProductFamilyStore
         return MapToView(family, null);
     }
 
+    public async Task<ProductFamilyView?> UpdateFamily(int familyId, string? name, string? modelName, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var family = await db.ProductFamilies.FindAsync([familyId], ct);
+        if (family is null)
+        {
+            return null;
+        }
+
+        if (name is not null)
+        {
+            family.Name = name;
+        }
+
+        if (modelName is not null)
+        {
+            family.ModelName = modelName;
+        }
+
+        await db.SaveChangesAsync(ct);
+        var latest = await LoadLatestVersion(db, familyId, ct);
+        return MapToView(family, latest);
+    }
+
     public async Task<IReadOnlyList<ProductFamilyView>> GetFamilies(CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);

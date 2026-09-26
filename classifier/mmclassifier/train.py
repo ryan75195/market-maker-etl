@@ -162,10 +162,9 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: List[str] | None = None) -> None:
+def run(args: argparse.Namespace) -> Dict[str, Dict[str, float]]:
     import torch
 
-    args = parse_args(argv)
     device = args.device or ("cuda" if cuda_is_available() else "cpu")
     seeds = parse_seed_list(args.seeds)
 
@@ -185,6 +184,12 @@ def main(argv: List[str] | None = None) -> None:
             torch.cuda.empty_cache()
 
     (args.out / "metrics.json").write_text(json.dumps(metrics_by_seed, indent=2), encoding="utf-8")
+    return metrics_by_seed
+
+
+def main(argv: List[str] | None = None) -> None:
+    args = parse_args(argv)
+    run(args)
 
 
 if __name__ == "__main__":

@@ -98,6 +98,43 @@ public class FamilyEndpointsTests : JobsApiTestBase
     }
 
     [Test]
+    public async Task Should_update_a_familys_name_and_model_name()
+    {
+        var family = await CreateFamily("update-target");
+
+        var response = await Client.PutAsJsonAsync(
+            $"/api/families/{family.Id}", new UpdateProductFamilyRequest("Updated Name", "updated-model"));
+        var updated = await response.Content.ReadFromJsonAsync<ProductFamilyView>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(updated!.Name, Is.EqualTo("Updated Name"));
+            Assert.That(updated.ModelName, Is.EqualTo("updated-model"));
+        });
+    }
+
+    [Test]
+    public async Task Should_return_not_found_when_updating_an_unknown_family()
+    {
+        var response = await Client.PutAsJsonAsync(
+            "/api/families/999999", new UpdateProductFamilyRequest("Name", "model-name"));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
+    [Test]
+    public async Task Should_reject_updating_with_an_unsafe_model_name()
+    {
+        var family = await CreateFamily("unsafe-model-name-target");
+
+        var response = await Client.PutAsJsonAsync(
+            $"/api/families/{family.Id}", new UpdateProductFamilyRequest(null, "Not Safe!"));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
     public async Task Should_reject_creating_a_family_with_a_duplicate_key()
     {
         await Client.PostAsJsonAsync(

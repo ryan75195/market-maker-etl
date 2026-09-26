@@ -41,7 +41,7 @@ def test_run_writes_train_and_val_jsonl(tmp_path: Path):
             "--taxonomy",
             str(tmp_path / "taxonomy.json"),
             "--labels",
-            str(tmp_path / "labels_*.json"),
+            f"pilot:{tmp_path / 'labels_*.json'}",
             "--replay",
             str(tmp_path / "replay.jsonl"),
             "--replay-count",
@@ -66,6 +66,63 @@ def test_run_writes_train_and_val_jsonl(tmp_path: Path):
     assert result.val_listing_count == 5
     assert result.family_row_count == 15
     assert result.replay_row_count == 10
+
+
+def test_run_merges_multiple_label_sources_and_later_source_wins(tmp_path: Path):
+    taxonomy = {
+        "questions": {
+            "item_type": {
+                "instructions": "What is this?",
+                "criteria": {"phone": "A phone.", "case": "A case."},
+            }
+        }
+    }
+    _write_json(tmp_path / "taxonomy.json", taxonomy)
+
+    pool = [{"id": "m1", "title": "t1", "category": "c", "brand": "b", "description": "d"}]
+    pilot_labels = [{"id": "m1", "item_type": "phone", "ambiguous": ""}]
+    _write_json(tmp_path / "pool.json", pool)
+    _write_json(tmp_path / "labels_0.json", pilot_labels)
+
+    export_path = tmp_path / "export.jsonl"
+    export_path.write_text(
+        json.dumps(
+            {
+                "listingId": "m1",
+                "taxonomyVersion": 1,
+                "state": {"title": "t1", "mercari_category": "c", "brand": "b", "description": "d"},
+                "answers": {"item_type": "case"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _write_jsonl(tmp_path / "replay.jsonl", [])
+
+    out_dir = tmp_path / "out"
+    args = parse_args(
+        [
+            "--taxonomy",
+            str(tmp_path / "taxonomy.json"),
+            "--labels",
+            f"pilot:{tmp_path / 'labels_*.json'}",
+            "--labels",
+            f"export:{export_path}",
+            "--replay",
+            str(tmp_path / "replay.jsonl"),
+            "--val-listings",
+            "0",
+            "--out",
+            str(out_dir),
+        ]
+    )
+
+    result = run(args)
+
+    assert result.listing_count == 1
+    assert result.family_row_count == 1
+    train_rows = [json.loads(line) for line in (out_dir / "train.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert all(row["gold"] == "case" for row in train_rows)
 
 
 def test_load_replay_pool_reads_jsonl(tmp_path: Path):

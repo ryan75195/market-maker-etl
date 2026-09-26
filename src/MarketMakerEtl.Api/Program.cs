@@ -274,4 +274,6 @@ namespace MarketMakerEtl.Api
     public sealed record SetJobFamilyRequest(int? ProductFamilyId);
 
     public sealed record CreateProductFamilyRequest(string Key, string Name, string ModelName);
+
+    public sealed record UpdateProductFamilyRequest(string? Name, string? ModelName);
 }

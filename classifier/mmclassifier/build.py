@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
 from mmclassifier.dataset import DEFAULT_SPLIT_SEED, BuildResult, build_dataset
-from mmclassifier.labels import load_labels
+from mmclassifier.labels import load_label_sources
 from mmclassifier.taxonomy import load_taxonomy
 
 
@@ -23,8 +23,14 @@ def write_jsonl(path: Path, rows: Sequence[Dict[str, Any]]) -> None:
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m mmclassifier.build")
     parser.add_argument("--taxonomy", required=True, type=Path)
-    parser.add_argument("--labels", required=True)
-    parser.add_argument("--labels-format", choices=["pilot", "export"], default="pilot")
+    parser.add_argument(
+        "--labels",
+        action="append",
+        required=True,
+        metavar="FORMAT:PATTERN",
+        help="Repeatable. '<format>:<pattern>', format is 'pilot' or 'export'. Merged and "
+        "de-duplicated by listing id; later sources win.",
+    )
     parser.add_argument("--replay", required=True, type=Path)
     parser.add_argument("--replay-count", type=int, default=3000)
     parser.add_argument("--val-listings", type=int, default=40)
@@ -35,7 +41,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
 
 def run(args: argparse.Namespace) -> BuildResult:
     taxonomy = load_taxonomy(args.taxonomy)
-    listings = load_labels(args.labels, args.labels_format)
+    listings = load_label_sources(args.labels)
     replay_pool = load_replay_pool(args.replay)
 
     result = build_dataset(
