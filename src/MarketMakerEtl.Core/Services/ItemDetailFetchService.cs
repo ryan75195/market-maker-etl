@@ -12,6 +12,7 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
     private const string DetailPhase = "Detail";
     private const string FetchFailedIssueType = "ItemDetailFetchFailed";
     private const string ParseFailedIssueType = "ItemDetailParseFailed";
+    internal const string InfrastructureUnavailableIssueType = "ItemDetailFetchInfrastructureUnavailable";
 
     private readonly IItemDetailStore _store;
     private readonly IScrapeClient _client;
@@ -125,6 +126,15 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
         {
             await _store.MarkListingRemoved(target.Id, ct);
             return null;
+        }
+        catch (FetchInfrastructureUnavailableException ex)
+        {
+            return new ScrapeRunIssueDetails(
+                target.ListingId,
+                InfrastructureUnavailableIssueType,
+                ExceptionIssueMessageFormatter.Describe(ex),
+                DetailPhase,
+                null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

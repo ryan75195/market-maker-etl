@@ -20,7 +20,7 @@ public class CoreServicesDefaultsTests
         Assert.Multiple(() =>
         {
             Assert.That(options.BaseUrl, Is.EqualTo("http://127.0.0.1:8766"));
-            Assert.That(options.Timeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
+            Assert.That(options.Timeout, Is.EqualTo(TimeSpan.FromSeconds(240)));
         });
     }
 
@@ -58,6 +58,18 @@ public class CoreServicesDefaultsTests
         var options = Resolve<ScrapeOptions>();
 
         Assert.That(options.SearchConcurrency, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void Should_default_the_infrastructure_backoff_window_when_configuration_is_empty()
+    {
+        var options = Resolve<DetailBacklogOptions>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(options.InfrastructureBackoffBaseSeconds, Is.EqualTo(1));
+            Assert.That(options.InfrastructureBackoffMaxSeconds, Is.EqualTo(1800));
+        });
     }
 
     [Test]

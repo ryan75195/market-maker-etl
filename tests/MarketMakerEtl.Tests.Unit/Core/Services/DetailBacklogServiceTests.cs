@@ -10,6 +10,7 @@ using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
@@ -193,6 +194,74 @@ public class DetailBacklogServiceTests
             Assert.That(result.Failures, Has.Count.EqualTo(1));
             Assert.That(fetch.Calls, Has.Count.EqualTo(1));
         });
+    }
+
+    [Test]
+    public async Task Should_leave_detail_fetch_attempts_unchanged_when_every_failure_is_infrastructure_unavailable()
+    {
+        var jobId = await CreateJob("infra-outage-job");
+        var listingId = await SeedListing(jobId, "infra-outage-1");
+        var fetch = new RecordingDetailFetchService(_detailStore, 3, _ => false, simulateInfrastructureFailure: true);
+        var service = CreateService(fetch, new FakeTimeProvider(StartTime), Options());
+
+        var result = await service.RunTick(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Attempted, Is.EqualTo(1));
+            Assert.That(result.Succeeded, Is.EqualTo(0));
+            Assert.That(result.Failures, Has.Count.EqualTo(1));
+            Assert.That(result.Failures[0].IssueType, Is.EqualTo(ItemDetailFetchService.InfrastructureUnavailableIssueType));
+        });
+        Assert.That(await GetDetailFetchAttempts(listingId), Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task Should_back_off_exponentially_during_an_infrastructure_outage_and_reset_to_the_base_delay_on_recovery()
+    {
+        var jobId = await CreateJob("infra-backoff-job");
+        var firstListingId = await SeedListing(jobId, "infra-backoff-1");
+        var succeedNow = false;
+        var fetch = new RecordingDetailFetchService(
+            _detailStore, 3, _ => succeedNow, simulateInfrastructureFailure: true);
+        var timeProvider = new FakeTimeProvider(StartTime);
+        var service = CreateService(
+            fetch, timeProvider, Options(infrastructureBackoffBaseSeconds: 2, infrastructureBackoffMaxSeconds: 30));
+
+        var firstOutageTick = await service.RunTick(CancellationToken.None);
+        var immediateRetryTick = await service.RunTick(CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(2));
+        var secondOutageTick = await service.RunTick(CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(4));
+        succeedNow = true;
+        var recoveryTick = await service.RunTick(CancellationToken.None);
+        succeedNow = false;
+        var secondListingId = await SeedListing(jobId, "infra-backoff-2");
+        var freshFailureTick = await service.RunTick(CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
+        var stillWithinFreshBackoffTick = await service.RunTick(CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
+        var afterFreshBackoffElapsedTick = await service.RunTick(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(firstOutageTick.Attempted, Is.EqualTo(1));
+            Assert.That(immediateRetryTick.Selected, Is.EqualTo(0));
+            Assert.That(secondOutageTick.Attempted, Is.EqualTo(1));
+            Assert.That(recoveryTick.Succeeded, Is.EqualTo(1));
+            Assert.That(freshFailureTick.Attempted, Is.EqualTo(1));
+            Assert.That(stillWithinFreshBackoffTick.Selected, Is.EqualTo(0));
+            Assert.That(afterFreshBackoffElapsedTick.Attempted, Is.EqualTo(1));
+        });
+        Assert.That(await GetDetailFetchAttempts(firstListingId), Is.EqualTo(0));
+        Assert.That(await GetDetailFetchAttempts(secondListingId), Is.EqualTo(0));
+    }
+
+    private async Task<int> GetDetailFetchAttempts(int listingEntityId)
+    {
+        await using var db = await Factory().CreateDbContextAsync();
+        var listing = await db.Listings.SingleAsync(l => l.Id == listingEntityId);
+        return listing.DetailFetchAttempts;
     }
 
     [Test]
@@ -437,7 +506,12 @@ public class DetailBacklogServiceTests
 
     private DetailBacklogService CreateService(
         IItemDetailFetchService fetch, TimeProvider timeProvider, DetailBacklogOptions options) =>
-        new(_jobs, _backlog, fetch, options, timeProvider);
+        new(
+            _jobs,
+            _backlog,
+            fetch,
+            options,
+            new DetailBacklogThrottleService(options, timeProvider, NullLogger<DetailBacklogThrottleService>.Instance));
 
     private static DetailBacklogOptions Options(
         bool enabled = true,
@@ -447,7 +521,9 @@ public class DetailBacklogServiceTests
         int maxAttempts = 3,
         int familyFetchesPerTick = 300,
         int concurrency = 1,
-        bool familyInScopeOnly = true) =>
+        bool familyInScopeOnly = true,
+        int infrastructureBackoffBaseSeconds = 1,
+        int infrastructureBackoffMaxSeconds = 1800) =>
         new(
             enabled,
             tickMinutes,
@@ -456,7 +532,9 @@ public class DetailBacklogServiceTests
             maxAttempts,
             familyFetchesPerTick,
             concurrency,
-            familyInScopeOnly);
+            familyInScopeOnly,
+            infrastructureBackoffBaseSeconds,
+            infrastructureBackoffMaxSeconds);
 
     private async Task<int> CreateJob(string searchTerm)
     {
@@ -544,12 +622,18 @@ public class DetailBacklogServiceTests
         private readonly IItemDetailStore _store;
         private readonly int _maxAttempts;
         private readonly Func<ListingDetailTarget, bool> _shouldSucceed;
+        private readonly bool _simulateInfrastructureFailure;
 
-        public RecordingDetailFetchService(IItemDetailStore store, int maxAttempts, Func<ListingDetailTarget, bool> shouldSucceed)
+        public RecordingDetailFetchService(
+            IItemDetailStore store,
+            int maxAttempts,
+            Func<ListingDetailTarget, bool> shouldSucceed,
+            bool simulateInfrastructureFailure = false)
         {
             _store = store;
             _maxAttempts = maxAttempts;
             _shouldSucceed = shouldSucceed;
+            _simulateInfrastructureFailure = simulateInfrastructureFailure;
         }
 
         public List<ListingDetailTarget> Calls { get; } = [];
@@ -565,6 +649,12 @@ public class DetailBacklogServiceTests
             {
                 await _store.ApplyItemDetail(target.Id, MinimalDetail, ct);
                 return null;
+            }
+
+            if (_simulateInfrastructureFailure)
+            {
+                return new ScrapeRunIssueDetails(
+                    target.ListingId, ItemDetailFetchService.InfrastructureUnavailableIssueType, "sidecar unreachable", "Detail", null);
             }
 
             await _store.MarkDetailFetchFailed(target.Id, _maxAttempts, ct);

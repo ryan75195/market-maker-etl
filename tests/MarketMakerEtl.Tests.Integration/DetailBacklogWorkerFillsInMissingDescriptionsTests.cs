@@ -93,7 +93,9 @@ public class DetailBacklogWorkerFillsInMissingDescriptionsTests
         var backlogOptions = new DetailBacklogOptions(
             Enabled: true, TickMinutes: 5, MaxFetchesPerTick: 10, MaxFetchesPerHour: 10, MaxDetailFetchAttempts: 3);
         var backlog = new DetailBacklogStore(factory);
-        var backlogService = new DetailBacklogService(jobs, backlog, detailFetch, backlogOptions, TimeProvider.System);
+        var throttle = new DetailBacklogThrottleService(
+            backlogOptions, TimeProvider.System, NullLogger<DetailBacklogThrottleService>.Instance);
+        var backlogService = new DetailBacklogService(jobs, backlog, detailFetch, backlogOptions, throttle);
         return new DetailBacklogWorker(backlogService, backlogOptions, TimeProvider.System, NullLogger<DetailBacklogWorker>.Instance);
     }
 
