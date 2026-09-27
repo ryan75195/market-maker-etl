@@ -1,0 +1,25 @@
+namespace MarketMakerEtl.Core.Models.Trades;
+
+public sealed record TradeView(
+    int Id,
+    int? DealSignalId,
+    int? ListingEntityId,
+    string? ListingTitle,
+    string? ListingUrl,
+    int? ProductFamilyId,
+    IReadOnlyDictionary<string, string>? PriceGroupKey,
+    DateTime BoughtUtc,
+    decimal BuyPrice,
+    decimal BuyShipping,
+    decimal BuyFees,
+    DateTime? SoldUtc,
+    decimal? SellPrice,
+    decimal? SellShipping,
+    decimal? SellFees,
+    TradeStatus Status,
+    string? Notes,
+    DateTime CreatedUtc,
+    DateTime UpdatedUtc,
+    decimal? RealisedProfit,
+    double? DaysToSell,
+    decimal? PredictedMargin);

@@ -1,0 +1,142 @@
+body {
+  max-width: 900px;
+}
+
+.panel {
+  border: 1px solid #ccc;
+  border-radius: 0.35rem;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.panel h2 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem;
+}
+
+.stat {
+  border: 1px solid #ddd;
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+}
+
+.stat .label {
+  display: block;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.stat .value {
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+
+.trade-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.trade-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  gap: 0.2rem;
+}
+
+.trade-form label.wide {
+  grid-column: 1 / -1;
+}
+
+.trade-form input {
+  font-size: 0.95rem;
+  padding: 0.35rem;
+}
+
+.trade-form button {
+  padding: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.trade-card {
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.trade-card .trade-header {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  margin-bottom: 0.35rem;
+}
+
+.trade-card dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.5rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+
+.trade-card dt {
+  color: #666;
+}
+
+.trade-card dd {
+  margin: 0;
+}
+
+.sale-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.sale-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.7rem;
+  gap: 0.15rem;
+}
+
+.sale-form input,
+.sale-form select {
+  font-size: 0.85rem;
+  padding: 0.3rem;
+}
+
+.status-open {
+  color: #a60;
+}
+
+.status-sold {
+  color: #2a6;
+}
+
+.status-returned,
+.status-writtenoff {
+  color: #900;
+}
+
+@media (prefers-color-scheme: dark) {
+  .panel,
+  .stat,
+  .trade-card {
+    border-color: #444;
+  }
+
+  .stat .label,
+  .trade-card dt {
+    color: #aaa;
+  }
+}

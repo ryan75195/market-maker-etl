@@ -41,6 +41,8 @@ public sealed partial class EtlDbContext : DbContext
 
     public DbSet<FetchOutcomeBucketEntity> FetchOutcomeBuckets => Set<FetchOutcomeBucketEntity>();
 
+    public DbSet<TradeEntity> Trades => Set<TradeEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureScrapeJobs(modelBuilder);
@@ -59,6 +61,7 @@ public sealed partial class EtlDbContext : DbContext
         ConfigureProductFamilies(modelBuilder);
         ConfigureListingClassifications(modelBuilder);
         ConfigureDealSignals(modelBuilder);
+        ConfigureTrades(modelBuilder);
     }
 
     private static void ConfigureScrapeJobs(ModelBuilder modelBuilder)

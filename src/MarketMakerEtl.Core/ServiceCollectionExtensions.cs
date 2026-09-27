@@ -119,7 +119,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IClassificationReviewStore, ClassificationReviewStore>();
         services.AddSingleton<IPriceGroupListingStore, PriceGroupListingStore>();
         services.AddSingleton<IPriceGroupQueryService, PriceGroupQueryService>();
-        return services.AddCoreHealthServices().AddDealServices();
+        return services.AddCoreHealthServices().AddDealServices().AddTradeServices();
     }
 
     private static IServiceCollection AddMarketplaceAdapterServices(this IServiceCollection services)
