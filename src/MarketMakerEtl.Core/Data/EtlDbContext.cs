@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MarketMakerEtl.Core.Data;
 
-public sealed class EtlDbContext : DbContext
+public sealed partial class EtlDbContext : DbContext
 {
     public EtlDbContext(DbContextOptions<EtlDbContext> options)
         : base(options)
@@ -39,12 +39,15 @@ public sealed class EtlDbContext : DbContext
 
     public DbSet<DealSignalEntity> DealSignals => Set<DealSignalEntity>();
 
+    public DbSet<FetchOutcomeBucketEntity> FetchOutcomeBuckets => Set<FetchOutcomeBucketEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureScrapeJobs(modelBuilder);
         ConfigureScrapeRuns(modelBuilder);
         ConfigureListings(modelBuilder);
         ConfigureCategories(modelBuilder);
+        ConfigureFetchOutcomeBuckets(modelBuilder);
 
         modelBuilder.Entity<SchedulerStateEntity>(entity =>
         {

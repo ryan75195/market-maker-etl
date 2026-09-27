@@ -11,28 +11,33 @@ public sealed class SystemHealthService : ISystemHealthService
     private readonly IJobHealthService _jobHealth;
     private readonly IFamilyBacklogHealthService _familyHealth;
     private readonly IListingClassifierClient _classifierClient;
+    private readonly IFetcherHealthService _fetcherHealth;
 
     public SystemHealthService(
         IJobHealthService jobHealth,
         IFamilyBacklogHealthService familyHealth,
-        IListingClassifierClient classifierClient)
+        IListingClassifierClient classifierClient,
+        IFetcherHealthService fetcherHealth)
     {
         _jobHealth = jobHealth;
         _familyHealth = familyHealth;
         _classifierClient = classifierClient;
+        _fetcherHealth = fetcherHealth;
     }
 
     public async Task<SystemHealthResponse> GetHealth(CancellationToken ct)
     {
         var database = await LoadDatabaseHealth(ct);
         var classifier = await _classifierClient.CheckHealth(ct);
-        var status = ComputeStatus(database, classifier);
+        var fetcher = await _fetcherHealth.GetFetcherHealth(ct);
+        var status = ComputeStatus(database, classifier, fetcher);
 
         return new SystemHealthResponse(
             status,
             database.Reachable,
             database.Jobs,
             classifier,
+            fetcher,
             new SystemHealthBacklogs(BuildClassificationBacklogs(database.Families), database.PendingDetailFetch),
             BuildReview(database.Families));
     }
@@ -53,9 +58,14 @@ public sealed class SystemHealthService : ISystemHealthService
     }
 
     private static SystemHealthStatus ComputeStatus(
-        DatabaseHealthSnapshot database, ClassifierHealthCheckResult classifier)
+        DatabaseHealthSnapshot database, ClassifierHealthCheckResult classifier, FetcherHealthView fetcher)
     {
         if (!database.Reachable)
+        {
+            return SystemHealthStatus.Degraded;
+        }
+
+        if (fetcher.IsDegraded)
         {
             return SystemHealthStatus.Degraded;
         }

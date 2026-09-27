@@ -7,5 +7,6 @@ public sealed record SystemHealthResponse(
     bool DatabaseReachable,
     IReadOnlyList<JobHealthView> Jobs,
     ClassifierHealthCheckResult Classifier,
+    FetcherHealthView Fetcher,
     SystemHealthBacklogs Backlogs,
     IReadOnlyList<FamilyReviewView> Review);

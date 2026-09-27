@@ -16,10 +16,11 @@ public class SystemHealthServiceTests
         var jobHealth = Substitute.For<IJobHealthService>();
         var familyHealth = Substitute.For<IFamilyBacklogHealthService>();
         var classifier = Substitute.For<IListingClassifierClient>();
+        var fetcherHealth = HealthyFetcher();
         jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([BuildJob(isStale: false, status: ScrapeRunStatus.Completed)]);
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>()).Returns([]);
         classifier.CheckHealth(Arg.Any<CancellationToken>()).Returns(new ClassifierHealthCheckResult("http://classifier.test", false, []));
-        var service = new SystemHealthService(jobHealth, familyHealth, classifier);
+        var service = new SystemHealthService(jobHealth, familyHealth, classifier, fetcherHealth);
 
         var health = await service.GetHealth(CancellationToken.None);
 
@@ -36,10 +37,11 @@ public class SystemHealthServiceTests
         var jobHealth = Substitute.For<IJobHealthService>();
         var familyHealth = Substitute.For<IFamilyBacklogHealthService>();
         var classifier = Substitute.For<IListingClassifierClient>();
+        var fetcherHealth = HealthyFetcher();
         jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([BuildJob(isStale: true, status: ScrapeRunStatus.Completed)]);
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>()).Returns([]);
         classifier.CheckHealth(Arg.Any<CancellationToken>()).Returns(new ClassifierHealthCheckResult("http://classifier.test", false, []));
-        var service = new SystemHealthService(jobHealth, familyHealth, classifier);
+        var service = new SystemHealthService(jobHealth, familyHealth, classifier, fetcherHealth);
 
         var health = await service.GetHealth(CancellationToken.None);
 
@@ -52,10 +54,11 @@ public class SystemHealthServiceTests
         var jobHealth = Substitute.For<IJobHealthService>();
         var familyHealth = Substitute.For<IFamilyBacklogHealthService>();
         var classifier = Substitute.For<IListingClassifierClient>();
+        var fetcherHealth = HealthyFetcher();
         jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([BuildJob(isStale: false, status: ScrapeRunStatus.Failed)]);
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>()).Returns([]);
         classifier.CheckHealth(Arg.Any<CancellationToken>()).Returns(new ClassifierHealthCheckResult("http://classifier.test", false, []));
-        var service = new SystemHealthService(jobHealth, familyHealth, classifier);
+        var service = new SystemHealthService(jobHealth, familyHealth, classifier, fetcherHealth);
 
         var health = await service.GetHealth(CancellationToken.None);
 
@@ -68,11 +71,12 @@ public class SystemHealthServiceTests
         var jobHealth = Substitute.For<IJobHealthService>();
         var familyHealth = Substitute.For<IFamilyBacklogHealthService>();
         var classifier = Substitute.For<IListingClassifierClient>();
+        var fetcherHealth = HealthyFetcher();
         jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([]);
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>())
             .Returns([new FamilyBacklogHealthView(1, "ps5-controller", 0, 0)]);
         classifier.CheckHealth(Arg.Any<CancellationToken>()).Returns(new ClassifierHealthCheckResult("http://classifier.test", false, []));
-        var service = new SystemHealthService(jobHealth, familyHealth, classifier);
+        var service = new SystemHealthService(jobHealth, familyHealth, classifier, fetcherHealth);
 
         var health = await service.GetHealth(CancellationToken.None);
 
@@ -85,14 +89,39 @@ public class SystemHealthServiceTests
         var jobHealth = Substitute.For<IJobHealthService>();
         var familyHealth = Substitute.For<IFamilyBacklogHealthService>();
         var classifier = Substitute.For<IListingClassifierClient>();
+        var fetcherHealth = HealthyFetcher();
         jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([]);
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>()).Returns([]);
         classifier.CheckHealth(Arg.Any<CancellationToken>()).Returns(new ClassifierHealthCheckResult("http://classifier.test", false, []));
-        var service = new SystemHealthService(jobHealth, familyHealth, classifier);
+        var service = new SystemHealthService(jobHealth, familyHealth, classifier, fetcherHealth);
 
         var health = await service.GetHealth(CancellationToken.None);
 
         Assert.That(health.Status, Is.EqualTo(SystemHealthStatus.Ok));
+    }
+
+    [Test]
+    public async Task Should_report_degraded_when_the_fetcher_health_is_degraded()
+    {
+        var jobHealth = Substitute.For<IJobHealthService>();
+        var familyHealth = Substitute.For<IFamilyBacklogHealthService>();
+        var classifier = Substitute.For<IListingClassifierClient>();
+        var fetcherHealth = Substitute.For<IFetcherHealthService>();
+        jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([]);
+        familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>()).Returns([]);
+        classifier.CheckHealth(Arg.Any<CancellationToken>()).Returns(new ClassifierHealthCheckResult("http://classifier.test", false, []));
+        fetcherHealth.GetFetcherHealth(Arg.Any<CancellationToken>())
+            .Returns(new FetcherHealthView(false, 60, 0, 10, 0, 0, IsDegraded: true));
+        var service = new SystemHealthService(jobHealth, familyHealth, classifier, fetcherHealth);
+
+        var health = await service.GetHealth(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(health.Status, Is.EqualTo(SystemHealthStatus.Degraded));
+            Assert.That(health.Fetcher.SidecarReachable, Is.False);
+            Assert.That(health.Fetcher.RecentInfrastructureFailureCount, Is.EqualTo(10));
+        });
     }
 
     [Test]
@@ -101,12 +130,13 @@ public class SystemHealthServiceTests
         var jobHealth = Substitute.For<IJobHealthService>();
         var familyHealth = Substitute.For<IFamilyBacklogHealthService>();
         var classifier = Substitute.For<IListingClassifierClient>();
+        var fetcherHealth = HealthyFetcher();
         jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([]);
         jobHealth.GetPendingDetailFetchCount(Arg.Any<CancellationToken>()).Returns(5);
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>())
             .Returns([new FamilyBacklogHealthView(1, "ps5-controller", 3, 2)]);
         classifier.CheckHealth(Arg.Any<CancellationToken>()).Returns(new ClassifierHealthCheckResult("http://classifier.test", true, ["ps5-controller"]));
-        var service = new SystemHealthService(jobHealth, familyHealth, classifier);
+        var service = new SystemHealthService(jobHealth, familyHealth, classifier, fetcherHealth);
 
         var health = await service.GetHealth(CancellationToken.None);
 
@@ -117,6 +147,14 @@ public class SystemHealthServiceTests
             Assert.That(health.Review.Single().NeedsReviewCount, Is.EqualTo(2));
             Assert.That(health.Classifier.LoadedModels, Does.Contain("ps5-controller"));
         });
+    }
+
+    private static IFetcherHealthService HealthyFetcher()
+    {
+        var fetcherHealth = Substitute.For<IFetcherHealthService>();
+        fetcherHealth.GetFetcherHealth(Arg.Any<CancellationToken>())
+            .Returns(new FetcherHealthView(true, 60, 1, 0, 0, 0, IsDegraded: false));
+        return fetcherHealth;
     }
 
     private static JobHealthView BuildJob(bool isStale, ScrapeRunStatus status) =>

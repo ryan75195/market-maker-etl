@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Scraper;
+using Microsoft.Extensions.Logging;
 
 namespace MarketMakerEtl.Core.Services;
 
@@ -15,14 +16,56 @@ public sealed class FetcherScrapeClient : IScrapeClient
 
     private readonly HttpClient _http;
     private readonly FetcherOptions _options;
+    private readonly IFetchOutcomeStore _outcomeStore;
+    private readonly ILogger<FetcherScrapeClient> _logger;
 
-    public FetcherScrapeClient(HttpClient http, FetcherOptions options)
+    public FetcherScrapeClient(
+        HttpClient http, FetcherOptions options, IFetchOutcomeStore outcomeStore, ILogger<FetcherScrapeClient> logger)
     {
         _http = http;
         _options = options;
+        _outcomeStore = outcomeStore;
+        _logger = logger;
     }
 
     public async Task<string> GetPageHtml(string url, CancellationToken ct)
+    {
+        try
+        {
+            var body = await FetchPage(url, ct);
+            await SafeRecordOutcome(FetchOutcomeKind.Success, ct);
+            return body;
+        }
+        catch (ListingNotFoundException)
+        {
+            await SafeRecordOutcome(FetchOutcomeKind.NotFound, ct);
+            throw;
+        }
+        catch (FetchInfrastructureUnavailableException)
+        {
+            await SafeRecordOutcome(FetchOutcomeKind.Infrastructure, ct);
+            throw;
+        }
+        catch (FetchFailedException)
+        {
+            await SafeRecordOutcome(FetchOutcomeKind.Other, ct);
+            throw;
+        }
+    }
+
+    private async Task SafeRecordOutcome(FetchOutcomeKind kind, CancellationToken ct)
+    {
+        try
+        {
+            await _outcomeStore.RecordOutcome(kind, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to record fetch outcome {Kind}.", kind);
+        }
+    }
+
+    private async Task<string> FetchPage(string url, CancellationToken ct)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(_options.Timeout);
