@@ -1,5 +1,6 @@
 using System.Data.Common;
 using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Families;
 using MarketMakerEtl.Core.Models.Health;
 using MarketMakerEtl.Core.Models.Runs;
 
@@ -38,7 +39,8 @@ public sealed class SystemHealthService : ISystemHealthService
             fetcher,
             llm,
             new SystemHealthBacklogs(BuildClassificationBacklogs(database.Families), database.PendingDetailFetch),
-            BuildReview(database.Families));
+            BuildReview(database.Families),
+            BuildFamilyStates(database.Families));
     }
 
     private async Task<DatabaseHealthSnapshot> LoadDatabaseHealth(CancellationToken ct)
@@ -74,6 +76,11 @@ public sealed class SystemHealthService : ISystemHealthService
             return SystemHealthStatus.Degraded;
         }
 
+        if (database.Families.Any(family => family.State == FamilyState.Draft && family.HasEnabledScrapeJob))
+        {
+            return SystemHealthStatus.Degraded;
+        }
+
         var hasUnhealthyJob = database.Jobs.Any(
             job => job.IsStale || job.LastRunStatus == ScrapeRunStatus.Failed);
 
@@ -89,6 +96,11 @@ public sealed class SystemHealthService : ISystemHealthService
     private static IReadOnlyList<FamilyReviewView> BuildReview(IReadOnlyList<FamilyBacklogHealthView> families) =>
         families
             .Select(f => new FamilyReviewView(f.FamilyId, f.FamilyKey, f.NeedsReviewCount))
+            .ToList();
+
+    private static IReadOnlyList<FamilyStateView> BuildFamilyStates(IReadOnlyList<FamilyBacklogHealthView> families) =>
+        families
+            .Select(f => new FamilyStateView(f.FamilyId, f.FamilyKey, f.State))
             .ToList();
 
     private sealed record DatabaseHealthSnapshot(

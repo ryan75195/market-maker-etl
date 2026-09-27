@@ -141,6 +141,23 @@ public class HealthEndpointsTests
     }
 
     [Test]
+    public async Task Should_report_degraded_when_a_draft_family_has_an_enabled_scrape_job()
+    {
+        var client = CreateClient();
+        await SeedDraftFamilyWithEnabledJob("draft-with-enabled-job");
+
+        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response!.Status, Is.EqualTo(SystemHealthStatus.Degraded));
+            Assert.That(
+                response.Families.Single(f => f.FamilyKey == "draft-with-enabled-job").State,
+                Is.EqualTo(FamilyState.Draft));
+        });
+    }
+
+    [Test]
     public async Task Should_report_the_configured_model_and_whether_an_api_key_is_set()
     {
         var client = CreateClient(apiKey: "sk-test");
@@ -250,6 +267,35 @@ public class HealthEndpointsTests
             });
         }
 
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedDraftFamilyWithEnabledJob(string key)
+    {
+        var services = new ServiceCollection();
+        services.AddDbContextFactory<EtlDbContext>(options => options.UseSqlite($"Data Source={_databasePath}"));
+        await using var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        var family = new ProductFamilyEntity
+        {
+            Key = key,
+            Name = key,
+            ModelName = key,
+            State = FamilyState.Draft,
+            CreatedUtc = DateTime.UtcNow
+        };
+        db.ProductFamilies.Add(family);
+        await db.SaveChangesAsync();
+
+        db.ScrapeJobs.Add(new ScrapeJobEntity
+        {
+            SearchTerm = key,
+            IntervalHours = 24,
+            IsEnabled = true,
+            CreatedUtc = DateTime.UtcNow,
+            ProductFamilyId = family.Id
+        });
         await db.SaveChangesAsync();
     }
 

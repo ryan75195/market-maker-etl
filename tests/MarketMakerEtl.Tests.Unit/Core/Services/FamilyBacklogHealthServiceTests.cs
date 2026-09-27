@@ -103,20 +103,58 @@ public class FamilyBacklogHealthServiceTests
         await classifications.Received(1).CountListingsNeedingClassification(10, 100, Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task Should_report_the_familys_state_and_whether_it_has_an_enabled_scrape_job()
+    {
+        var families = Substitute.For<IProductFamilyStore>();
+        var classifications = Substitute.For<IListingClassificationStore>();
+        var reviews = Substitute.For<IClassificationReviewStore>();
+        families.GetFamilies(Arg.Any<CancellationToken>())
+            .Returns([BuildFamily(1, taxonomyVersion: null, state: FamilyState.Draft)]);
+        families.GetJobsWithFamily(Arg.Any<CancellationToken>()).Returns([BuildJob(10, 1, isEnabled: true)]);
+        var service = CreateService(families, classifications, reviews);
+
+        var health = await service.GetFamilyBacklogHealth(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(health.Single().State, Is.EqualTo(FamilyState.Draft));
+            Assert.That(health.Single().HasEnabledScrapeJob, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task Should_report_no_enabled_scrape_job_when_all_jobs_are_disabled()
+    {
+        var families = Substitute.For<IProductFamilyStore>();
+        var classifications = Substitute.For<IListingClassificationStore>();
+        var reviews = Substitute.For<IClassificationReviewStore>();
+        families.GetFamilies(Arg.Any<CancellationToken>())
+            .Returns([BuildFamily(1, taxonomyVersion: null, state: FamilyState.Draft)]);
+        families.GetJobsWithFamily(Arg.Any<CancellationToken>()).Returns([BuildJob(10, 1, isEnabled: false)]);
+        var service = CreateService(families, classifications, reviews);
+
+        var health = await service.GetFamilyBacklogHealth(CancellationToken.None);
+
+        Assert.That(health.Single().HasEnabledScrapeJob, Is.False);
+    }
+
     private static FamilyBacklogHealthService CreateService(
         IProductFamilyStore families,
         IListingClassificationStore classifications,
         IClassificationReviewStore reviews) =>
         new(families, classifications, reviews, new ClassificationReviewOptions(0.9));
 
-    private static ProductFamilyView BuildFamily(int id, int? taxonomyVersion) =>
+    private static ProductFamilyView BuildFamily(
+        int id, int? taxonomyVersion, FamilyState state = FamilyState.Active) =>
         new(
             id,
             $"family-{id}",
             "Family",
             "model",
             DateTime.UtcNow,
-            taxonomyVersion is null ? null : new TaxonomyVersionView(taxonomyVersion.Value, id, 1, "{}", DateTime.UtcNow));
+            taxonomyVersion is null ? null : new TaxonomyVersionView(taxonomyVersion.Value, id, 1, "{}", DateTime.UtcNow),
+            State: state);
 
     private static JobView BuildJob(int id, int productFamilyId, bool isEnabled = true) =>
         new(id, "search", Marketplace.Mercari, null, 24, isEnabled, null, null, DateTime.UtcNow, [], productFamilyId);

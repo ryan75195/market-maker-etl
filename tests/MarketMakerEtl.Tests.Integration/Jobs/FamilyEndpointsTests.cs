@@ -51,6 +51,7 @@ public class FamilyEndpointsTests : JobsApiTestBase
             Assert.That(created.Name, Is.EqualTo("PS5 Controller"));
             Assert.That(created.ModelName, Is.EqualTo("ps5-controller"));
             Assert.That(created.LatestTaxonomyVersion, Is.Null);
+            Assert.That(created.State, Is.EqualTo(FamilyState.Active));
             Assert.That(listResponse!.Select(f => f.Id), Does.Contain(created.Id));
             Assert.That(readResponse!.Key, Is.EqualTo("ps5-controller"));
         });

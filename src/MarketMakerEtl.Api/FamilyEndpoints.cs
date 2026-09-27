@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Families;
 using MarketMakerEtl.Core.Models.Taxonomies;
 using MarketMakerEtl.Core.Services;
 
@@ -70,7 +71,7 @@ public static class FamilyEndpoints
             return invalid;
         }
 
-        var family = await families.CreateFamily(request.Key, request.Name, request.ModelName, ct);
+        var family = await families.CreateFamily(request.Key, request.Name, request.ModelName, ct, FamilyState.Active);
         return family is null
             ? Results.Conflict($"A product family with key '{request.Key}' already exists.")
             : Results.Created($"/api/families/{family.Id}", family);
