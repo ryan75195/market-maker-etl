@@ -119,4 +119,57 @@ public class MercariSearchUrlServiceTests
             Assert.That(url, Does.Contain("maxPrice=200"));
         });
     }
+
+    [Test]
+    public void Should_report_that_it_supports_pagination()
+    {
+        Assert.That(Service.SupportsPagination, Is.True);
+    }
+
+    [Test]
+    public void Should_omit_the_offset_parameter_when_it_is_zero()
+    {
+        var request = new MercariSearchRequest("playstation 5", Sold: false, Offset: 0);
+
+        var url = Service.BuildSearch(request);
+
+        Assert.That(url, Does.Not.Contain("offset="));
+    }
+
+    [Test]
+    public void Should_include_the_offset_parameter_in_steps_of_a_hundred()
+    {
+        var request = new MercariSearchRequest("playstation 5", Sold: false, Offset: 300);
+
+        var url = Service.BuildSearch(request);
+
+        Assert.That(url, Does.Contain("offset=300"));
+    }
+
+    [Test]
+    public void Should_build_a_banded_search_url_with_an_offset()
+    {
+        IPriceBandSearchUrlService bandService = Service;
+
+        var url = bandService.BuildSearch("playstation 5", sold: true, minPrice: 1.00m, maxPrice: 2.00m, offset: 200);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(url, Does.StartWith("https://www.mercari.com/search/?"));
+            Assert.That(url, Does.Contain("minPrice=100"));
+            Assert.That(url, Does.Contain("maxPrice=200"));
+            Assert.That(url, Does.Contain("offset=200"));
+        });
+    }
+
+    [Test]
+    public void Should_leave_every_other_query_parameter_unchanged_when_paging()
+    {
+        IPriceBandSearchUrlService bandService = Service;
+
+        var firstPage = bandService.BuildSearch("playstation 5", sold: true, minPrice: 1.00m, maxPrice: 2.00m, offset: 0);
+        var secondPage = bandService.BuildSearch("playstation 5", sold: true, minPrice: 1.00m, maxPrice: 2.00m, offset: 100);
+
+        Assert.That(secondPage, Is.EqualTo($"{firstPage}&offset=100"));
+    }
 }

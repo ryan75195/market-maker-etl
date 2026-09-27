@@ -663,6 +663,136 @@ public class MercariPriceBandCollectorTests
         await client.Received(9).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task Should_page_through_offsets_until_a_partial_page_ends_the_band()
+    {
+        var urlService = new OffsetKeyedUrlService();
+        var band = PriceBand.SeedBands()[0];
+        string UrlFor(int offset) => urlService.BuildSearch(SearchTerm, false, band.MinPrice, band.MaxPrice, offset);
+
+        var firstPage = BuildListingBatch("pg0", 100);
+        var secondPage = BuildListingBatch("pg1", 40);
+        var resultsByUrl = new Dictionary<string, SearchPageResult>(StringComparer.Ordinal)
+        {
+            [UrlFor(0)] = new SearchPageResult(firstPage, TotalCount: 140),
+            [UrlFor(100)] = new SearchPageResult(secondPage, TotalCount: 140),
+        };
+
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(ci => (string)ci[0]);
+        var parser = new KeyedResultParser(resultsByUrl, new SearchPageResult([], 0));
+        var settings = new MercariCollectionSettings(1, Backfill: null, MaxSearchPages: 5);
+        var collector = new MercariPriceBandCollector(client, urlService, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(merged, Has.Count.EqualTo(140));
+            Assert.That(summary.BandsFetched, Is.EqualTo(1));
+        });
+        await client.Received(2).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_stop_paging_early_when_a_later_page_is_empty()
+    {
+        var urlService = new OffsetKeyedUrlService();
+        var band = PriceBand.SeedBands()[0];
+        string UrlFor(int offset) => urlService.BuildSearch(SearchTerm, false, band.MinPrice, band.MaxPrice, offset);
+
+        var firstPage = BuildListingBatch("em0", 100);
+        var resultsByUrl = new Dictionary<string, SearchPageResult>(StringComparer.Ordinal)
+        {
+            [UrlFor(0)] = new SearchPageResult(firstPage, TotalCount: 100),
+            [UrlFor(100)] = new SearchPageResult([], TotalCount: 100),
+        };
+
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(ci => (string)ci[0]);
+        var parser = new KeyedResultParser(resultsByUrl, new SearchPageResult([], 0));
+        var settings = new MercariCollectionSettings(1, Backfill: null, MaxSearchPages: 5);
+        var collector = new MercariPriceBandCollector(client, urlService, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.That(merged, Has.Count.EqualTo(100));
+        await client.Received(2).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_stop_paging_early_when_every_listing_on_a_page_is_already_known()
+    {
+        var urlService = new OffsetKeyedUrlService();
+        var band = PriceBand.SeedBands()[0];
+        string UrlFor(int offset) => urlService.BuildSearch(SearchTerm, true, band.MinPrice, band.MaxPrice, offset);
+
+        var firstPage = BuildListingBatch("kn0", 100);
+        var secondPage = BuildListingBatch("kn1", 100);
+        var resultsByUrl = new Dictionary<string, SearchPageResult>(StringComparer.Ordinal)
+        {
+            [UrlFor(0)] = new SearchPageResult(firstPage, TotalCount: 300),
+            [UrlFor(100)] = new SearchPageResult(secondPage, TotalCount: 300),
+            [UrlFor(200)] = new SearchPageResult(BuildListingBatch("kn2", 100), TotalCount: 300),
+        };
+
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(ci => (string)ci[0]);
+        var parser = new KeyedResultParser(resultsByUrl, new SearchPageResult([], 0));
+        var settings = new MercariCollectionSettings(1, Backfill: null, MaxSearchPages: 5);
+        var collector = new MercariPriceBandCollector(client, urlService, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+        var knownSoldListingIds = secondPage.Select(listing => listing.ListingId).ToHashSet(StringComparer.Ordinal);
+
+        await collector.Collect(SearchTerm, sold: true, merged, knownSoldListingIds, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(merged.Keys, Is.SupersetOf(firstPage.Select(listing => listing.ListingId)));
+            Assert.That(merged.Keys, Is.SupersetOf(secondPage.Select(listing => listing.ListingId)));
+            Assert.That(merged.Keys, Has.None.Contains("kn2"));
+        });
+        await client.Received(2).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_split_a_band_once_its_reported_count_exceeds_the_paging_cap()
+    {
+        var urlService = new OffsetKeyedUrlService();
+        var band = PriceBand.SeedBands()[0];
+        var child = band.Split()[0];
+        string UrlFor(PriceBand target, int offset) =>
+            urlService.BuildSearch(SearchTerm, false, target.MinPrice, target.MaxPrice, offset);
+
+        var firstPage = BuildListingBatch("sp0", 100);
+        var secondPage = BuildListingBatch("sp1", 100);
+        var childItem = BuildListing("childItem", "https://x/childItem");
+        var resultsByUrl = new Dictionary<string, SearchPageResult>(StringComparer.Ordinal)
+        {
+            [UrlFor(band, 0)] = new SearchPageResult(firstPage, TotalCount: 250),
+            [UrlFor(band, 100)] = new SearchPageResult(secondPage, TotalCount: 250),
+            [UrlFor(child, 0)] = new SearchPageResult([childItem], TotalCount: 1),
+        };
+
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(ci => (string)ci[0]);
+        var parser = new KeyedResultParser(resultsByUrl, new SearchPageResult([], 0));
+        var settings = new MercariCollectionSettings(10, Backfill: null, MaxSearchPages: 2);
+        var collector = new MercariPriceBandCollector(client, urlService, parser, settings, NullLogger.Instance);
+        var merged = new Dictionary<string, ListingSummary>();
+
+        var summary = await collector.Collect(SearchTerm, sold: false, merged, new HashSet<string>(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.BandsFetched, Is.EqualTo(10));
+            Assert.That(merged.Keys, Is.SupersetOf(firstPage.Select(listing => listing.ListingId)));
+            Assert.That(merged.Keys, Is.SupersetOf(secondPage.Select(listing => listing.ListingId)));
+            Assert.That(merged, Contains.Key("childItem"));
+        });
+    }
 
     private static MercariPriceBandCollector BuildCollector(int maxBandsPerDirection, params SearchPageResult[] results)
     {
@@ -710,6 +840,11 @@ public class MercariPriceBandCollectorTests
 
     private static ListingSummary BuildListing(string id, string url) =>
         new(id, id, 1m, "USD", url, false, null, null, null);
+
+    private static List<ListingSummary> BuildListingBatch(string prefix, int count) =>
+        Enumerable.Range(0, count)
+            .Select(i => BuildListing($"{prefix}-{i}", $"https://x/{prefix}-{i}"))
+            .ToList();
 
     private static ItemPageListing BuildDetail(int daysAgo) =>
         new(
@@ -892,6 +1027,21 @@ public class MercariPriceBandCollectorTests
         public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice) =>
             $"{Encode(minPrice)}|{Encode(maxPrice)}";
 
+        public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice, int offset) =>
+            BuildSearch(searchTerm, sold, minPrice, maxPrice);
+
+        private static string Encode(decimal? value) =>
+            value?.ToString(CultureInfo.InvariantCulture) ?? "open";
+    }
+
+    private sealed class OffsetKeyedUrlService : IPriceBandSearchUrlService
+    {
+        public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice) =>
+            BuildSearch(searchTerm, sold, minPrice, maxPrice, offset: 0);
+
+        public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice, int offset) =>
+            $"{Encode(minPrice)}|{Encode(maxPrice)}|{offset}";
+
         private static string Encode(decimal? value) =>
             value?.ToString(CultureInfo.InvariantCulture) ?? "open";
     }
@@ -929,12 +1079,18 @@ public class MercariPriceBandCollectorTests
 
             return $"{minPrice}|{maxPrice}";
         }
+
+        public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice, int offset) =>
+            BuildSearch(searchTerm, sold, minPrice, maxPrice);
     }
 
     private sealed class CatalogueUrlService : IPriceBandSearchUrlService
     {
         public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice) =>
             $"catalogue://{Encode(minPrice)}/{Encode(maxPrice)}";
+
+        public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice, int offset) =>
+            BuildSearch(searchTerm, sold, minPrice, maxPrice);
 
         private static string Encode(decimal? value) =>
             value?.ToString(CultureInfo.InvariantCulture) ?? "open";

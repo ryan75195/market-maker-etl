@@ -21,7 +21,8 @@ internal sealed record MercariCollectionSettings(
     SoldBackfillPlanner? Backfill,
     int SearchPageMaxAttempts = 5,
     int SearchPageRetryBaseDelaySeconds = 5,
-    int SearchConcurrency = 1);
+    int SearchConcurrency = 1,
+    int MaxSearchPages = 1);
 
 internal readonly record struct BandOutcome(SearchPageResult Result, bool Pruned, bool OverCapacity);
 
@@ -156,7 +157,7 @@ internal sealed class MercariPriceBandCollector
 internal static class BandOutcomeApplier
 {
     internal const decimal MinimumBandWidth = 0.01m;
-    private const int MinimumCountRequiringSplit = 100;
+    internal const int SearchResultPageSize = 100;
 
     internal static BandOutcome ProcessSearchOutcome(
         PriceBand band,
@@ -166,7 +167,8 @@ internal static class BandOutcomeApplier
         Dictionary<string, ListingSummary> merged,
         IReadOnlySet<string> knownSoldListingIds,
         bool sold,
-        CollectorRunState state)
+        CollectorRunState state,
+        int maxSearchPages)
     {
         lock (state.SyncRoot)
         {
@@ -177,7 +179,7 @@ internal static class BandOutcomeApplier
                 return new BandOutcome(result, Pruned: true, OverCapacity: false);
             }
 
-            if (ShouldSplit(result, band))
+            if (ShouldSplit(result, band, maxSearchPages))
             {
                 queue.EnqueueChildren(band, PriceBandResultMath.ReportedCount(result));
             }
@@ -230,8 +232,9 @@ internal static class BandOutcomeApplier
         return newCount;
     }
 
-    private static bool ShouldSplit(SearchPageResult result, PriceBand band) =>
-        PriceBandResultMath.ReportedCount(result) >= MinimumCountRequiringSplit && band.CanSplit(MinimumBandWidth);
+    private static bool ShouldSplit(SearchPageResult result, PriceBand band, int maxSearchPages) =>
+        PriceBandResultMath.ReportedCount(result) >= Math.Max(1, maxSearchPages) * SearchResultPageSize
+            && band.CanSplit(MinimumBandWidth);
 }
 
 internal sealed class PriceBandWorkerPool
@@ -430,7 +433,7 @@ internal sealed class PriceBandCollectionRun
         CancellationToken ct)
     {
         var band = queued.Band;
-        var result = await FetchBand(searchTerm, sold, band, state, ct);
+        var result = await FetchBand(searchTerm, sold, band, pruneKnownBands, knownSoldListingIds, state, ct);
         if (result is null)
         {
             return null;
@@ -451,24 +454,57 @@ internal sealed class PriceBandCollectionRun
         }
 
         return BandOutcomeApplier.ProcessSearchOutcome(
-            band, result, queue, pruneKnownBands, merged, knownSoldListingIds, sold, state);
+            band, result, queue, pruneKnownBands, merged, knownSoldListingIds, sold, state, _settings.MaxSearchPages);
     }
 
     private async Task<SearchPageResult?> FetchBand(
-        string searchTerm, bool sold, PriceBand band, CollectorRunState state, CancellationToken ct)
+        string searchTerm,
+        bool sold,
+        PriceBand band,
+        bool pruneKnownBands,
+        IReadOnlySet<string> knownSoldListingIds,
+        CollectorRunState state,
+        CancellationToken ct)
     {
-        var url = _urls.BuildSearch(searchTerm, sold, band.MinPrice, band.MaxPrice);
-        var outcome = await _fetcher.Fetch(url, band, ct);
+        var pageSize = BandOutcomeApplier.SearchResultPageSize;
+        var maxPages = Math.Max(1, _settings.MaxSearchPages);
+        var listings = new List<ListingSummary>();
+        int? totalCount = null;
 
-        if (outcome.Failure is { } failure)
+        for (var pageIndex = 0; pageIndex < maxPages; pageIndex++)
         {
-            lock (state.SyncRoot)
+            var offset = pageIndex * pageSize;
+            var url = offset == 0
+                ? _urls.BuildSearch(searchTerm, sold, band.MinPrice, band.MaxPrice)
+                : _urls.BuildSearch(searchTerm, sold, band.MinPrice, band.MaxPrice, offset);
+            var outcome = await _fetcher.Fetch(url, band, ct);
+
+            if (outcome.Failure is { } failure)
             {
-                _searchPageFailures.Add(failure);
+                lock (state.SyncRoot)
+                {
+                    _searchPageFailures.Add(failure);
+                }
+
+                return pageIndex == 0 ? null : new SearchPageResult(listings, totalCount);
+            }
+
+            var page = outcome.Result!;
+            totalCount ??= page.TotalCount;
+            listings.AddRange(page.Listings);
+
+            var pageWasFull = page.Listings.Count == pageSize;
+            var pageEntirelyKnown = pruneKnownBands
+                && page.Listings.Count > 0
+                && page.Listings.All(listing => knownSoldListingIds.Contains(listing.ListingId));
+
+            if (!pageWasFull || pageEntirelyKnown)
+            {
+                break;
             }
         }
 
-        return outcome.Result;
+        return new SearchPageResult(listings, totalCount);
     }
 
     private void LogBackfillDecision(
