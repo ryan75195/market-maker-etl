@@ -7,4 +7,5 @@ public sealed record ListingClassificationTarget(
     string? Category1Name,
     string? Category2Name,
     string? Brand,
-    string? Description);
+    string? Description,
+    bool IsSold);

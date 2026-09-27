@@ -231,6 +231,59 @@ public class ListingClassificationStoreTests
         Assert.That(classification, Is.Null);
     }
 
+    [Test]
+    public async Task Should_record_and_return_recent_batch_outcomes_newest_first()
+    {
+        var store = CreateStore();
+
+        await store.RecordBatchOutcome(true, CancellationToken.None);
+        await store.RecordBatchOutcome(false, CancellationToken.None);
+
+        var recent = await store.GetRecentBatchOutcomes(5, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(recent, Has.Count.EqualTo(2));
+            Assert.That(recent[0].Succeeded, Is.False);
+            Assert.That(recent[1].Succeeded, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task Should_limit_recent_batch_outcomes_to_the_requested_count()
+    {
+        var store = CreateStore();
+
+        await store.RecordBatchOutcome(true, CancellationToken.None);
+        await store.RecordBatchOutcome(true, CancellationToken.None);
+        await store.RecordBatchOutcome(true, CancellationToken.None);
+
+        var recent = await store.GetRecentBatchOutcomes(2, CancellationToken.None);
+
+        Assert.That(recent, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public async Task Should_only_return_batch_outcomes_since_the_given_time()
+    {
+        var store = CreateStore();
+        await store.RecordBatchOutcome(true, CancellationToken.None);
+        await Task.Delay(TimeSpan.FromMilliseconds(50));
+        var midpoint = DateTime.UtcNow;
+        await Task.Delay(TimeSpan.FromMilliseconds(50));
+        await store.RecordBatchOutcome(false, CancellationToken.None);
+
+        var sinceMidpoint = await store.GetBatchOutcomesSince(midpoint, CancellationToken.None);
+        var sinceStart = await store.GetBatchOutcomesSince(DateTime.UtcNow.AddMinutes(-5), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sinceMidpoint, Has.Count.EqualTo(1));
+            Assert.That(sinceMidpoint[0].Succeeded, Is.False);
+            Assert.That(sinceStart, Has.Count.EqualTo(2));
+        });
+    }
+
     private ListingClassificationStore CreateStore() =>
         new(_provider.GetRequiredService<IDbContextFactory<EtlDbContext>>());
 

@@ -3,6 +3,7 @@ using System;
 using MarketMakerEtl.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace MarketMakerEtl.Core.Data.Migrations
 {
     [DbContext(typeof(EtlDbContext))]
-    partial class EtlDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927120929_AddClassificationBatchRuns")]
+    partial class AddClassificationBatchRuns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.5");
@@ -123,31 +126,6 @@ namespace MarketMakerEtl.Core.Data.Migrations
                     b.HasIndex("ProductFamilyId", "CreatedUtc");
 
                     b.ToTable("DealSignals", (string)null);
-                });
-
-            modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.FetchOutcomeBucketEntity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("BucketStartUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Count")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BucketStartUtc", "Kind")
-                        .IsUnique();
-
-                    b.ToTable("FetchOutcomeBuckets", (string)null);
                 });
 
             modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.JobCategoryEntity", b =>
@@ -720,73 +698,6 @@ namespace MarketMakerEtl.Core.Data.Migrations
                     b.ToTable("TaxonomyVersions", (string)null);
                 });
 
-            modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.TradeEntity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("BoughtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("BuyFees")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("BuyPrice")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("BuyShipping")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("DealSignalId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("ListingEntityId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PriceGroupKeyJson")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("ProductFamilyId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal?>("SellFees")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("SellPrice")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("SellShipping")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("SoldUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("UpdatedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedUtc");
-
-                    b.HasIndex("DealSignalId");
-
-                    b.HasIndex("ListingEntityId");
-
-                    b.HasIndex("ProductFamilyId");
-
-                    b.ToTable("Trades", (string)null);
-                });
-
             modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.DealSignalEntity", b =>
                 {
                     b.HasOne("MarketMakerEtl.Core.Data.Entities.ListingEntity", null)
@@ -879,24 +790,6 @@ namespace MarketMakerEtl.Core.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("ProductFamily");
-                });
-
-            modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.TradeEntity", b =>
-                {
-                    b.HasOne("MarketMakerEtl.Core.Data.Entities.DealSignalEntity", null)
-                        .WithMany()
-                        .HasForeignKey("DealSignalId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("MarketMakerEtl.Core.Data.Entities.ListingEntity", null)
-                        .WithMany()
-                        .HasForeignKey("ListingEntityId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("MarketMakerEtl.Core.Data.Entities.ProductFamilyEntity", null)
-                        .WithMany()
-                        .HasForeignKey("ProductFamilyId")
-                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.ListingEntity", b =>

@@ -1,6 +1,5 @@
 using System.Data.Common;
 using MarketMakerEtl.Core.Interfaces;
-using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Models.Health;
 using MarketMakerEtl.Core.Models.Runs;
 
@@ -10,34 +9,34 @@ public sealed class SystemHealthService : ISystemHealthService
 {
     private readonly IJobHealthService _jobHealth;
     private readonly IFamilyBacklogHealthService _familyHealth;
-    private readonly IListingClassifierClient _classifierClient;
     private readonly IFetcherHealthService _fetcherHealth;
+    private readonly ILlmHealthService _llmHealth;
 
     public SystemHealthService(
         IJobHealthService jobHealth,
         IFamilyBacklogHealthService familyHealth,
-        IListingClassifierClient classifierClient,
-        IFetcherHealthService fetcherHealth)
+        IFetcherHealthService fetcherHealth,
+        ILlmHealthService llmHealth)
     {
         _jobHealth = jobHealth;
         _familyHealth = familyHealth;
-        _classifierClient = classifierClient;
         _fetcherHealth = fetcherHealth;
+        _llmHealth = llmHealth;
     }
 
     public async Task<SystemHealthResponse> GetHealth(CancellationToken ct)
     {
         var database = await LoadDatabaseHealth(ct);
-        var classifier = await _classifierClient.CheckHealth(ct);
         var fetcher = await _fetcherHealth.GetFetcherHealth(ct);
-        var status = ComputeStatus(database, classifier, fetcher);
+        var llm = await _llmHealth.GetLlmHealth(ct);
+        var status = ComputeStatus(database, fetcher, llm);
 
         return new SystemHealthResponse(
             status,
             database.Reachable,
             database.Jobs,
-            classifier,
             fetcher,
+            llm,
             new SystemHealthBacklogs(BuildClassificationBacklogs(database.Families), database.PendingDetailFetch),
             BuildReview(database.Families));
     }
@@ -58,7 +57,7 @@ public sealed class SystemHealthService : ISystemHealthService
     }
 
     private static SystemHealthStatus ComputeStatus(
-        DatabaseHealthSnapshot database, ClassifierHealthCheckResult classifier, FetcherHealthView fetcher)
+        DatabaseHealthSnapshot database, FetcherHealthView fetcher, LlmHealthView llm)
     {
         if (!database.Reachable)
         {
@@ -70,7 +69,7 @@ public sealed class SystemHealthService : ISystemHealthService
             return SystemHealthStatus.Degraded;
         }
 
-        if (!classifier.Reachable && database.Families.Count > 0)
+        if (llm.Degraded && database.Families.Count > 0)
         {
             return SystemHealthStatus.Degraded;
         }

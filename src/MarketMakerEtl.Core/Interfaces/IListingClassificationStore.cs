@@ -15,4 +15,10 @@ public interface IListingClassificationStore
 
     Task<IReadOnlyDictionary<int, IReadOnlyDictionary<string, string>>> GetHumanChoices(
         IReadOnlyList<int> listingEntityIds, CancellationToken ct);
+
+    Task RecordBatchOutcome(bool succeeded, CancellationToken ct);
+
+    Task<IReadOnlyList<ClassificationBatchRunView>> GetRecentBatchOutcomes(int count, CancellationToken ct);
+
+    Task<IReadOnlyList<ClassificationBatchRunView>> GetBatchOutcomesSince(DateTime sinceUtc, CancellationToken ct);
 }

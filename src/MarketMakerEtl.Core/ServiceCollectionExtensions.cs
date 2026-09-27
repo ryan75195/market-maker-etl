@@ -40,13 +40,16 @@ public static class ServiceCollectionExtensions
     private const bool DefaultFamilyInScopeOnly = true;
     private const int DefaultDetailBacklogInfrastructureBackoffBaseSeconds = 1;
     private const int DefaultDetailBacklogInfrastructureBackoffMaxSeconds = 1800;
-    private const string DefaultClassifierBaseUrl = "";
-    private const int DefaultClassifierBatchSize = 64;
     private const int DefaultClassifierTickMinutes = 5;
     private const int DefaultClassifierMaxListingsPerTick = 2000;
-    private const int DefaultClassifierTimeoutSeconds = 120;
+    private const int DefaultClassifierDegradedAfterFailedBatches = 5;
     private const double DefaultClassificationReviewThreshold = 0.9;
     private const int DefaultBusyTimeoutMs = 10000;
+    private const string DefaultOpenAiModel = "gpt-6-luna";
+    private const string DefaultOpenAiReasoningEffort = "low";
+    private const int DefaultOpenAiBatchSize = 25;
+    private const int DefaultOpenAiMaxConcurrency = 6;
+    private const int DefaultOpenAiTimeoutSeconds = 120;
 
     public static IServiceCollection AddCoreServices(this IServiceCollection services)
     {
@@ -77,6 +80,7 @@ public static class ServiceCollectionExtensions
             configuration, detailFetchOptions.MaxDetailFetchAttempts, detailFetchOptions.MaxConcurrentDetailFetches));
         services.AddSingleton(BuildClassifierOptions(configuration));
         services.AddSingleton(BuildClassificationReviewOptions(configuration));
+        services.AddSingleton(_ => BuildOpenAiOptions(configuration));
         services.AddSingleton(PriceGroupOptionsFactory.Build(configuration));
         services.AddSingleton(DealsOptionsFactory.Build(configuration));
         services.AddSingleton(BacktestOptionsFactory.Build(configuration));
@@ -92,7 +96,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IFetchOutcomeStore, FetchOutcomeStore>();
         services.AddHttpClient<IScrapeClient, FetcherScrapeClient>();
         services.AddHttpClient<IFetcherHealthClient, FetcherHealthClient>();
-        services.AddHttpClient<IListingClassifierClient, HttpListingClassifierClient>(
+        services.AddHttpClient<IListingClassifierClient, OpenAiListingClassifierClient>(
             client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddMarketplaceAdapterServices();
         services.AddSingleton<IScrapeRunStateService, ScrapeRunStateService>();
@@ -143,6 +147,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IJobHealthService, JobHealthService>();
         services.AddSingleton<IFamilyBacklogHealthService, FamilyBacklogHealthService>();
         services.AddSingleton<IFetcherHealthService, FetcherHealthService>();
+        services.AddSingleton<ILlmHealthService, LlmHealthService>();
         services.AddSingleton<ISystemHealthService, SystemHealthService>();
         return services;
     }
@@ -202,14 +207,21 @@ public static class ServiceCollectionExtensions
 
     private static ClassifierOptions BuildClassifierOptions(IConfiguration? configuration) =>
         new(
-            ReadString(configuration, "Classifier:BaseUrl", DefaultClassifierBaseUrl),
-            ReadInt(configuration, "Classifier:BatchSize", DefaultClassifierBatchSize),
             ReadInt(configuration, "Classifier:TickMinutes", DefaultClassifierTickMinutes),
             ReadInt(configuration, "Classifier:MaxListingsPerTick", DefaultClassifierMaxListingsPerTick),
-            ReadInt(configuration, "Classifier:TimeoutSeconds", DefaultClassifierTimeoutSeconds));
+            ReadInt(configuration, "Classifier:DegradedAfterFailedBatches", DefaultClassifierDegradedAfterFailedBatches));
 
     private static ClassificationReviewOptions BuildClassificationReviewOptions(IConfiguration? configuration) =>
         new(ReadDouble(configuration, "Classification:ReviewThreshold", DefaultClassificationReviewThreshold));
+
+    private static OpenAiOptions BuildOpenAiOptions(IConfiguration? configuration) =>
+        new(
+            ReadOptionalString(configuration, "OpenAI:ApiKey") ?? string.Empty,
+            ReadString(configuration, "OpenAI:Model", DefaultOpenAiModel),
+            ReadString(configuration, "OpenAI:ReasoningEffort", DefaultOpenAiReasoningEffort),
+            ReadInt(configuration, "OpenAI:BatchSize", DefaultOpenAiBatchSize),
+            ReadInt(configuration, "OpenAI:MaxConcurrency", DefaultOpenAiMaxConcurrency),
+            ReadInt(configuration, "OpenAI:TimeoutSeconds", DefaultOpenAiTimeoutSeconds));
 
     private static int BuildBusyTimeoutMs(IConfiguration? configuration) =>
         ReadInt(configuration, "Database:BusyTimeoutMs", DefaultBusyTimeoutMs);

@@ -8,29 +8,30 @@ namespace MarketMakerEtl.Core.Services;
 
 public sealed class ListingClassificationService : IListingClassificationService
 {
-    private const string ChoiceType = "choice";
-
     private readonly IProductFamilyStore _families;
     private readonly IListingClassificationStore _classifications;
     private readonly IListingClassifierClient _client;
     private readonly ClassifierOptions _options;
+    private readonly OpenAiOptions _openAiOptions;
 
     public ListingClassificationService(
         IProductFamilyStore families,
         IListingClassificationStore classifications,
         IListingClassifierClient client,
-        ClassifierOptions options)
+        ClassifierOptions options,
+        OpenAiOptions openAiOptions)
     {
         _families = families;
         _classifications = classifications;
         _client = client;
         _options = options;
+        _openAiOptions = openAiOptions;
     }
 
     public async Task<ClassificationTickResult> ClassifyPending(
         Action<ClassificationBatchFailure> onBatchFailure, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(_options.BaseUrl))
+        if (string.IsNullOrEmpty(_openAiOptions.ApiKey))
         {
             return new ClassificationTickResult(0, 0, 0, []);
         }
@@ -70,11 +71,6 @@ public sealed class ListingClassificationService : IListingClassificationService
             listingsClassified += outcome.Classified;
             remainingBudget -= outcome.Selected;
             failures.AddRange(outcome.Failures);
-
-            if (outcome.Stopped)
-            {
-                break;
-            }
         }
 
         return new ClassificationTickResult(jobsProcessed, listingsSelected, listingsClassified, failures);
@@ -95,93 +91,87 @@ public sealed class ListingClassificationService : IListingClassificationService
 
         if (targets.Count == 0)
         {
-            return new JobClassificationOutcome(0, 0, [], false);
+            return new JobClassificationOutcome(0, 0, []);
         }
 
-        var classified = 0;
-        var failures = new List<ClassificationBatchFailure>();
-        var stopped = false;
-
-        foreach (var batch in Chunk(targets, _options.BatchSize))
-        {
-            ct.ThrowIfCancellationRequested();
-            var outcome = await ClassifyBatch(
-                job.Id, family.ModelName, family.LatestTaxonomyVersion.Id, taxonomy, batch, onBatchFailure, ct);
-            classified += outcome.Classified;
-            if (outcome.Failure is not null)
-            {
-                failures.Add(outcome.Failure);
-            }
-
-            if (outcome.StopTick)
-            {
-                stopped = true;
-                break;
-            }
-        }
-
-        return new JobClassificationOutcome(targets.Count, classified, failures, stopped);
+        return await ClassifyBatch(job.Id, family.ModelName, family.LatestTaxonomyVersion.Id, taxonomy, targets, onBatchFailure, ct);
     }
 
-    private async Task<BatchClassificationOutcome> ClassifyBatch(
+    private async Task<JobClassificationOutcome> ClassifyBatch(
         int jobId,
         string modelName,
         int taxonomyVersionId,
         TaxonomyDocument taxonomy,
-        IReadOnlyList<ListingClassificationTarget> batch,
+        IReadOnlyList<ListingClassificationTarget> targets,
         Action<ClassificationBatchFailure> onBatchFailure,
         CancellationToken ct)
     {
         try
         {
-            var request = BuildRequest(modelName, taxonomy, batch);
+            var request = BuildRequest(modelName, taxonomy, targets);
             var response = await _client.Classify(request, ct);
             var humanChoicesByListing = await _classifications.GetHumanChoices(
-                batch.Select(target => target.ListingEntityId).ToList(), ct)
+                targets.Select(target => target.ListingEntityId).ToList(), ct)
                 ?? new Dictionary<int, IReadOnlyDictionary<string, string>>();
-            var batchItems = BuildBatchItems(taxonomy, taxonomyVersionId, batch, response, humanChoicesByListing);
-            await _classifications.UpsertBatch(batchItems, ct);
-            return new BatchClassificationOutcome(batch.Count, null, false);
-        }
-        catch (ListingClassifierException ex) when (ex.IsTimeout)
-        {
-            var failure = new ClassificationBatchFailure(jobId, batch.Count, ex.Message);
-            onBatchFailure(failure);
-            return new BatchClassificationOutcome(0, failure, true);
+
+            var succeeded = BuildBatchItems(taxonomy, taxonomyVersionId, targets, response, humanChoicesByListing, out var failedCount);
+            await _classifications.UpsertBatch(succeeded, ct);
+
+            var batchSucceeded = failedCount == 0;
+            await _classifications.RecordBatchOutcome(batchSucceeded, ct);
+
+            if (!batchSucceeded)
+            {
+                var failure = new ClassificationBatchFailure(jobId, failedCount, "OpenAI failed to classify some listings.");
+                onBatchFailure(failure);
+                return new JobClassificationOutcome(targets.Count, succeeded.Count, [failure]);
+            }
+
+            return new JobClassificationOutcome(targets.Count, succeeded.Count, []);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            var failure = new ClassificationBatchFailure(jobId, batch.Count, ex.Message);
+            await _classifications.RecordBatchOutcome(false, ct);
+            var failure = new ClassificationBatchFailure(jobId, targets.Count, ex.Message);
             onBatchFailure(failure);
-            return new BatchClassificationOutcome(0, failure, false);
+            return new JobClassificationOutcome(targets.Count, 0, [failure]);
         }
     }
 
     private static ClassifyRequest BuildRequest(
-        string modelName, TaxonomyDocument taxonomy, IReadOnlyList<ListingClassificationTarget> batch)
+        string modelName, TaxonomyDocument taxonomy, IReadOnlyList<ListingClassificationTarget> targets)
     {
         var questions = taxonomy.Questions.ToDictionary(
             question => question.Key,
-            question => new ClassifyQuestion(ChoiceType, question.Instructions, question.Criteria));
-        var states = batch.Select(ClassificationStateBuilder.BuildState).ToList();
+            ClassifyQuestionBuilder.Build);
+        var states = targets.Select(ClassificationStateBuilder.BuildState).ToList();
 
-        return new ClassifyRequest(modelName, questions, states);
+        return new ClassifyRequest(modelName, questions, states, taxonomy.Guidance);
     }
 
     private static IReadOnlyList<ListingClassificationBatchItem> BuildBatchItems(
         TaxonomyDocument taxonomy,
         int taxonomyVersionId,
-        IReadOnlyList<ListingClassificationTarget> batch,
+        IReadOnlyList<ListingClassificationTarget> targets,
         ClassifyResponse response,
-        IReadOnlyDictionary<int, IReadOnlyDictionary<string, string>> humanChoicesByListing)
+        IReadOnlyDictionary<int, IReadOnlyDictionary<string, string>> humanChoicesByListing,
+        out int failedCount)
     {
-        var items = new List<ListingClassificationBatchItem>(batch.Count);
+        var items = new List<ListingClassificationBatchItem>(targets.Count);
+        failedCount = 0;
 
-        for (var index = 0; index < batch.Count; index++)
+        for (var index = 0; index < targets.Count; index++)
         {
-            var target = batch[index];
+            var target = targets[index];
+            var result = response.Results[index];
+            if (result.Error is not null)
+            {
+                failedCount++;
+                continue;
+            }
+
             humanChoicesByListing.TryGetValue(target.ListingEntityId, out var humanChoices);
-            items.Add(BuildBatchItem(taxonomy, taxonomyVersionId, target, response.Results[index], humanChoices));
+            items.Add(BuildBatchItem(taxonomy, taxonomyVersionId, target, result, humanChoices));
         }
 
         return items;
@@ -211,17 +201,6 @@ public sealed class ListingClassificationService : IListingClassificationService
             modelAnswer.Agreement,
             JsonSerializer.Serialize(modelAnswer.Probabilities));
 
-    private static IEnumerable<IReadOnlyList<T>> Chunk<T>(IReadOnlyList<T> source, int size)
-    {
-        for (var offset = 0; offset < source.Count; offset += size)
-        {
-            yield return source.Skip(offset).Take(size).ToList();
-        }
-    }
-
     private sealed record JobClassificationOutcome(
-        int Selected, int Classified, IReadOnlyList<ClassificationBatchFailure> Failures, bool Stopped);
-
-    private sealed record BatchClassificationOutcome(
-        int Classified, ClassificationBatchFailure? Failure, bool StopTick);
+        int Selected, int Classified, IReadOnlyList<ClassificationBatchFailure> Failures);
 }

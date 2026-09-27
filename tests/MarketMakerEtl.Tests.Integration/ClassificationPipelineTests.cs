@@ -173,9 +173,10 @@ public class ClassificationPipelineTests
     {
         var families = new ProductFamilyStore(factory);
         var classifications = new ListingClassificationStore(factory);
-        var options = new ClassifierOptions("http://classifier.test", 64, 5, 2000, 120);
+        var options = new ClassifierOptions(5, 2000, 5);
+        var openAiOptions = new OpenAiOptions("test-key", "gpt-6-luna", "low", 25, 6, 120);
         var service = new ListingClassificationService(
-            families, classifications, new StubClassifierClient(), options);
+            families, classifications, new StubClassifierClient(), options, openAiOptions);
         return new ClassificationWorker(service, options, TimeProvider.System, NullLogger<ClassificationWorker>.Instance);
     }
 
@@ -210,8 +211,5 @@ public class ClassificationPipelineTests
             var results = request.States.Select(_ => new ClassifyResult(answers)).ToList();
             return Task.FromResult(new ClassifyResponse(request.Model, 3, results));
         }
-
-        public Task<ClassifierHealthCheckResult> CheckHealth(CancellationToken ct) =>
-            Task.FromResult(new ClassifierHealthCheckResult("http://stub", true, []));
     }
 }
