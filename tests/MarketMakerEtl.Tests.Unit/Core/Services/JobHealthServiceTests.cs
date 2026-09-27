@@ -20,7 +20,7 @@ public class JobHealthServiceTests
     {
         var jobs = Substitute.For<IJobStore>();
         var runReports = Substitute.For<IScrapeRunReportStore>();
-        var detailStore = Substitute.For<IItemDetailStore>();
+        var detailStore = Substitute.For<IDetailBacklogStore>();
         jobs.GetJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(1)]);
         runReports.GetLastRun(1, Arg.Any<CancellationToken>()).Returns(
             new JobLastRunView(ScrapeRunStatus.Completed, NowUtc.AddHours(-1), NowUtc.AddHours(-1), NowUtc.AddHours(-1)));
@@ -40,7 +40,7 @@ public class JobHealthServiceTests
     {
         var jobs = Substitute.For<IJobStore>();
         var runReports = Substitute.For<IScrapeRunReportStore>();
-        var detailStore = Substitute.For<IItemDetailStore>();
+        var detailStore = Substitute.For<IDetailBacklogStore>();
         jobs.GetJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(1)]);
         runReports.GetLastRun(1, Arg.Any<CancellationToken>()).Returns((JobLastRunView?)null);
         var service = CreateService(jobs, runReports, detailStore);
@@ -55,7 +55,7 @@ public class JobHealthServiceTests
     {
         var jobs = Substitute.For<IJobStore>();
         var runReports = Substitute.For<IScrapeRunReportStore>();
-        var detailStore = Substitute.For<IItemDetailStore>();
+        var detailStore = Substitute.For<IDetailBacklogStore>();
         jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>()).Returns([BuildJob(1), BuildJob(2)]);
         jobs.HasQueuedOrRunningRun(1, Arg.Any<CancellationToken>()).Returns(false);
         jobs.HasQueuedOrRunningRun(2, Arg.Any<CancellationToken>()).Returns(true);
@@ -74,7 +74,7 @@ public class JobHealthServiceTests
     {
         var jobs = Substitute.For<IJobStore>();
         var runReports = Substitute.For<IScrapeRunReportStore>();
-        var detailStore = Substitute.For<IItemDetailStore>();
+        var detailStore = Substitute.For<IDetailBacklogStore>();
         jobs.GetEffectivelyEnabledJobs(Arg.Any<CancellationToken>()).Returns([]);
         var service = CreateService(jobs, runReports, detailStore);
 
@@ -89,7 +89,7 @@ public class JobHealthServiceTests
     }
 
     private static JobHealthService CreateService(
-        IJobStore jobs, IScrapeRunReportStore runReports, IItemDetailStore detailStore) =>
+        IJobStore jobs, IScrapeRunReportStore runReports, IDetailBacklogStore detailStore) =>
         new(
             jobs,
             runReports,

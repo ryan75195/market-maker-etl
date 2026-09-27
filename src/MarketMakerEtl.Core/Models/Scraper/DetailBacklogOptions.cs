@@ -7,4 +7,5 @@ public sealed record DetailBacklogOptions(
     int MaxFetchesPerHour,
     int MaxDetailFetchAttempts,
     int FamilyDetailFetchesPerTick = 300,
-    int MaxConcurrentDetailFetches = 1);
+    int MaxConcurrentDetailFetches = 1,
+    bool FamilyInScopeOnly = true);

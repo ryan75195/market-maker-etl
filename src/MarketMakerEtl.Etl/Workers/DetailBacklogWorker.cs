@@ -82,8 +82,13 @@ public sealed class DetailBacklogWorker : BackgroundService
         }
 
         _logger.LogInformation(
-            "Detail backlog tick: family-priority fetches ran {FamilyAttempted}, remaining {FamilyRemaining}",
+            "Detail backlog tick: family-priority fetches ran {FamilyAttempted} " +
+            "(in-scope {FamilyInScopeFetched}, unclassified {FamilyUnclassifiedFetched}), " +
+            "remaining {FamilyRemaining} (in-scope remaining {FamilyInScopeRemaining})",
             result.FamilyAttempted,
-            result.FamilyRemaining);
+            result.FamilyInScopeFetched,
+            result.FamilyUnclassifiedFetched,
+            result.FamilyRemaining,
+            result.FamilyInScopeRemaining);
     }
 }

@@ -11,7 +11,7 @@ public sealed class DetailBacklogService : IDetailBacklogService
     private static readonly DetailBacklogTickResult EmptyResult = new(0, 0, 0, []);
 
     private readonly IJobStore _jobs;
-    private readonly IItemDetailStore _detailStore;
+    private readonly IDetailBacklogStore _backlog;
     private readonly IItemDetailFetchService _detailFetch;
     private readonly DetailBacklogOptions _options;
     private readonly TimeProvider _timeProvider;
@@ -20,13 +20,13 @@ public sealed class DetailBacklogService : IDetailBacklogService
 
     public DetailBacklogService(
         IJobStore jobs,
-        IItemDetailStore detailStore,
+        IDetailBacklogStore backlog,
         IItemDetailFetchService detailFetch,
         DetailBacklogOptions options,
         TimeProvider timeProvider)
     {
         _jobs = jobs;
-        _detailStore = detailStore;
+        _backlog = backlog;
         _detailFetch = detailFetch;
         _options = options;
         _timeProvider = timeProvider;
@@ -53,10 +53,14 @@ public sealed class DetailBacklogService : IDetailBacklogService
 
         var familyResult = await RunFamilyPass(familyJobIds, ct);
         var generalResult = await RunGeneralPass(allJobIds, ct);
-        var familyRemaining = await _detailStore.CountFamilyListingsNeedingDetail(
+        var familyRemaining = await _backlog.CountFamilyListingsNeedingDetail(
             familyJobIds, _options.MaxDetailFetchAttempts, ct);
+        var familyInScopeRemaining = _options.FamilyInScopeOnly
+            ? await _backlog.CountFamilyInScopeListingsNeedingDetail(
+                familyJobIds, _options.MaxDetailFetchAttempts, ct)
+            : 0;
 
-        return Combine(familyResult, generalResult, familyRemaining);
+        return Combine(familyResult, generalResult, familyRemaining, familyInScopeRemaining);
     }
 
     private async Task<IReadOnlyList<JobView>> GetEligibleJobs(CancellationToken ct)
@@ -88,10 +92,31 @@ public sealed class DetailBacklogService : IDetailBacklogService
             return EmptyResult;
         }
 
-        var targets = await _detailStore.GetFamilyBacklogListingsNeedingDetail(
-            familyJobIds, maxThisPass, _options.MaxDetailFetchAttempts, ct);
+        if (!_options.FamilyInScopeOnly)
+        {
+            var targets = await _backlog.GetFamilyBacklogListingsNeedingDetail(
+                familyJobIds, maxThisPass, _options.MaxDetailFetchAttempts, ct);
+            return await FetchTargets(targets, ct);
+        }
 
-        return await FetchTargets(targets, ct);
+        return await RunFamilyPassInScope(familyJobIds, maxThisPass, ct);
+    }
+
+    private async Task<DetailBacklogTickResult> RunFamilyPassInScope(
+        IReadOnlyList<int> familyJobIds, int maxThisPass, CancellationToken ct)
+    {
+        var inScope = await _backlog.GetFamilyInScopeListingsNeedingDetail(
+            familyJobIds, maxThisPass, _options.MaxDetailFetchAttempts, ct);
+        var remainingBudget = maxThisPass - inScope.Count;
+        IReadOnlyList<ListingDetailTarget> unclassified = [];
+        if (remainingBudget > 0)
+        {
+            unclassified = await _backlog.GetFamilyUnclassifiedListingsNeedingDetail(
+                familyJobIds, remainingBudget, _options.MaxDetailFetchAttempts, ct);
+        }
+
+        var result = await FetchTargets([.. inScope, .. unclassified], ct);
+        return result with { FamilyInScopeFetched = inScope.Count, FamilyUnclassifiedFetched = unclassified.Count };
     }
 
     private async Task<DetailBacklogTickResult> RunGeneralPass(IReadOnlyList<int> allJobIds, CancellationToken ct)
@@ -102,21 +127,27 @@ public sealed class DetailBacklogService : IDetailBacklogService
             return EmptyResult;
         }
 
-        var targets = await _detailStore.GetBacklogListingsNeedingDetail(
+        var targets = await _backlog.GetBacklogListingsNeedingDetail(
             allJobIds, maxThisPass, _options.MaxDetailFetchAttempts, ct);
 
         return await FetchTargets(targets, ct);
     }
 
     private static DetailBacklogTickResult Combine(
-        DetailBacklogTickResult family, DetailBacklogTickResult general, int familyRemaining) =>
+        DetailBacklogTickResult family,
+        DetailBacklogTickResult general,
+        int familyRemaining,
+        int familyInScopeRemaining) =>
         new(
             family.Selected + general.Selected,
             family.Attempted + general.Attempted,
             family.Succeeded + general.Succeeded,
             [.. family.Failures, .. general.Failures],
             family.Attempted,
-            familyRemaining);
+            familyRemaining,
+            family.FamilyInScopeFetched,
+            family.FamilyUnclassifiedFetched,
+            familyInScopeRemaining);
 
     private async Task<DetailBacklogTickResult> FetchTargets(
         IReadOnlyList<ListingDetailTarget> targets, CancellationToken ct)

@@ -36,6 +36,7 @@ public static class ServiceCollectionExtensions
     private const int DefaultDetailBacklogMaxFetchesPerTick = 30;
     private const int DefaultDetailBacklogMaxFetchesPerHour = 300;
     private const int DefaultFamilyDetailFetchesPerTick = 300;
+    private const bool DefaultFamilyInScopeOnly = true;
     private const string DefaultClassifierBaseUrl = "";
     private const int DefaultClassifierBatchSize = 64;
     private const int DefaultClassifierTickMinutes = 5;
@@ -112,6 +113,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICategoryStore, CategoryStore>();
         services.AddSingleton<IProductFamilyStore, ProductFamilyStore>();
         services.AddSingleton<IItemDetailStore, ItemDetailStore>();
+        services.AddSingleton<IDetailBacklogStore, DetailBacklogStore>();
         services.AddSingleton<IListingRawDataStore, ListingRawDataStore>();
         services.AddSingleton<ISearchPageService, SearchPageService>();
         services.AddSingleton<IItemDetailFetchService, ItemDetailFetchService>();
@@ -181,7 +183,8 @@ public static class ServiceCollectionExtensions
             ReadInt(configuration, "DetailBacklog:MaxFetchesPerHour", DefaultDetailBacklogMaxFetchesPerHour),
             maxDetailFetchAttempts,
             ReadInt(configuration, "Scrape:FamilyDetailFetchesPerTick", DefaultFamilyDetailFetchesPerTick),
-            maxConcurrentDetailFetches);
+            maxConcurrentDetailFetches,
+            ReadBool(configuration, "DetailBacklog:FamilyInScopeOnly", DefaultFamilyInScopeOnly));
 
     private static ClassifierOptions BuildClassifierOptions(IConfiguration? configuration) =>
         new(

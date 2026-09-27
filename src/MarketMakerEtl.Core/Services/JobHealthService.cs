@@ -12,14 +12,14 @@ public sealed class JobHealthService : IJobHealthService
     private readonly IJobStore _jobs;
     private readonly IScrapeRunReportStore _runReports;
     private readonly TimeProvider _timeProvider;
-    private readonly IItemDetailStore _detailStore;
+    private readonly IDetailBacklogStore _detailStore;
     private readonly DetailBacklogOptions _detailOptions;
 
     public JobHealthService(
         IJobStore jobs,
         IScrapeRunReportStore runReports,
         TimeProvider timeProvider,
-        IItemDetailStore detailStore,
+        IDetailBacklogStore detailStore,
         DetailBacklogOptions detailOptions)
     {
         _jobs = jobs;
