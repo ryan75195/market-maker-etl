@@ -14,27 +14,25 @@ public sealed class DetailBacklogService : IDetailBacklogService
     private readonly IDetailBacklogStore _backlog;
     private readonly IItemDetailFetchService _detailFetch;
     private readonly DetailBacklogOptions _options;
-    private readonly TimeProvider _timeProvider;
-    private readonly object _budgetLock = new();
-    private readonly List<DateTime> _recentFetchTimestampsUtc = [];
+    private readonly IDetailBacklogThrottleService _throttle;
 
     public DetailBacklogService(
         IJobStore jobs,
         IDetailBacklogStore backlog,
         IItemDetailFetchService detailFetch,
         DetailBacklogOptions options,
-        TimeProvider timeProvider)
+        IDetailBacklogThrottleService throttle)
     {
         _jobs = jobs;
         _backlog = backlog;
         _detailFetch = detailFetch;
         _options = options;
-        _timeProvider = timeProvider;
+        _throttle = throttle;
     }
 
     public async Task<DetailBacklogTickResult> RunTick(CancellationToken ct)
     {
-        if (!_options.Enabled)
+        if (!_options.Enabled || _throttle.IsBackingOffInfrastructureFailures())
         {
             return EmptyResult;
         }
@@ -60,7 +58,9 @@ public sealed class DetailBacklogService : IDetailBacklogService
                 familyJobIds, _options.MaxDetailFetchAttempts, ct)
             : 0;
 
-        return Combine(familyResult, generalResult, familyRemaining, familyInScopeRemaining);
+        var combined = Combine(familyResult, generalResult, familyRemaining, familyInScopeRemaining);
+        _throttle.ObserveTickResult(combined);
+        return combined;
     }
 
     private async Task<IReadOnlyList<JobView>> GetEligibleJobs(CancellationToken ct)
@@ -86,7 +86,7 @@ public sealed class DetailBacklogService : IDetailBacklogService
             return EmptyResult;
         }
 
-        var maxThisPass = Math.Min(_options.FamilyDetailFetchesPerTick, RemainingHourlyBudget());
+        var maxThisPass = Math.Min(_options.FamilyDetailFetchesPerTick, _throttle.RemainingHourlyBudget());
         if (maxThisPass <= 0)
         {
             return EmptyResult;
@@ -121,7 +121,7 @@ public sealed class DetailBacklogService : IDetailBacklogService
 
     private async Task<DetailBacklogTickResult> RunGeneralPass(IReadOnlyList<int> allJobIds, CancellationToken ct)
     {
-        var maxThisPass = Math.Min(_options.MaxFetchesPerTick, RemainingHourlyBudget());
+        var maxThisPass = Math.Min(_options.MaxFetchesPerTick, _throttle.RemainingHourlyBudget());
         if (maxThisPass <= 0)
         {
             return EmptyResult;
@@ -186,26 +186,7 @@ public sealed class DetailBacklogService : IDetailBacklogService
 
     private Task<ScrapeRunIssueDetails?> FetchOne(ListingDetailTarget target, CancellationToken ct)
     {
-        RecordFetchAttempt();
+        _throttle.RecordFetchAttempt();
         return _detailFetch.FetchListingDetail(target, ct);
-    }
-
-    private int RemainingHourlyBudget()
-    {
-        var cutoffUtc = _timeProvider.GetUtcNow().UtcDateTime.AddHours(-1);
-
-        lock (_budgetLock)
-        {
-            _recentFetchTimestampsUtc.RemoveAll(timestamp => timestamp <= cutoffUtc);
-            return Math.Max(0, _options.MaxFetchesPerHour - _recentFetchTimestampsUtc.Count);
-        }
-    }
-
-    private void RecordFetchAttempt()
-    {
-        lock (_budgetLock)
-        {
-            _recentFetchTimestampsUtc.Add(_timeProvider.GetUtcNow().UtcDateTime);
-        }
     }
 }

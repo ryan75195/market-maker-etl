@@ -14,7 +14,7 @@ namespace MarketMakerEtl.Core;
 public static class ServiceCollectionExtensions
 {
     private const string DefaultFetcherBaseUrl = "http://127.0.0.1:8766";
-    private const int DefaultFetcherTimeoutSeconds = 30;
+    private const int DefaultFetcherTimeoutSeconds = 240;
     private const int DefaultMaxPages = 2;
     private const bool DefaultCollectSold = true;
     private const int DefaultMaxBandsPerDirection = 200;
@@ -35,6 +35,8 @@ public static class ServiceCollectionExtensions
     private const int DefaultDetailBacklogMaxFetchesPerHour = 300;
     private const int DefaultFamilyDetailFetchesPerTick = 300;
     private const bool DefaultFamilyInScopeOnly = true;
+    private const int DefaultDetailBacklogInfrastructureBackoffBaseSeconds = 1;
+    private const int DefaultDetailBacklogInfrastructureBackoffMaxSeconds = 1800;
     private const string DefaultClassifierBaseUrl = "";
     private const int DefaultClassifierBatchSize = 64;
     private const int DefaultClassifierTickMinutes = 5;
@@ -106,6 +108,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProductFamilyStore, ProductFamilyStore>();
         services.AddSingleton<IItemDetailStore, ItemDetailStore>();
         services.AddSingleton<IDetailBacklogStore, DetailBacklogStore>();
+        services.AddSingleton<IDetailBacklogThrottleService, DetailBacklogThrottleService>();
         services.AddSingleton<IListingRawDataStore, ListingRawDataStore>();
         services.AddSingleton<ISearchPageService, SearchPageService>();
         services.AddSingleton<IItemDetailFetchService, ItemDetailFetchService>();
@@ -168,7 +171,15 @@ public static class ServiceCollectionExtensions
             maxDetailFetchAttempts,
             ReadInt(configuration, "Scrape:FamilyDetailFetchesPerTick", DefaultFamilyDetailFetchesPerTick),
             maxConcurrentDetailFetches,
-            ReadBool(configuration, "DetailBacklog:FamilyInScopeOnly", DefaultFamilyInScopeOnly));
+            ReadBool(configuration, "DetailBacklog:FamilyInScopeOnly", DefaultFamilyInScopeOnly),
+            ReadInt(
+                configuration,
+                "DetailBacklog:InfrastructureBackoffBaseSeconds",
+                DefaultDetailBacklogInfrastructureBackoffBaseSeconds),
+            ReadInt(
+                configuration,
+                "DetailBacklog:InfrastructureBackoffMaxSeconds",
+                DefaultDetailBacklogInfrastructureBackoffMaxSeconds));
 
     private static ClassifierOptions BuildClassifierOptions(IConfiguration? configuration) =>
         new(

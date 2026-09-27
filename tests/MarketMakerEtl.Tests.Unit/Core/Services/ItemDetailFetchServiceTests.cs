@@ -91,6 +91,30 @@ public class ItemDetailFetchServiceTests
     }
 
     [Test]
+    public async Task Should_not_mark_the_listing_failed_when_the_fetch_reports_infrastructure_unavailable()
+    {
+        var store = Substitute.For<IItemDetailStore>();
+        store.GetListingsNeedingDetail(JobId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([Target]);
+        var client = Substitute.For<IScrapeClient>();
+        client.GetPageHtml(Target.Url!, Arg.Any<CancellationToken>())
+            .Returns<string>(_ => throw new FetchInfrastructureUnavailableException("sidecar unreachable"));
+        var parser = BuildParser(Marketplace.Mercari, BuildPage());
+        var service = new ItemDetailFetchService(store, client, [parser], Options(), NullLogger<ItemDetailFetchService>.Instance);
+
+        var issues = await service.FetchDetails(JobId, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(issues, Has.Count.EqualTo(1));
+            Assert.That(issues[0].IssueType, Is.EqualTo(ItemDetailFetchService.InfrastructureUnavailableIssueType));
+            Assert.That(issues[0].ErrorMessage, Does.Contain("sidecar unreachable"));
+        });
+        await store.DidNotReceive().MarkDetailFetchFailed(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await store.DidNotReceive().ApplyItemDetail(Arg.Any<int>(), Arg.Any<ItemPageListing>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task Should_record_the_innermost_exception_message_and_type_when_the_save_fails()
     {
         var store = Substitute.For<IItemDetailStore>();

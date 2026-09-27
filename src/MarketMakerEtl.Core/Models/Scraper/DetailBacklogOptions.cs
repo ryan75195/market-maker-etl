@@ -8,4 +8,6 @@ public sealed record DetailBacklogOptions(
     int MaxDetailFetchAttempts,
     int FamilyDetailFetchesPerTick = 300,
     int MaxConcurrentDetailFetches = 1,
-    bool FamilyInScopeOnly = true);
+    bool FamilyInScopeOnly = true,
+    int InfrastructureBackoffBaseSeconds = 1,
+    int InfrastructureBackoffMaxSeconds = 1800);
