@@ -130,7 +130,7 @@ public class MercariSearchPayloadParsesToListingsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(exception!.Message, Does.StartWith("Unrecognised search page"));
+            Assert.That(exception!.Message, Is.EqualTo("Unrecognised search payload"));
             Assert.That(parser.ContainsListingMarkup(ErrorPayload), Is.True);
         });
     }

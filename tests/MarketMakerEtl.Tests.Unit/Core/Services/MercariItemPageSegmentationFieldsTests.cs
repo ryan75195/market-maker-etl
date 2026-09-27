@@ -5,12 +5,11 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 [TestFixture]
 public class MercariItemPageSegmentationFieldsTests
 {
-    private static readonly string ElectronicsItemPage = ReadFixture("item-active-m71344610988.html");
-    private static readonly string ClothingItemPage = ReadFixture("item-active-m74693959349.html");
-    private static readonly string ToysItemPage = ReadFixture("item-active-m14283608971.html");
+    private static readonly string ElectronicsItemPage = ReadFixture("item-api-active-m45718142917.json");
+    private static readonly string BuyerShippingItemPage = ReadFixture("item-api-buyer-shipping-m69858447002.json");
 
     [Test]
-    public void Should_read_leaf_category_brand_condition_and_discount_ratio_from_an_item_page()
+    public void Should_read_the_full_category_hierarchy_brand_condition_and_discount_ratio_from_an_item_page()
     {
         var listing = new MercariItemPageParser().Parse(ElectronicsItemPage);
 
@@ -18,16 +17,18 @@ public class MercariItemPageSegmentationFieldsTests
         Assert.Multiple(() =>
         {
             Assert.That(listing!.CategoryId, Is.EqualTo(797));
-            Assert.That(listing.CategoryHierarchy!.Level2Id, Is.EqualTo(797));
+            Assert.That(listing.CategoryHierarchy!.Level0Id, Is.EqualTo(7));
+            Assert.That(listing.CategoryHierarchy.Level0Name, Is.EqualTo("Electronics"));
+            Assert.That(listing.CategoryHierarchy.Level1Id, Is.EqualTo(84));
+            Assert.That(listing.CategoryHierarchy.Level1Name, Is.EqualTo("Video games & consoles"));
+            Assert.That(listing.CategoryHierarchy.Level2Id, Is.EqualTo(797));
             Assert.That(listing.CategoryHierarchy.Level2Name, Is.EqualTo("Consoles"));
-            Assert.That(listing.CategoryHierarchy.Level0Id, Is.Null);
-            Assert.That(listing.CategoryHierarchy.Level1Id, Is.Null);
-            Assert.That(listing.BrandId, Is.EqualTo(5058));
+            Assert.That(listing.BrandId, Is.EqualTo(4591));
             Assert.That(listing.ConditionId, Is.EqualTo(3));
-            Assert.That(listing.DiscountRatio, Is.EqualTo(3));
-            Assert.That(listing.ShipsFromState, Is.EqualTo("Pennsylvania"));
+            Assert.That(listing.DiscountRatio, Is.EqualTo(9));
+            Assert.That(listing.ShipsFromState, Is.EqualTo("New York"));
             Assert.That(listing.ShippingPayer, Is.EqualTo("seller"));
-            Assert.That(listing.RawJson, Does.Contain("m71344610988").Or.Contain("Consoles"));
+            Assert.That(listing.RawJson, Does.Contain("m45718142917").Or.Contain("Consoles"));
         });
     }
 
@@ -40,39 +41,40 @@ public class MercariItemPageSegmentationFieldsTests
         Assert.Multiple(() =>
         {
             Assert.That(listing!.SellerProfile, Is.Not.Null);
-            Assert.That(listing.SellerProfile!.SellerId, Is.EqualTo(865070813L));
-            Assert.That(listing.SellerProfile.Name, Is.EqualTo("Nerd Mom Electronics"));
-            Assert.That(listing.SellerProfile.NumSales, Is.EqualTo(317));
-            Assert.That(listing.SellerProfile.NumSellItems, Is.EqualTo(328));
-            Assert.That(listing.SellerProfile.RatingCount, Is.EqualTo(327));
+            Assert.That(listing.SellerProfile!.SellerId, Is.EqualTo(734240498L));
+            Assert.That(listing.SellerProfile.Name, Is.EqualTo("thehallofpops"));
+            Assert.That(listing.SellerProfile.NumSales, Is.EqualTo(1177));
+            Assert.That(listing.SellerProfile.NumSellItems, Is.EqualTo(1215));
+            Assert.That(listing.SellerProfile.RatingCount, Is.EqualTo(1560));
             Assert.That(listing.SellerProfile.RatingAverage, Is.EqualTo(5));
             Assert.That(listing.SellerProfile.IsProSeller, Is.False);
             Assert.That(
                 listing.SellerProfile.AccountCreatedUtc,
-                Is.EqualTo(new DateTimeOffset(2021, 8, 26, 0, 54, 4, TimeSpan.Zero)));
+                Is.EqualTo(DateTimeOffset.FromUnixTimeSeconds(1558807490)));
         });
     }
 
     [Test]
-    public void Should_read_the_size_name_from_a_clothing_item_page()
+    public void Should_read_the_size_name_from_an_item_page()
     {
-        var listing = new MercariItemPageParser().Parse(ClothingItemPage);
+        var listing = new MercariItemPageParser().Parse(BuyerShippingItemPage);
 
         Assert.That(listing, Is.Not.Null);
-        Assert.That(listing!.SizeName, Is.EqualTo("6 (39)"));
+        Assert.That(listing!.SizeName, Is.EqualTo("5"));
     }
 
     [Test]
-    public void Should_read_a_buyer_paid_shipping_payer_and_ships_from_state_from_a_toy_item_page()
+    public void Should_charge_the_shipping_class_fee_when_the_buyer_pays_for_shipping()
     {
-        var listing = new MercariItemPageParser().Parse(ToysItemPage);
+        var listing = new MercariItemPageParser().Parse(BuyerShippingItemPage);
 
         Assert.That(listing, Is.Not.Null);
         Assert.Multiple(() =>
         {
             Assert.That(listing!.ShippingPayer, Is.EqualTo("buyer"));
-            Assert.That(listing.ShipsFromState, Is.EqualTo("Hawaii"));
-            Assert.That(listing.DiscountRatio, Is.EqualTo(6));
+            Assert.That(listing.ShippingCost, Is.EqualTo(7.97m));
+            Assert.That(listing.ShipsFromState, Is.EqualTo("Maryland"));
+            Assert.That(listing.DiscountRatio, Is.EqualTo(0));
         });
     }
 

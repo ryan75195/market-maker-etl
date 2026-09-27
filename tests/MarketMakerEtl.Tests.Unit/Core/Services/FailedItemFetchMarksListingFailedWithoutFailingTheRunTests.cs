@@ -14,7 +14,7 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 public class FailedItemFetchMarksListingFailedWithoutFailingTheRunTests
 {
     private const string BlockedUrl = "https://www.mercari.com/us/item/blocked-listing/";
-    private const string OkUrl = "https://www.mercari.com/us/item/m71344610988/";
+    private const string OkUrl = "https://www.mercari.com/us/item/m45718142917/";
 
     private string _databasePath = null!;
     private ServiceProvider _provider = null!;
@@ -50,10 +50,10 @@ public class FailedItemFetchMarksListingFailedWithoutFailingTheRunTests
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         var jobId = await SeedJob(factory);
         var blockedListingId = await SeedListing(factory, jobId, "blocked-listing", BlockedUrl);
-        var okListingId = await SeedListing(factory, jobId, "m71344610988", OkUrl);
+        var okListingId = await SeedListing(factory, jobId, "m45718142917", OkUrl);
         var client = new SelectivelyFailingScrapeClient(
             failingUrl: BlockedUrl,
-            pages: new Dictionary<string, string> { [OkUrl] = ReadFixture("item-active-m71344610988.html") });
+            pages: new Dictionary<string, string> { [OkUrl] = ReadFixture("item-api-active-m45718142917.json") });
         var service = new ItemDetailFetchService(
             new ItemDetailStore(factory),
             client,
@@ -72,7 +72,7 @@ public class FailedItemFetchMarksListingFailedWithoutFailingTheRunTests
             Assert.That(blocked.DetailFetchAttempts, Is.EqualTo(1));
             Assert.That(blocked.DetailFetchedUtc, Is.Null);
             Assert.That(ok.DescriptionStatus, Is.EqualTo("ok"));
-            Assert.That(ok.Description, Does.StartWith("Hi!"));
+            Assert.That(ok.Description, Does.StartWith("This listing is for a Nintendo Switch V1"));
         });
     }
 

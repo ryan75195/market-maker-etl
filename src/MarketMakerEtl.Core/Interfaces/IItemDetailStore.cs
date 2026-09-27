@@ -13,4 +13,6 @@ public interface IItemDetailStore
     Task ApplyItemDetail(int listingEntityId, ItemPageListing detail, CancellationToken ct);
 
     Task MarkDetailFetchFailed(int listingEntityId, int maxAttempts, CancellationToken ct);
+
+    Task MarkListingRemoved(int listingEntityId, CancellationToken ct);
 }

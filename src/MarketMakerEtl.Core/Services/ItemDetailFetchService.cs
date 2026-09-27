@@ -121,6 +121,11 @@ public sealed class ItemDetailFetchService : IItemDetailFetchService
             await _store.ApplyItemDetail(target.Id, page, ct);
             return null;
         }
+        catch (ListingNotFoundException)
+        {
+            await _store.MarkListingRemoved(target.Id, ct);
+            return null;
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await _store.MarkDetailFetchFailed(target.Id, _options.MaxDetailFetchAttempts, ct);

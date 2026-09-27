@@ -302,6 +302,23 @@ public class ItemDetailStoreTests
         });
     }
 
+    [Test]
+    public async Task Should_mark_the_listing_ended_and_record_a_detail_fetch_when_removed_from_mercari()
+    {
+        var store = CreateStore();
+        var jobId = await SeedJob();
+        var listingEntityId = await SeedListing(jobId, "detail-not-found", detailFetched: false);
+
+        await store.MarkListingRemoved(listingEntityId, CancellationToken.None);
+
+        var listing = await GetListing(listingEntityId);
+        Assert.Multiple(() =>
+        {
+            Assert.That(listing.ItemStatus, Is.EqualTo("Ended"));
+            Assert.That(listing.DetailFetchedUtc, Is.Not.Null);
+        });
+    }
+
     private static ItemPageListing BuildItemPageListing(string? status) =>
         new(
             ListingId: null,

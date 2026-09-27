@@ -8,6 +8,9 @@ public sealed class ListingRefreshService : IListingRefreshService
 {
     private const string ActiveStatus = "Active";
     private const string SoldStatus = "Sold";
+    private const string EndedStatus = "Ended";
+
+    private static readonly ListingStatusObservation EndedObservation = new(EndedStatus, null, null, null, null, false);
 
     private readonly IScrapeClient _client;
     private readonly IScrapeStore _store;
@@ -46,7 +49,21 @@ public sealed class ListingRefreshService : IListingRefreshService
             return;
         }
 
-        var html = await _client.GetPageHtml(target.Url, ct);
+        string html;
+        try
+        {
+            html = await _client.GetPageHtml(target.Url, ct);
+        }
+        catch (ListingNotFoundException)
+        {
+            if (HasStatusChanged(target.ItemStatus, EndedStatus))
+            {
+                await _store.RecordStatusChange(target.Id, EndedObservation, ct);
+            }
+
+            return;
+        }
+
         var page = parser.Parse(html);
 
         if (page is null || page.Status is null || string.IsNullOrWhiteSpace(page.Title))

@@ -5,168 +5,109 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 [TestFixture]
 public class MercariSearchParserTests
 {
-    private const string ResultsPage = """
-        <div data-testid="ItemContainer" data-productid="m92390261760" data-itemprice="1900" data-itemstatus="on_sale" data-brand="PlayStation">
-          <a href="https://www.mercari.com/us/item/m92390261760/">
-            <img src="https://static.mercdn.net/m92390261760.jpg" alt="PlayStation 5 Console" />
-          </a>
-          <span data-testid="ItemName">PlayStation 5 Console</span>
-        </div>
-        <div data-testid="ItemContainer" data-productid="m92390261761" data-itemprice="2500" data-itemstatus="trading" data-brand="Nintendo">
-          <a href="https://www.mercari.com/us/item/m92390261761/">
-            <img src="https://static.mercdn.net/m92390261761.jpg" alt="Nintendo Switch OLED" />
-          </a>
-          <span data-testid="ItemName">Nintendo Switch OLED</span>
-        </div>
-        """;
+    private static readonly string SearchPayload = File.ReadAllText(
+        Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Mercari", "search-api-payload-nintendo-switch.json"));
 
-    private const string CardWithoutPrice = """
-        <div data-testid="ItemContainer" data-productid="m92390261762" data-itemstatus="on_sale" data-brand="Sony">
-          <a href="https://www.mercari.com/us/item/m92390261762/">
-            <img src="https://static.mercdn.net/m92390261762.jpg" alt="Sony DualSense" />
-          </a>
-          <span data-testid="ItemName">Sony DualSense</span>
-        </div>
+    private const string ColorPayload = """
+        {
+          "data": {
+            "search": {
+              "count": 1,
+              "itemsList": [
+                {
+                  "id": "m11111111111",
+                  "name": "Blue hoodie",
+                  "price": 2000,
+                  "status": "on_sale",
+                  "originalPrice": 2000,
+                  "categoryId": 1,
+                  "color": { "id": 8, "name": "Blue", "hexCode": "#0047BB" },
+                  "photos": [],
+                  "itemCondition": { "id": 1, "name": "New" },
+                  "brand": null,
+                  "itemSize": { "name": "M" },
+                  "itemCategory": { "name": "Tops" },
+                  "itemCategoryHierarchy": [],
+                  "seller": { "sellerId": 42 },
+                  "shippingPayer": { "code": "seller" },
+                  "customFacetsList": []
+                }
+              ]
+            }
+          }
+        }
         """;
-
-    private const string SoldOutCard = """
-        <div data-testid="ItemContainer" data-productid="m92390261763" data-itemprice="5000" data-itemstatus="sold_out" data-brand="Sony">
-          <a href="https://www.mercari.com/us/item/m92390261763/">
-            <img src="https://static.mercdn.net/m92390261763.jpg" alt="Sony DualSense" />
-          </a>
-          <span data-testid="ItemName">Sony DualSense</span>
-        </div>
-        """;
-
-    private static readonly string CapturedRenderedCards = File.ReadAllText(
-        Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Mercari", "search-rendered-cards.html"));
 
     [Test]
-    public void Should_read_price_and_sold_state_from_the_tile_wrapping_a_captured_card()
+    public void Should_parse_every_listing_from_a_captured_ad_hoc_search_payload()
     {
-        var summaries = new MercariSearchParser().Parse(CapturedRenderedCards).Listings;
+        var summaries = new MercariSearchParser().Parse(SearchPayload).Listings;
 
         Assert.Multiple(() =>
         {
-            Assert.That(summaries, Has.Count.EqualTo(2));
-            Assert.That(summaries[0].ListingId, Is.EqualTo("m71344610988"));
-            Assert.That(summaries[0].Title, Is.EqualTo("Sony PlayStation 5 PS5 Digital Console with Controller and Power Cable"));
-            Assert.That(summaries[0].Price, Is.EqualTo(389.00m));
-            Assert.That(summaries[0].Url, Is.EqualTo("https://www.mercari.com/us/item/m71344610988/"));
-            Assert.That(summaries[0].Brand, Is.EqualTo("PlayStation"));
+            Assert.That(summaries, Is.Not.Empty);
+            Assert.That(summaries[0].ListingId, Is.EqualTo("m45718142917"));
+            Assert.That(summaries[0].Title, Is.EqualTo("Nintendo switch v1 bundle"));
+            Assert.That(summaries[0].Price, Is.EqualTo(150.00m));
+            Assert.That(summaries[0].Url, Is.EqualTo("https://www.mercari.com/us/item/m45718142917/"));
             Assert.That(summaries[0].IsSold, Is.False);
-            Assert.That(summaries[1].ListingId, Is.EqualTo("m44688360101"));
-            Assert.That(summaries[1].Price, Is.EqualTo(140.25m));
-            Assert.That(summaries[1].IsSold, Is.True);
+            Assert.That(summaries[0].Condition, Is.EqualTo("Good"));
+            Assert.That(summaries[0].Brand, Is.EqualTo("Nintendo"));
+            Assert.That(summaries[0].SellerId, Is.EqualTo(734240498L));
         });
     }
 
     [Test]
-    public void Should_parse_one_listing_per_result_card()
+    public void Should_report_the_total_result_count_from_the_search_payload()
     {
-        var summaries = new MercariSearchParser().Parse(ResultsPage).Listings;
+        var result = new MercariSearchParser().Parse(SearchPayload);
+
+        Assert.That(result.TotalCount, Is.EqualTo(10000));
+    }
+
+    [Test]
+    public void Should_read_the_color_name_from_the_nested_color_object_because_color_is_an_object_not_a_string()
+    {
+        var summary = new MercariSearchParser().Parse(ColorPayload).Listings[0];
 
         Assert.Multiple(() =>
         {
-            Assert.That(summaries, Has.Count.EqualTo(2));
-            Assert.That(summaries[0].ListingId, Is.EqualTo("m92390261760"));
-            Assert.That(summaries[0].Title, Is.EqualTo("PlayStation 5 Console"));
-            Assert.That(summaries[0].Price, Is.EqualTo(19.00m));
-            Assert.That(summaries[0].Currency, Is.EqualTo("USD"));
-            Assert.That(summaries[0].Url, Is.EqualTo("https://www.mercari.com/us/item/m92390261760/"));
-            Assert.That(summaries[0].PrimaryImageUrl, Is.EqualTo("https://static.mercdn.net/m92390261760.jpg"));
-            Assert.That(summaries[0].Brand, Is.EqualTo("PlayStation"));
-            Assert.That(summaries[0].IsSold, Is.False);
+            Assert.That(summary.ColorName, Is.EqualTo("Blue"));
+            Assert.That(summary.ShippingPayer, Is.EqualTo("seller"));
+            Assert.That(summary.SizeName, Is.EqualTo("M"));
+            Assert.That(summary.SellerId, Is.EqualTo(42L));
         });
     }
 
     [Test]
-    public void Should_preserve_the_full_listing_id_including_its_leading_letter()
-    {
-        var summaries = new MercariSearchParser().Parse(ResultsPage).Listings;
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(summaries[0].ListingId, Is.EqualTo("m92390261760"));
-            Assert.That(summaries[1].ListingId, Is.EqualTo("m92390261761"));
-        });
-    }
-
-    [Test]
-    public void Should_mark_a_card_that_is_in_transaction_as_sold()
-    {
-        var summaries = new MercariSearchParser().Parse(ResultsPage).Listings;
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(summaries[1].IsSold, Is.True);
-            Assert.That(summaries[1].Brand, Is.EqualTo("Nintendo"));
-        });
-    }
-
-    [Test]
-    public void Should_mark_a_card_that_is_sold_out_as_sold()
-    {
-        var summaries = new MercariSearchParser().Parse(SoldOutCard).Listings;
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(summaries, Has.Count.EqualTo(1));
-            Assert.That(summaries[0].IsSold, Is.True);
-        });
-    }
-
-    [Test]
-    public void Should_leave_price_absent_when_a_card_has_no_price()
-    {
-        var summaries = new MercariSearchParser().Parse(CardWithoutPrice).Listings;
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(summaries, Has.Count.EqualTo(1));
-            Assert.That(summaries[0].Price, Is.Null);
-            Assert.That(summaries[0].ListingId, Is.EqualTo("m92390261762"));
-        });
-    }
-
-    [Test]
-    public void Should_report_listing_markup_only_when_the_page_contains_result_cards()
+    public void Should_report_listing_markup_only_when_the_payload_has_a_non_empty_result_set()
     {
         var parser = new MercariSearchParser();
 
         Assert.Multiple(() =>
         {
-            Assert.That(parser.ContainsListingMarkup(ResultsPage), Is.True);
-            Assert.That(parser.ContainsListingMarkup("<html><body>No results found</body></html>"), Is.False);
+            Assert.That(parser.ContainsListingMarkup(SearchPayload), Is.True);
+            Assert.That(
+                parser.ContainsListingMarkup("""{"data":{"search":{"count":0,"itemsList":[]}}}"""),
+                Is.False);
         });
     }
 
     [Test]
-    public void Should_throw_with_the_challenge_message_for_a_cloudflare_challenge_page()
+    public void Should_throw_for_a_payload_without_a_search_result()
     {
-        const string challengePage = """
-            <html>
-              <head><title>Just a moment...</title></head>
-              <body>
-                <script src="/cdn-cgi/challenge-platform/h/g/orchestrate/jsch/v1"></script>
-              </body>
-            </html>
-            """;
-
         var exception = Assert.Throws<UnrecognisedSearchPageException>(
-            () => new MercariSearchParser().Parse(challengePage));
+            () => new MercariSearchParser().Parse("""{"data":{"somethingElse":true}}"""));
 
-        Assert.That(exception!.Message, Is.EqualTo("Cloudflare challenge page"));
+        Assert.That(exception!.Message, Is.EqualTo("Unrecognised search payload"));
     }
 
     [Test]
-    public void Should_throw_with_the_page_title_for_an_unrecognised_html_page()
+    public void Should_throw_for_content_that_is_not_a_json_payload()
     {
-        const string page = "<html><head><title>Access Denied</title></head><body>blocked</body></html>";
-
         var exception = Assert.Throws<UnrecognisedSearchPageException>(
-            () => new MercariSearchParser().Parse(page));
+            () => new MercariSearchParser().Parse("<html><head><title>Just a moment...</title></head></html>"));
 
-        Assert.That(exception!.Message, Is.EqualTo("Unrecognised search page (title: 'Access Denied')"));
+        Assert.That(exception!.Message, Is.EqualTo("Unrecognised search payload"));
     }
 }
