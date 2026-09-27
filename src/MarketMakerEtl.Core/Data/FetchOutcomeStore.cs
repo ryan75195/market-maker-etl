@@ -11,6 +11,8 @@ public sealed class FetchOutcomeStore : IFetchOutcomeStore
 
     private readonly IDbContextFactory<EtlDbContext> _factory;
     private readonly TimeProvider _timeProvider;
+    private readonly object _pruneGate = new();
+    private DateTime? _lastPrunedBucketUtc;
 
     public FetchOutcomeStore(IDbContextFactory<EtlDbContext> factory, TimeProvider timeProvider)
     {
@@ -32,7 +34,25 @@ public sealed class FetchOutcomeStore : IFetchOutcomeStore
             ON CONFLICT(BucketStartUtc, Kind) DO UPDATE SET Count = Count + 1
             """,
             ct);
-        await PruneStaleBuckets(db, nowUtc, ct);
+
+        if (ShouldPruneFor(bucketStartUtc))
+        {
+            await PruneStaleBuckets(db, nowUtc, ct);
+        }
+    }
+
+    private bool ShouldPruneFor(DateTime bucketStartUtc)
+    {
+        lock (_pruneGate)
+        {
+            if (_lastPrunedBucketUtc == bucketStartUtc)
+            {
+                return false;
+            }
+
+            _lastPrunedBucketUtc = bucketStartUtc;
+            return true;
+        }
     }
 
     public async Task<FetchOutcomeSnapshot> GetRecentOutcomes(TimeSpan window, CancellationToken ct)

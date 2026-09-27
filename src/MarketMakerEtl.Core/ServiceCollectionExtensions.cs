@@ -94,17 +94,7 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IFetcherHealthClient, FetcherHealthClient>();
         services.AddHttpClient<IListingClassifierClient, HttpListingClassifierClient>(
             client => client.Timeout = Timeout.InfiniteTimeSpan);
-        services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
-        services.AddSingleton<IEbaySearchUrlService, MercariSearchUrlService>();
-        services.AddSingleton<IPriceBandSearchUrlService, MercariSearchUrlService>();
-        services.AddSingleton<ISearchPageParser, EbaySearchParser>();
-        services.AddSingleton<ISearchPageParser, MercariSearchParser>();
-        services.AddSingleton<IItemPageParser, EbayItemPageParserService>();
-        services.AddSingleton<IItemPageParser, MercariItemPageParser>();
-        services.AddSingleton(sp => new MarketplaceAdapters(
-            sp.GetServices<IEbaySearchUrlService>(),
-            sp.GetServices<ISearchPageParser>(),
-            sp.GetServices<IItemPageParser>()));
+        services.AddMarketplaceAdapterServices();
         services.AddSingleton<IScrapeRunStateService, ScrapeRunStateService>();
         services.AddSingleton<IScrapeStore, ScrapeStore>();
         services.AddSingleton<IStaleScrapeRunRecoveryService, StaleScrapeRunRecoveryService>();
@@ -130,6 +120,22 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPriceGroupListingStore, PriceGroupListingStore>();
         services.AddSingleton<IPriceGroupQueryService, PriceGroupQueryService>();
         return services.AddCoreHealthServices().AddDealServices();
+    }
+
+    private static IServiceCollection AddMarketplaceAdapterServices(this IServiceCollection services)
+    {
+        services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
+        services.AddSingleton<IEbaySearchUrlService, MercariSearchUrlService>();
+        services.AddSingleton<IPriceBandSearchUrlService, MercariSearchUrlService>();
+        services.AddSingleton<ISearchPageParser, EbaySearchParser>();
+        services.AddSingleton<ISearchPageParser, MercariSearchParser>();
+        services.AddSingleton<IItemPageParser, EbayItemPageParserService>();
+        services.AddSingleton<IItemPageParser, MercariItemPageParser>();
+        services.AddSingleton(sp => new MarketplaceAdapters(
+            sp.GetServices<IEbaySearchUrlService>(),
+            sp.GetServices<ISearchPageParser>(),
+            sp.GetServices<IItemPageParser>()));
+        return services;
     }
 
     private static IServiceCollection AddCoreHealthServices(this IServiceCollection services)
