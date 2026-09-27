@@ -9,4 +9,5 @@ public sealed record ProductFamilyView(
     TaxonomyVersionView? LatestTaxonomyVersion,
     string? DealGroupBy = null,
     decimal DealMinDiscount = 0.20m,
-    int DealMinSold = 5);
+    int DealMinSold = 5,
+    FamilyState State = FamilyState.Active);

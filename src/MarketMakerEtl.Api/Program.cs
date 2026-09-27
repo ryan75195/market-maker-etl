@@ -185,6 +185,7 @@ app.MapPost("/api/categories/{categoryId:int}/disable", async (int categoryId, I
 });
 
 app.MapFamilyEndpoints();
+app.MapFamilyOnboardingEndpoints();
 app.MapClassificationEndpoints();
 app.MapReviewEndpoints();
 app.MapPriceGroupEndpoints();
@@ -287,4 +288,11 @@ namespace MarketMakerEtl.Api
         string? DealGroupBy = null,
         decimal? DealMinDiscount = null,
         int? DealMinSold = null);
+
+    public sealed record StartOnboardingRequest(string Name, string SearchTerm, string? Key = null);
+
+    public sealed record RegenerateOnboardingRequest(string Feedback);
+
+    public sealed record UpdateOnboardingDealSettingsRequest(
+        string? DealGroupBy, decimal? DealMinDiscount, int? DealMinSold);
 }

@@ -48,7 +48,9 @@ public sealed class DealSignalService : IDealSignalService
     }
 
     private static bool IsDealEnabled(ProductFamilyView family) =>
-        !string.IsNullOrWhiteSpace(family.DealGroupBy) && family.LatestTaxonomyVersion is not null;
+        family.State == FamilyState.Active
+        && !string.IsNullOrWhiteSpace(family.DealGroupBy)
+        && family.LatestTaxonomyVersion is not null;
 
     private async Task<DealFamilyScanResult> ScanFamily(ProductFamilyView family, CancellationToken ct)
     {

@@ -15,7 +15,8 @@ public sealed class ProductFamilyStore : IProductFamilyStore
         _factory = factory;
     }
 
-    public async Task<ProductFamilyView?> CreateFamily(string key, string name, string modelName, CancellationToken ct)
+    public async Task<ProductFamilyView?> CreateFamily(
+        string key, string name, string modelName, CancellationToken ct, FamilyState state = FamilyState.Active)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var keyAlreadyExists = await db.ProductFamilies.AnyAsync(f => f.Key == key, ct);
@@ -29,6 +30,7 @@ public sealed class ProductFamilyStore : IProductFamilyStore
             Key = key,
             Name = name,
             ModelName = modelName,
+            State = state,
             CreatedUtc = DateTime.UtcNow
         };
         db.ProductFamilies.Add(family);
@@ -223,7 +225,8 @@ public sealed class ProductFamilyStore : IProductFamilyStore
             latest,
             family.DealGroupBy,
             family.DealMinDiscount,
-            family.DealMinSold);
+            family.DealMinSold,
+            family.State);
 
     private static TaxonomyVersionView MapToVersionView(TaxonomyVersionEntity version) =>
         new(version.Id, version.ProductFamilyId, version.Version, version.QuestionsJson, version.CreatedUtc);

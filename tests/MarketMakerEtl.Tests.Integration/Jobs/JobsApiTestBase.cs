@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MarketMakerEtl.Tests.Integration.Jobs;
 
@@ -17,14 +18,22 @@ public abstract class JobsApiTestBase
     {
         _databasePath = Path.Combine(Path.GetTempPath(), $"mm-etl-jobs-api-{Guid.NewGuid():N}.db");
         Factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, configuration) =>
+            .WithWebHostBuilder(builder =>
             {
-                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                builder.ConfigureAppConfiguration((_, configuration) =>
                 {
-                    ["Database:ConnectionString"] = $"Data Source={_databasePath}"
+                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Database:ConnectionString"] = $"Data Source={_databasePath}"
+                    });
                 });
-            }));
+                builder.ConfigureServices(ConfigureTestServices);
+            });
         Client = Factory.CreateClient();
+    }
+
+    protected virtual void ConfigureTestServices(IServiceCollection services)
+    {
     }
 
     [TearDown]
