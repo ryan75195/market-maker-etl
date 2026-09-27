@@ -13,7 +13,7 @@ internal static class OpenAiChatCompletionSender
     private const int MaxAttempts = 4;
     private static readonly TimeSpan BaseBackoff = TimeSpan.FromMilliseconds(500);
 
-    public static async Task<string> Send(
+    public static async Task<OpenAiCompletionResult> Send(
         HttpClient http, OpenAiOptions options, TimeProvider timeProvider, JsonObject body, CancellationToken ct)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -22,9 +22,9 @@ internal static class OpenAiChatCompletionSender
         for (var attempt = 0; ; attempt++)
         {
             var outcome = await Attempt(http, options, body, deadline, ct);
-            if (outcome.Content is not null)
+            if (outcome.Result is not null)
             {
-                return outcome.Content;
+                return outcome.Result;
             }
 
             if (attempt >= MaxAttempts - 1 || !outcome.Retryable)
@@ -57,7 +57,7 @@ internal static class OpenAiChatCompletionSender
         if (response.IsSuccessStatusCode)
         {
             var envelope = await ReadResponseBody(response, deadline, options, ct);
-            return AttemptOutcome.Succeeded(ExtractMessageContent(envelope));
+            return AttemptOutcome.Succeeded(ExtractResult(envelope));
         }
 
         var errorBody = await TryReadBody(response, deadline.Token);
@@ -106,7 +106,7 @@ internal static class OpenAiChatCompletionSender
     private static ListingClassifierException BuildTimeout(OpenAiOptions options) =>
         ListingClassifierException.Timeout($"OpenAI request timed out after {options.TimeoutSeconds}s.");
 
-    private static string ExtractMessageContent(string envelope)
+    private static OpenAiCompletionResult ExtractResult(string envelope)
     {
         try
         {
@@ -116,13 +116,23 @@ internal static class OpenAiChatCompletionSender
                 .GetProperty("message")
                 .GetProperty("content")
                 .GetString();
-            return content ?? throw new ListingClassifierException("OpenAI response message content was null.");
+            return content is null
+                ? throw new ListingClassifierException("OpenAI response message content was null.")
+                : new OpenAiCompletionResult(content, ReadUsageTokens(document.RootElement, "prompt_tokens"),
+                    ReadUsageTokens(document.RootElement, "completion_tokens"));
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or ArgumentOutOfRangeException)
         {
             throw new ListingClassifierException("OpenAI response was not a valid chat completion.", ex);
         }
     }
+
+    private static int ReadUsageTokens(JsonElement root, string propertyName) =>
+        root.TryGetProperty("usage", out var usage)
+            && usage.TryGetProperty(propertyName, out var value)
+            && value.ValueKind == JsonValueKind.Number
+                ? value.GetInt32()
+                : 0;
 
     private static bool IsRetryable(HttpStatusCode statusCode) =>
         (int)statusCode == 429 || (int)statusCode >= 500;
@@ -147,13 +157,13 @@ internal static class OpenAiChatCompletionSender
 
     private sealed class AttemptOutcome
     {
-        public string? Content { get; private init; }
+        public OpenAiCompletionResult? Result { get; private init; }
 
         public ListingClassifierException? Failure { get; private init; }
 
         public bool Retryable { get; private init; }
 
-        public static AttemptOutcome Succeeded(string content) => new() { Content = content };
+        public static AttemptOutcome Succeeded(OpenAiCompletionResult result) => new() { Result = result };
 
         public static AttemptOutcome Failed(ListingClassifierException failure, bool retryable) =>
             new() { Failure = failure, Retryable = retryable };

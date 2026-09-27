@@ -1,3 +1,5 @@
+using MarketMakerEtl.Core.Models.Families;
+
 namespace MarketMakerEtl.Core.Data.Entities;
 
 public sealed class ProductFamilyEntity
@@ -20,7 +22,11 @@ public sealed class ProductFamilyEntity
 
     public int DealMinSold { get; set; } = DefaultDealMinSold;
 
+    public FamilyState State { get; set; } = FamilyState.Active;
+
     public DateTime CreatedUtc { get; set; }
 
     public ICollection<TaxonomyVersionEntity> TaxonomyVersions { get; } = new List<TaxonomyVersionEntity>();
+
+    public FamilyOnboardingEntity? Onboarding { get; set; }
 }

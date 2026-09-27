@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Classification;
+using MarketMakerEtl.Core.Models.Families;
 using MarketMakerEtl.Core.Models.Jobs;
 using MarketMakerEtl.Core.Models.Taxonomies;
 
@@ -88,7 +89,7 @@ public sealed class ListingClassificationService : IListingClassificationService
         JobView job, int budget, Action<ClassificationBatchFailure> onBatchFailure, CancellationToken ct)
     {
         var family = await _families.GetFamily(job.ProductFamilyId!.Value, ct);
-        if (family?.LatestTaxonomyVersion is null)
+        if (family?.LatestTaxonomyVersion is null || family.State != FamilyState.Active)
         {
             return null;
         }

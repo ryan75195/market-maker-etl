@@ -5,7 +5,8 @@ namespace MarketMakerEtl.Core.Interfaces;
 
 public interface IProductFamilyStore
 {
-    Task<ProductFamilyView?> CreateFamily(string key, string name, string modelName, CancellationToken ct);
+    Task<ProductFamilyView?> CreateFamily(
+        string key, string name, string modelName, CancellationToken ct, FamilyState state = FamilyState.Active);
 
     Task<ProductFamilyView?> UpdateFamily(
         int familyId,

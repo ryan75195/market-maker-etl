@@ -420,17 +420,35 @@ public class ListingClassificationServiceTests
             Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task Should_skip_a_job_whose_family_is_still_in_draft_state()
+    {
+        var families = Substitute.For<IProductFamilyStore>();
+        var classifications = Substitute.For<IListingClassificationStore>();
+        var client = Substitute.For<IListingClassifierClient>();
+        families.GetJobsWithFamily(Arg.Any<CancellationToken>()).Returns([BuildJob(productFamilyId: 1)]);
+        families.GetFamily(1, Arg.Any<CancellationToken>()).Returns(BuildFamily(state: FamilyState.Draft));
+
+        var service = new ListingClassificationService(families, classifications, client, Throttle(), OpenAiOpts());
+        var result = await service.ClassifyPending(NoOpFailureCallback, CancellationToken.None);
+
+        Assert.That(result.JobsProcessed, Is.EqualTo(0));
+        await classifications.DidNotReceive().GetListingsNeedingClassification(
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
     private static JobView BuildJob(int? productFamilyId, int id = 10, bool isEnabled = true) =>
         new(id, "ps5 controller", Marketplace.Mercari, null, 24, isEnabled, null, null, DateTime.UtcNow, [], productFamilyId);
 
-    private static ProductFamilyView BuildFamily(int familyId = 1) =>
+    private static ProductFamilyView BuildFamily(int familyId = 1, FamilyState state = FamilyState.Active) =>
         new(
             familyId,
             "ps5-controller",
             "PS5 Controller",
             "ps5-controller",
             DateTime.UtcNow,
-            new TaxonomyVersionView(100, familyId, 1, TaxonomyJson, DateTime.UtcNow));
+            new TaxonomyVersionView(100, familyId, 1, TaxonomyJson, DateTime.UtcNow),
+            State: state);
 
     private static ProductFamilyView BuildPs5Family() =>
         new(

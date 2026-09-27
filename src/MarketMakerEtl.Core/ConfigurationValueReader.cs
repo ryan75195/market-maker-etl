@@ -38,4 +38,12 @@ internal static class ConfigurationValueReader
             ? parsed
             : fallback;
     }
+
+    public static decimal ReadDecimal(IConfiguration? configuration, string key, decimal fallback)
+    {
+        var value = configuration?[key];
+        return decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : fallback;
+    }
 }

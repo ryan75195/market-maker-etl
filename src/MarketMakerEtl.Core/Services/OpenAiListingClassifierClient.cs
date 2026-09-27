@@ -82,8 +82,8 @@ public sealed class OpenAiListingClassifierClient : IListingClassifierClient
         {
             var body = OpenAiRequestBuilder.Build(
                 _options.Model, _options.ReasoningEffort, systemPrompt, questions, batch);
-            var content = await OpenAiChatCompletionSender.Send(_http, _options, _timeProvider, body, ct);
-            return OpenAiResponseParser.Parse(content, questions, _reviewOptions.ReviewThreshold);
+            var result = await OpenAiChatCompletionSender.Send(_http, _options, _timeProvider, body, ct);
+            return OpenAiResponseParser.Parse(result.Content, questions, _reviewOptions.ReviewThreshold);
         }
         catch (ListingClassifierException ex)
         {

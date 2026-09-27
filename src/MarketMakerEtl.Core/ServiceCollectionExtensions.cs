@@ -71,6 +71,7 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton(BuildClassifierOptions(configuration));
         services.AddSingleton(BuildClassificationReviewOptions(configuration));
         services.AddSingleton(_ => BuildOpenAiOptions(configuration));
+        services.AddSingleton(BuildOnboardingOptions(configuration));
         services.AddSingleton(PriceGroupOptionsFactory.Build(configuration));
         services.AddSingleton(DealsOptionsFactory.Build(configuration));
         services.AddSingleton(BacktestOptionsFactory.Build(configuration));
@@ -114,6 +115,13 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton<IClassificationReviewStore, ClassificationReviewStore>();
         services.AddSingleton<IPriceGroupListingStore, PriceGroupListingStore>();
         services.AddSingleton<IPriceGroupQueryService, PriceGroupQueryService>();
+        services.AddSingleton<IFamilyOnboardingStore, FamilyOnboardingStore>();
+        services.AddSingleton<IFamilySampleFetchService, FamilySampleFetchService>();
+        services.AddHttpClient<IFamilyDraftClient, OpenAiFamilyDraftClient>(
+            client => client.Timeout = Timeout.InfiniteTimeSpan);
+        services.AddSingleton<IFamilyOnboardingDraftingService, FamilyOnboardingDraftingService>();
+        services.AddSingleton<IFamilyOnboardingPreviewService, FamilyOnboardingPreviewService>();
+        services.AddSingleton<IFamilyOnboardingLifecycleService, FamilyOnboardingLifecycleService>();
         return services.AddCoreHealthServices().AddDealServices().AddTradeServices();
     }
 

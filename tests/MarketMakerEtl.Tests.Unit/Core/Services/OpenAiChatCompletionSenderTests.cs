@@ -27,13 +27,47 @@ public class OpenAiChatCompletionSenderTests
                 : SuccessResponse();
         });
 
-        var content = await OpenAiChatCompletionSender.Send(
+        var result = await OpenAiChatCompletionSender.Send(
             new HttpClient(handler), Options(), TimeProvider.System, new JsonObject(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {
             Assert.That(attempt, Is.EqualTo(2));
-            Assert.That(content, Is.EqualTo("hello"));
+            Assert.That(result.Content, Is.EqualTo("hello"));
+        });
+    }
+
+    [Test]
+    public async Task Should_capture_prompt_and_completion_token_usage_from_the_envelope()
+    {
+        var handler = new StubHandler(SuccessResponse);
+
+        var result = await OpenAiChatCompletionSender.Send(
+            new HttpClient(handler), Options(), TimeProvider.System, new JsonObject(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.PromptTokens, Is.EqualTo(12));
+            Assert.That(result.CompletionTokens, Is.EqualTo(34));
+        });
+    }
+
+    [Test]
+    public async Task Should_default_token_usage_to_zero_when_the_envelope_omits_it()
+    {
+        var handler = new StubHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"choices":[{"message":{"content":"hello"}}]}""", Encoding.UTF8, "application/json")
+        });
+
+        var result = await OpenAiChatCompletionSender.Send(
+            new HttpClient(handler), Options(), TimeProvider.System, new JsonObject(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.PromptTokens, Is.EqualTo(0));
+            Assert.That(result.CompletionTokens, Is.EqualTo(0));
         });
     }
 
@@ -85,7 +119,8 @@ public class OpenAiChatCompletionSenderTests
             new HttpClient(handler), Options(), TimeProvider.System, new JsonObject(), cts.Token));
     }
 
-    private static async Task<ListingClassifierException> CatchListingClassifierException(Task<string> send)
+    private static async Task<ListingClassifierException> CatchListingClassifierException(
+        Task<OpenAiCompletionResult> send)
     {
         try
         {
@@ -102,7 +137,11 @@ public class OpenAiChatCompletionSenderTests
     private static HttpResponseMessage SuccessResponse() => new(HttpStatusCode.OK)
     {
         Content = new StringContent(
-            """{"choices":[{"message":{"content":"hello"}}]}""", Encoding.UTF8, "application/json")
+            """
+            {"choices":[{"message":{"content":"hello"}}],"usage":{"prompt_tokens":12,"completion_tokens":34}}
+            """,
+            Encoding.UTF8,
+            "application/json")
     };
 
     private static HttpResponseMessage RateLimitedResponse() => new((HttpStatusCode)429)

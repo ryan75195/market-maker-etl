@@ -35,6 +35,8 @@ public sealed partial class EtlDbContext : DbContext
 
     public DbSet<TaxonomyVersionEntity> TaxonomyVersions => Set<TaxonomyVersionEntity>();
 
+    public DbSet<FamilyOnboardingEntity> FamilyOnboardings => Set<FamilyOnboardingEntity>();
+
     public DbSet<ListingClassificationEntity> ListingClassifications => Set<ListingClassificationEntity>();
 
     public DbSet<DealSignalEntity> DealSignals => Set<DealSignalEntity>();
@@ -187,6 +189,19 @@ public sealed partial class EtlDbContext : DbContext
             entity.HasOne(e => e.ProductFamily)
                 .WithMany(f => f.TaxonomyVersions)
                 .HasForeignKey(e => e.ProductFamilyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FamilyOnboardingEntity>(entity =>
+        {
+            entity.ToTable("FamilyOnboardings");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SearchTerm).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.SampleListingsJson).IsRequired();
+            entity.HasIndex(e => e.ProductFamilyId).IsUnique();
+            entity.HasOne(e => e.ProductFamily)
+                .WithOne(f => f.Onboarding)
+                .HasForeignKey<FamilyOnboardingEntity>(e => e.ProductFamilyId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

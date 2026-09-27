@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Family Onboarding</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header>
+  <h1>Family Onboarding</h1>
+  <div class="controls">
+    <label>
+      Draft family
+      <select id="family-select"><option value="">Start a new family below</option></select>
+    </label>
+  </div>
+</header>
+
+<main>
+  <p id="error" class="error" hidden></p>
+
+  <section id="start-form">
+    <h2>Start onboarding</h2>
+    <form id="onboard-form">
+      <label>
+        Family name
+        <input id="start-name" type="text" required placeholder="e.g. PS5 Controller" />
+      </label>
+      <label>
+        Search term
+        <input id="start-search-term" type="text" required placeholder="e.g. ps5 controller" />
+      </label>
+      <label>
+        Key (optional, kebab-case)
+        <input id="start-key" type="text" placeholder="e.g. ps5-controller" />
+      </label>
+      <button type="submit" id="start-button">Draft taxonomy</button>
+    </form>
+  </section>
+
+  <section id="draft" hidden>
+    <h2 id="draft-heading"></h2>
+    <div class="cost-line">
+      <span id="sample-size"></span>
+      <span id="token-usage"></span>
+      <span id="cost-usd"></span>
+    </div>
+
+    <h3>Draft taxonomy</h3>
+    <textarea id="taxonomy-json" rows="18" spellcheck="false"></textarea>
+    <button type="button" id="save-taxonomy-button">Save taxonomy &amp; re-run preview</button>
+
+    <h3>Deal settings</h3>
+    <div class="deal-settings">
+      <label>
+        Group by
+        <input id="deal-group-by" type="text" placeholder="e.g. model,storage,condition" />
+      </label>
+      <label>
+        Min discount
+        <input id="deal-min-discount" type="number" step="0.01" min="0" max="1" />
+      </label>
+      <label>
+        Min sold
+        <input id="deal-min-sold" type="number" step="1" min="1" />
+      </label>
+      <button type="button" id="save-deal-settings-button">Save deal settings</button>
+    </div>
+
+    <h3>Preview</h3>
+    <div id="preview"></div>
+
+    <h3>Regenerate</h3>
+    <label>
+      Feedback for the next draft
+      <textarea id="feedback" rows="3" placeholder="What should change?"></textarea>
+    </label>
+    <button type="button" id="regenerate-button">Regenerate</button>
+
+    <div class="decision">
+      <button type="button" id="approve-button" class="approve">Approve &amp; go live</button>
+      <button type="button" id="reject-button" class="reject">Reject &amp; delete</button>
+    </div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

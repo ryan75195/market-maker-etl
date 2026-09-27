@@ -3,6 +3,7 @@ using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Models.Deals;
+using MarketMakerEtl.Core.Models.Families;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.PriceGroups;
 using MarketMakerEtl.Core.Services;
@@ -126,10 +127,28 @@ public class DealSignalServiceTests
         });
     }
 
-    private async Task<int> SeedHappyPathScenario()
+    [Test]
+    public async Task Should_exclude_draft_families_from_deal_scanning()
+    {
+        var familyId = await SeedHappyPathScenario(FamilyState.Draft);
+        var service = CreateService();
+
+        var result = await service.ScanForDeals(CancellationToken.None);
+        var signals = await CreateSignalStore().GetSignals(familyId, null, 50, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.FamiliesScanned, Is.EqualTo(0));
+            Assert.That(result.SignalsCreated, Is.EqualTo(0));
+            Assert.That(signals, Is.Empty);
+        });
+        await _webhook.DidNotReceive().Notify(Arg.Any<DealWebhookPayload>(), Arg.Any<CancellationToken>());
+    }
+
+    private async Task<int> SeedHappyPathScenario(FamilyState state = FamilyState.Active)
     {
         await using var db = await CreateDbContext();
-        var family = await AddFamily(db, 0.20m, 2);
+        var family = await AddFamily(db, 0.20m, 2, state);
         var taxonomyVersionId = await AddTaxonomyVersion(db, family.Id);
         var jobId = await AddJob(db);
 
@@ -162,7 +181,8 @@ public class DealSignalServiceTests
         return family.Id;
     }
 
-    private async Task<ProductFamilyEntity> AddFamily(EtlDbContext db, decimal dealMinDiscount, int dealMinSold)
+    private async Task<ProductFamilyEntity> AddFamily(
+        EtlDbContext db, decimal dealMinDiscount, int dealMinSold, FamilyState state = FamilyState.Active)
     {
         var family = new ProductFamilyEntity
         {
@@ -172,6 +192,7 @@ public class DealSignalServiceTests
             DealGroupBy = "model",
             DealMinDiscount = dealMinDiscount,
             DealMinSold = dealMinSold,
+            State = state,
             CreatedUtc = DateTime.UtcNow
         };
         db.ProductFamilies.Add(family);
