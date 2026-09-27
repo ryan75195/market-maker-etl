@@ -92,7 +92,8 @@ public class DetailBacklogWorkerFillsInMissingDescriptionsTests
             detailStore, client, [new MercariItemPageParser()], detailFetchOptions, NullLogger<ItemDetailFetchService>.Instance);
         var backlogOptions = new DetailBacklogOptions(
             Enabled: true, TickMinutes: 5, MaxFetchesPerTick: 10, MaxFetchesPerHour: 10, MaxDetailFetchAttempts: 3);
-        var backlogService = new DetailBacklogService(jobs, detailStore, detailFetch, backlogOptions, TimeProvider.System);
+        var backlog = new DetailBacklogStore(factory);
+        var backlogService = new DetailBacklogService(jobs, backlog, detailFetch, backlogOptions, TimeProvider.System);
         return new DetailBacklogWorker(backlogService, backlogOptions, TimeProvider.System, NullLogger<DetailBacklogWorker>.Instance);
     }
 

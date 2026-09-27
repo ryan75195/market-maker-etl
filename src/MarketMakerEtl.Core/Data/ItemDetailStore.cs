@@ -36,27 +36,6 @@ public sealed class ItemDetailStore : IItemDetailStore
             .ToList();
     }
 
-    public async Task<IReadOnlyList<ListingDetailTarget>> GetBacklogListingsNeedingDetail(
-        IReadOnlyCollection<int> jobIds, int limit, int maxAttempts, CancellationToken ct)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        return await DetailBacklogQueries.GetGeneralListingsNeedingDetail(db, jobIds, limit, maxAttempts, ct);
-    }
-
-    public async Task<IReadOnlyList<ListingDetailTarget>> GetFamilyBacklogListingsNeedingDetail(
-        IReadOnlyCollection<int> jobIds, int limit, int maxAttempts, CancellationToken ct)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        return await DetailBacklogQueries.GetFamilyListingsNeedingDetail(db, jobIds, limit, maxAttempts, ct);
-    }
-
-    public async Task<int> CountFamilyListingsNeedingDetail(
-        IReadOnlyCollection<int> jobIds, int maxAttempts, CancellationToken ct)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        return await DetailBacklogQueries.CountFamilyListingsNeedingDetail(db, jobIds, maxAttempts, ct);
-    }
-
     public async Task<IReadOnlyDictionary<string, int>> GetListingEntityIds(
         int jobId, IReadOnlyCollection<string> listingIds, CancellationToken ct)
     {

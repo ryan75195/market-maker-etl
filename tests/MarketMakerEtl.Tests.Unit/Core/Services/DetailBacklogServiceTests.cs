@@ -18,10 +18,44 @@ public class DetailBacklogServiceTests
 {
     private static readonly DateTimeOffset StartTime = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
+    private const string SingleGateTaxonomyJson =
+        """
+        {
+         "family": "test-family",
+         "version": 1,
+         "questions": {
+          "item_type": {
+           "instructions": "What kind of item is this?",
+           "criteria": {
+            "relevant": "A relevant item for this family.",
+            "irrelevant": "Not relevant to this family."
+           }
+          },
+          "attribute": {
+           "instructions": "Which attribute does this item have?",
+           "criteria": {
+            "a": "Attribute A.",
+            "b": "Attribute B.",
+            "not_stated": "Not stated."
+           },
+           "askWhen": [
+            {
+             "question": "item_type",
+             "anyOf": [
+              "relevant"
+             ]
+            }
+           ]
+          }
+         }
+        }
+        """;
+
     private string _databasePath = null!;
     private ServiceProvider _provider = null!;
     private JobStore _jobs = null!;
     private ItemDetailStore _detailStore = null!;
+    private DetailBacklogStore _backlog = null!;
 
     [SetUp]
     public void SetUp()
@@ -37,6 +71,7 @@ public class DetailBacklogServiceTests
 
         _jobs = new JobStore(Factory());
         _detailStore = new ItemDetailStore(Factory());
+        _backlog = new DetailBacklogStore(Factory());
     }
 
     [TearDown]
@@ -345,9 +380,64 @@ public class DetailBacklogServiceTests
         Assert.That(fetch.Calls.Select(t => t.ListingId), Is.EqualTo(new[] { "family-transition" }));
     }
 
+    [Test]
+    public async Task Should_fetch_in_scope_family_listings_before_unclassified_ones_and_never_fetch_out_of_scope_listings()
+    {
+        var familyJob = await CreateFamilyJobWithId("family-scope-job");
+        var taxonomyVersionId = await SeedTaxonomyVersion(familyJob.FamilyId, SingleGateTaxonomyJson);
+        var outOfScopeId = await SeedListing(familyJob.JobId, "family-scope-out-of-scope");
+        await SeedClassification(outOfScopeId, taxonomyVersionId, "item_type", "irrelevant");
+        var inScopeId = await SeedListing(familyJob.JobId, "family-scope-in-scope");
+        await SeedClassification(inScopeId, taxonomyVersionId, "item_type", "relevant");
+        await SeedListing(familyJob.JobId, "family-scope-unclassified");
+        var fetch = new RecordingDetailFetchService(_detailStore, 3, _ => true);
+        var service = CreateService(
+            fetch, new FakeTimeProvider(StartTime), Options(maxFetchesPerTick: 0, familyFetchesPerTick: 10));
+
+        await service.RunTick(CancellationToken.None);
+
+        Assert.That(
+            fetch.Calls.Select(t => t.ListingId),
+            Is.EqualTo(new[] { "family-scope-in-scope", "family-scope-unclassified" }));
+    }
+
+    [Test]
+    public async Task Should_still_fetch_out_of_scope_family_listings_through_the_general_pass()
+    {
+        var familyJob = await CreateFamilyJobWithId("family-scope-general-job");
+        var taxonomyVersionId = await SeedTaxonomyVersion(familyJob.FamilyId, SingleGateTaxonomyJson);
+        var outOfScopeId = await SeedListing(familyJob.JobId, "family-general-out-of-scope");
+        await SeedClassification(outOfScopeId, taxonomyVersionId, "item_type", "irrelevant");
+        var fetch = new RecordingDetailFetchService(_detailStore, 3, _ => true);
+        var service = CreateService(
+            fetch, new FakeTimeProvider(StartTime), Options(maxFetchesPerTick: 10, familyFetchesPerTick: 0));
+
+        await service.RunTick(CancellationToken.None);
+
+        Assert.That(fetch.Calls.Select(t => t.ListingId), Does.Contain("family-general-out-of-scope"));
+    }
+
+    [Test]
+    public async Task Should_ignore_classification_scope_in_the_family_pass_when_in_scope_only_is_disabled()
+    {
+        var familyJob = await CreateFamilyJobWithId("family-scope-disabled-job");
+        var taxonomyVersionId = await SeedTaxonomyVersion(familyJob.FamilyId, SingleGateTaxonomyJson);
+        var outOfScopeId = await SeedListing(familyJob.JobId, "family-disabled-out-of-scope");
+        await SeedClassification(outOfScopeId, taxonomyVersionId, "item_type", "irrelevant");
+        var fetch = new RecordingDetailFetchService(_detailStore, 3, _ => true);
+        var service = CreateService(
+            fetch,
+            new FakeTimeProvider(StartTime),
+            Options(maxFetchesPerTick: 0, familyFetchesPerTick: 10, familyInScopeOnly: false));
+
+        await service.RunTick(CancellationToken.None);
+
+        Assert.That(fetch.Calls.Select(t => t.ListingId), Does.Contain("family-disabled-out-of-scope"));
+    }
+
     private DetailBacklogService CreateService(
         IItemDetailFetchService fetch, TimeProvider timeProvider, DetailBacklogOptions options) =>
-        new(_jobs, _detailStore, fetch, options, timeProvider);
+        new(_jobs, _backlog, fetch, options, timeProvider);
 
     private static DetailBacklogOptions Options(
         bool enabled = true,
@@ -356,8 +446,17 @@ public class DetailBacklogServiceTests
         int maxFetchesPerHour = 300,
         int maxAttempts = 3,
         int familyFetchesPerTick = 300,
-        int concurrency = 1) =>
-        new(enabled, tickMinutes, maxFetchesPerTick, maxFetchesPerHour, maxAttempts, familyFetchesPerTick, concurrency);
+        int concurrency = 1,
+        bool familyInScopeOnly = true) =>
+        new(
+            enabled,
+            tickMinutes,
+            maxFetchesPerTick,
+            maxFetchesPerHour,
+            maxAttempts,
+            familyFetchesPerTick,
+            concurrency,
+            familyInScopeOnly);
 
     private async Task<int> CreateJob(string searchTerm)
     {
@@ -367,11 +466,44 @@ public class DetailBacklogServiceTests
 
     private async Task<int> CreateFamilyJob(string searchTerm)
     {
+        var familyJob = await CreateFamilyJobWithId(searchTerm);
+        return familyJob.JobId;
+    }
+
+    private async Task<FamilyJob> CreateFamilyJobWithId(string searchTerm)
+    {
         var jobId = await CreateJob(searchTerm);
         var families = new ProductFamilyStore(Factory());
         var family = await families.CreateFamily($"family-{Guid.NewGuid():N}", "Test Family", "test-model", CancellationToken.None);
         await families.SetJobFamily(jobId, family!.Id, CancellationToken.None);
-        return jobId;
+        return new FamilyJob(jobId, family.Id);
+    }
+
+    private async Task<int> SeedTaxonomyVersion(int familyId, string questionsJson)
+    {
+        var families = new ProductFamilyStore(Factory());
+        var version = await families.AddTaxonomyVersion(familyId, questionsJson, CancellationToken.None);
+        return version!.Id;
+    }
+
+    private async Task SeedClassification(
+        int listingEntityId, int taxonomyVersionId, string question, string resolvedChoice)
+    {
+        await using var db = await Factory().CreateDbContextAsync();
+        db.ListingClassifications.Add(new ListingClassificationEntity
+        {
+            ListingEntityId = listingEntityId,
+            TaxonomyVersionId = taxonomyVersionId,
+            Question = question,
+            Choice = resolvedChoice,
+            ResolvedChoice = resolvedChoice,
+            IsApplicable = true,
+            Confidence = 1.0,
+            Agreement = 1.0,
+            ProbabilitiesJson = "{}",
+            ClassifiedUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
     }
 
     private async Task EnqueueRun(int jobId)
@@ -380,11 +512,11 @@ public class DetailBacklogServiceTests
         await scrapeStore.EnqueueRun(jobId, "term", TriggerType.Manual, CancellationToken.None);
     }
 
-    private async Task SeedListing(
+    private async Task<int> SeedListing(
         int jobId, string listingId, int attempts = 0, bool isSold = false, bool detailFetched = false)
     {
         await using var db = await Factory().CreateDbContextAsync();
-        db.Listings.Add(new ListingEntity
+        var listing = new ListingEntity
         {
             ListingId = listingId,
             ScrapeJobId = jobId,
@@ -394,11 +526,15 @@ public class DetailBacklogServiceTests
             DetailFetchedUtc = detailFetched ? DateTime.UtcNow : null,
             DetailFetchAttempts = attempts,
             CreatedUtc = DateTime.UtcNow
-        });
+        };
+        db.Listings.Add(listing);
         await db.SaveChangesAsync();
+        return listing.Id;
     }
 
     private IDbContextFactory<EtlDbContext> Factory() => _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+
+    private sealed record FamilyJob(int JobId, int FamilyId);
 
     private sealed class RecordingDetailFetchService : IItemDetailFetchService
     {
