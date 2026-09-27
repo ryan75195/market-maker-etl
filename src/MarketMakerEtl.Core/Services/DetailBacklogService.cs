@@ -152,36 +152,65 @@ public sealed class DetailBacklogService : IDetailBacklogService
     private async Task<DetailBacklogTickResult> FetchTargets(
         IReadOnlyList<ListingDetailTarget> targets, CancellationToken ct)
     {
+        if (targets.Count == 0)
+        {
+            return EmptyResult;
+        }
+
         var concurrency = Math.Max(1, _options.MaxConcurrentDetailFetches);
+        var initialWindowSize = Math.Min(concurrency, targets.Count);
         var succeeded = 0;
         var failures = new List<ScrapeRunIssueDetails>();
 
-        for (var offset = 0; offset < targets.Count; offset += concurrency)
+        var initialWindowIssues = await Task.WhenAll(
+            targets.Take(initialWindowSize).Select(target => FetchOne(target, ct)));
+        Collect(initialWindowIssues, ref succeeded, failures);
+
+        var remaining = targets.Skip(initialWindowSize).ToList();
+        if (succeeded > 0 && remaining.Count > 0)
         {
-            ct.ThrowIfCancellationRequested();
-
-            var batch = targets.Skip(offset).Take(concurrency).ToList();
-            var batchIssues = await Task.WhenAll(batch.Select(target => FetchOne(target, ct)));
-
-            foreach (var issue in batchIssues)
-            {
-                if (issue is null)
-                {
-                    succeeded++;
-                }
-                else
-                {
-                    failures.Add(issue);
-                }
-            }
-
-            if (succeeded == 0)
-            {
-                break;
-            }
+            var remainingIssues = await FetchWithSlidingWindow(remaining, concurrency, ct);
+            Collect(remainingIssues, ref succeeded, failures);
         }
 
         return new DetailBacklogTickResult(targets.Count, succeeded + failures.Count, succeeded, failures);
+    }
+
+    private static void Collect(
+        IReadOnlyList<ScrapeRunIssueDetails?> issues, ref int succeeded, List<ScrapeRunIssueDetails> failures)
+    {
+        foreach (var issue in issues)
+        {
+            if (issue is null)
+            {
+                succeeded++;
+            }
+            else
+            {
+                failures.Add(issue);
+            }
+        }
+    }
+
+    private async Task<IReadOnlyList<ScrapeRunIssueDetails?>> FetchWithSlidingWindow(
+        IReadOnlyList<ListingDetailTarget> targets, int concurrency, CancellationToken ct)
+    {
+        using var gate = new SemaphoreSlim(concurrency);
+        return await Task.WhenAll(targets.Select(target => FetchThrottled(target, gate, ct)));
+    }
+
+    private async Task<ScrapeRunIssueDetails?> FetchThrottled(
+        ListingDetailTarget target, SemaphoreSlim gate, CancellationToken ct)
+    {
+        await gate.WaitAsync(ct);
+        try
+        {
+            return await FetchOne(target, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     private Task<ScrapeRunIssueDetails?> FetchOne(ListingDetailTarget target, CancellationToken ct)

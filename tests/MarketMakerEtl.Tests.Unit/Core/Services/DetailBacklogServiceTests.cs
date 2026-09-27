@@ -313,6 +313,71 @@ public class DetailBacklogServiceTests
     }
 
     [Test]
+    public async Task Should_complete_other_targets_without_waiting_for_a_slow_fetch_under_the_sliding_window()
+    {
+        var jobId = await CreateJob("sliding-window-job");
+        await SeedListing(jobId, "sliding-fast-d");
+        await SeedListing(jobId, "sliding-fast-c");
+        await SeedListing(jobId, "sliding-slow");
+        await SeedListing(jobId, "sliding-fast-b");
+        await SeedListing(jobId, "sliding-fast-a");
+        var slowGate = new TaskCompletionSource();
+        var fetch = new GatedDetailFetchService("sliding-slow", slowGate.Task, fastCompletionsExpected: 4);
+        var service = CreateService(
+            fetch, new FakeTimeProvider(StartTime), Options(maxFetchesPerTick: 5, concurrency: 2));
+
+        var tickTask = service.RunTick(CancellationToken.None);
+        await fetch.FastCompletionsObserved;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tickTask.IsCompleted, Is.False);
+            Assert.That(fetch.CompletionOrder, Does.Not.Contain("sliding-slow"));
+            Assert.That(fetch.CompletionOrder, Has.Count.EqualTo(4));
+        });
+
+        slowGate.SetResult();
+        var result = await tickTask;
+
+        Assert.That(result.Succeeded, Is.EqualTo(5));
+    }
+
+    [Test]
+    public async Task Should_never_launch_fetches_beyond_the_outage_window_once_every_completion_in_it_fails()
+    {
+        var jobId = await CreateJob("outage-window-job");
+        await SeedListing(jobId, "outage-window-untouched-1");
+        await SeedListing(jobId, "outage-window-untouched-2");
+        var gatedListingIds = Enumerable.Range(0, 3).Select(i => $"outage-window-fail-{i}").ToList();
+        foreach (var listingId in gatedListingIds)
+        {
+            await SeedListing(jobId, listingId);
+        }
+
+        var gates = gatedListingIds.ToDictionary(id => id, _ => new TaskCompletionSource());
+        var fetch = new GatedFailureDetailFetchService(gates);
+        var service = CreateService(
+            fetch, new FakeTimeProvider(StartTime), Options(maxFetchesPerTick: 5, concurrency: 3));
+
+        var tickTask = service.RunTick(CancellationToken.None);
+        foreach (var gate in gates.Values)
+        {
+            gate.SetResult();
+        }
+
+        var result = await tickTask;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Selected, Is.EqualTo(5));
+            Assert.That(result.Attempted, Is.EqualTo(3));
+            Assert.That(result.Succeeded, Is.EqualTo(0));
+            Assert.That(result.Failures, Has.Count.EqualTo(3));
+            Assert.That(fetch.Calls, Is.EquivalentTo(gatedListingIds));
+        });
+    }
+
+    [Test]
     public async Task Should_never_exceed_the_hourly_budget_even_with_concurrent_fetches()
     {
         var jobId = await CreateJob("budget-concurrent-job");
@@ -723,5 +788,85 @@ public class DetailBacklogServiceTests
                 }
             }
         }
+    }
+
+    private sealed class GatedDetailFetchService : IItemDetailFetchService
+    {
+        private readonly string _gatedListingId;
+        private readonly Task _gate;
+        private readonly int _fastCompletionsExpected;
+        private readonly TaskCompletionSource _fastCompletionsObserved =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly object _lock = new();
+
+        public GatedDetailFetchService(string gatedListingId, Task gate, int fastCompletionsExpected)
+        {
+            _gatedListingId = gatedListingId;
+            _gate = gate;
+            _fastCompletionsExpected = fastCompletionsExpected;
+        }
+
+        public List<string> CompletionOrder { get; } = [];
+
+        public Task FastCompletionsObserved => _fastCompletionsObserved.Task;
+
+        public Task<IReadOnlyList<ScrapeRunIssueDetails>> FetchDetails(int jobId, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public async Task<ScrapeRunIssueDetails?> FetchListingDetail(ListingDetailTarget target, CancellationToken ct)
+        {
+            if (target.ListingId == _gatedListingId)
+            {
+                await _gate;
+            }
+
+            lock (_lock)
+            {
+                CompletionOrder.Add(target.ListingId);
+                if (CompletionOrder.Count == _fastCompletionsExpected)
+                {
+                    _fastCompletionsObserved.TrySetResult();
+                }
+            }
+
+            return null;
+        }
+
+        public Task ApplyBackfilledDetails(
+            int jobId, IReadOnlyDictionary<string, ItemPageListing> detailsByListingId, CancellationToken ct) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class GatedFailureDetailFetchService : IItemDetailFetchService
+    {
+        private readonly IReadOnlyDictionary<string, TaskCompletionSource> _gatesByListingId;
+        private readonly object _lock = new();
+
+        public GatedFailureDetailFetchService(IReadOnlyDictionary<string, TaskCompletionSource> gatesByListingId) =>
+            _gatesByListingId = gatesByListingId;
+
+        public List<string> Calls { get; } = [];
+
+        public Task<IReadOnlyList<ScrapeRunIssueDetails>> FetchDetails(int jobId, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public async Task<ScrapeRunIssueDetails?> FetchListingDetail(ListingDetailTarget target, CancellationToken ct)
+        {
+            lock (_lock)
+            {
+                Calls.Add(target.ListingId);
+            }
+
+            if (_gatesByListingId.TryGetValue(target.ListingId, out var gate))
+            {
+                await gate.Task;
+            }
+
+            return new ScrapeRunIssueDetails(target.ListingId, "ItemDetailFetchFailed", "boom", "Detail", null);
+        }
+
+        public Task ApplyBackfilledDetails(
+            int jobId, IReadOnlyDictionary<string, ItemPageListing> detailsByListingId, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 }
