@@ -82,11 +82,7 @@ public class HealthEndpointsTests
     {
         var client = CreateClient(classifierReachable: true, fetcherReachable: true);
         await CreateHealthyJob(client);
-        var outcomeMonitor = _factory!.Services.GetRequiredService<IFetchOutcomeMonitor>();
-        for (var attempt = 0; attempt < 10; attempt++)
-        {
-            outcomeMonitor.Record(FetchOutcomeKind.Infrastructure);
-        }
+        await SeedFetchOutcomes(FetchOutcomeKind.Infrastructure, 10);
 
         var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
 
@@ -205,6 +201,19 @@ public class HealthEndpointsTests
             CompletedUtc = completedUtc
         });
         await db.SaveChangesAsync();
+    }
+
+    private async Task SeedFetchOutcomes(FetchOutcomeKind kind, int count)
+    {
+        var services = new ServiceCollection();
+        services.AddDbContextFactory<EtlDbContext>(options => options.UseSqlite($"Data Source={_databasePath}"));
+        await using var provider = services.BuildServiceProvider();
+        var store = new FetchOutcomeStore(provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(), TimeProvider.System);
+
+        for (var attempt = 0; attempt < count; attempt++)
+        {
+            await store.RecordOutcome(kind, CancellationToken.None);
+        }
     }
 
     private sealed class StubClassifierClient : IListingClassifierClient

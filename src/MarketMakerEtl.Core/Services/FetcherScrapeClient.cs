@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Scraper;
+using Microsoft.Extensions.Logging;
 
 namespace MarketMakerEtl.Core.Services;
 
@@ -15,13 +16,16 @@ public sealed class FetcherScrapeClient : IScrapeClient
 
     private readonly HttpClient _http;
     private readonly FetcherOptions _options;
-    private readonly IFetchOutcomeMonitor _outcomeMonitor;
+    private readonly IFetchOutcomeStore _outcomeStore;
+    private readonly ILogger<FetcherScrapeClient> _logger;
 
-    public FetcherScrapeClient(HttpClient http, FetcherOptions options, IFetchOutcomeMonitor outcomeMonitor)
+    public FetcherScrapeClient(
+        HttpClient http, FetcherOptions options, IFetchOutcomeStore outcomeStore, ILogger<FetcherScrapeClient> logger)
     {
         _http = http;
         _options = options;
-        _outcomeMonitor = outcomeMonitor;
+        _outcomeStore = outcomeStore;
+        _logger = logger;
     }
 
     public async Task<string> GetPageHtml(string url, CancellationToken ct)
@@ -29,23 +33,35 @@ public sealed class FetcherScrapeClient : IScrapeClient
         try
         {
             var body = await FetchPage(url, ct);
-            _outcomeMonitor.Record(FetchOutcomeKind.Success);
+            await SafeRecordOutcome(FetchOutcomeKind.Success, ct);
             return body;
         }
         catch (ListingNotFoundException)
         {
-            _outcomeMonitor.Record(FetchOutcomeKind.NotFound);
+            await SafeRecordOutcome(FetchOutcomeKind.NotFound, ct);
             throw;
         }
         catch (FetchInfrastructureUnavailableException)
         {
-            _outcomeMonitor.Record(FetchOutcomeKind.Infrastructure);
+            await SafeRecordOutcome(FetchOutcomeKind.Infrastructure, ct);
             throw;
         }
         catch (FetchFailedException)
         {
-            _outcomeMonitor.Record(FetchOutcomeKind.Other);
+            await SafeRecordOutcome(FetchOutcomeKind.Other, ct);
             throw;
+        }
+    }
+
+    private async Task SafeRecordOutcome(FetchOutcomeKind kind, CancellationToken ct)
+    {
+        try
+        {
+            await _outcomeStore.RecordOutcome(kind, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to record fetch outcome {Kind}.", kind);
         }
     }
 

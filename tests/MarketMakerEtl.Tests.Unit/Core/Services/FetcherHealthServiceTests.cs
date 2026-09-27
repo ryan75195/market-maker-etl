@@ -12,11 +12,11 @@ public class FetcherHealthServiceTests
     public async Task Should_report_healthy_when_reachable_and_recent_fetches_succeeded()
     {
         var client = Substitute.For<IFetcherHealthClient>();
-        var outcomeMonitor = Substitute.For<IFetchOutcomeMonitor>();
+        var outcomeStore = Substitute.For<IFetchOutcomeStore>();
         client.CheckSidecarReachable(Arg.Any<CancellationToken>()).Returns(true);
-        outcomeMonitor.GetRecentOutcomes(Arg.Any<TimeSpan>())
+        outcomeStore.GetRecentOutcomes(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(new FetchOutcomeSnapshot(5, 0, 0, 0));
-        var service = new FetcherHealthService(client, outcomeMonitor, new FetcherHealthOptions(60, 10));
+        var service = new FetcherHealthService(client, outcomeStore, new FetcherHealthOptions(60, 10));
 
         var health = await service.GetFetcherHealth(CancellationToken.None);
 
@@ -32,11 +32,11 @@ public class FetcherHealthServiceTests
     public async Task Should_report_degraded_when_the_sidecar_is_unreachable()
     {
         var client = Substitute.For<IFetcherHealthClient>();
-        var outcomeMonitor = Substitute.For<IFetchOutcomeMonitor>();
+        var outcomeStore = Substitute.For<IFetchOutcomeStore>();
         client.CheckSidecarReachable(Arg.Any<CancellationToken>()).Returns(false);
-        outcomeMonitor.GetRecentOutcomes(Arg.Any<TimeSpan>())
+        outcomeStore.GetRecentOutcomes(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(new FetchOutcomeSnapshot(1, 0, 0, 0));
-        var service = new FetcherHealthService(client, outcomeMonitor, new FetcherHealthOptions(60, 10));
+        var service = new FetcherHealthService(client, outcomeStore, new FetcherHealthOptions(60, 10));
 
         var health = await service.GetFetcherHealth(CancellationToken.None);
 
@@ -47,11 +47,11 @@ public class FetcherHealthServiceTests
     public async Task Should_report_degraded_when_the_recent_window_has_enough_attempts_and_no_successes()
     {
         var client = Substitute.For<IFetcherHealthClient>();
-        var outcomeMonitor = Substitute.For<IFetchOutcomeMonitor>();
+        var outcomeStore = Substitute.For<IFetchOutcomeStore>();
         client.CheckSidecarReachable(Arg.Any<CancellationToken>()).Returns(true);
-        outcomeMonitor.GetRecentOutcomes(Arg.Any<TimeSpan>())
+        outcomeStore.GetRecentOutcomes(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(new FetchOutcomeSnapshot(0, 7, 3, 0));
-        var service = new FetcherHealthService(client, outcomeMonitor, new FetcherHealthOptions(60, 10));
+        var service = new FetcherHealthService(client, outcomeStore, new FetcherHealthOptions(60, 10));
 
         var health = await service.GetFetcherHealth(CancellationToken.None);
 
@@ -67,11 +67,11 @@ public class FetcherHealthServiceTests
     public async Task Should_report_healthy_when_failures_have_not_yet_reached_the_degraded_threshold()
     {
         var client = Substitute.For<IFetcherHealthClient>();
-        var outcomeMonitor = Substitute.For<IFetchOutcomeMonitor>();
+        var outcomeStore = Substitute.For<IFetchOutcomeStore>();
         client.CheckSidecarReachable(Arg.Any<CancellationToken>()).Returns(true);
-        outcomeMonitor.GetRecentOutcomes(Arg.Any<TimeSpan>())
+        outcomeStore.GetRecentOutcomes(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(new FetchOutcomeSnapshot(0, 4, 0, 0));
-        var service = new FetcherHealthService(client, outcomeMonitor, new FetcherHealthOptions(60, 10));
+        var service = new FetcherHealthService(client, outcomeStore, new FetcherHealthOptions(60, 10));
 
         var health = await service.GetFetcherHealth(CancellationToken.None);
 

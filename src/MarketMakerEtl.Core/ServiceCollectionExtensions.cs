@@ -89,7 +89,7 @@ public static class ServiceCollectionExtensions
 
     private static IServiceCollection AddCoreDomainServices(this IServiceCollection services)
     {
-        services.AddSingleton<IFetchOutcomeMonitor, FetchOutcomeMonitor>();
+        services.AddSingleton<IFetchOutcomeStore, FetchOutcomeStore>();
         services.AddHttpClient<IScrapeClient, FetcherScrapeClient>();
         services.AddHttpClient<IFetcherHealthClient, FetcherHealthClient>();
         services.AddHttpClient<IListingClassifierClient, HttpListingClassifierClient>(

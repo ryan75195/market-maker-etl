@@ -7,14 +7,14 @@ namespace MarketMakerEtl.Core.Services;
 public sealed class FetcherHealthService : IFetcherHealthService
 {
     private readonly IFetcherHealthClient _client;
-    private readonly IFetchOutcomeMonitor _outcomeMonitor;
+    private readonly IFetchOutcomeStore _outcomeStore;
     private readonly FetcherHealthOptions _options;
 
     public FetcherHealthService(
-        IFetcherHealthClient client, IFetchOutcomeMonitor outcomeMonitor, FetcherHealthOptions options)
+        IFetcherHealthClient client, IFetchOutcomeStore outcomeStore, FetcherHealthOptions options)
     {
         _client = client;
-        _outcomeMonitor = outcomeMonitor;
+        _outcomeStore = outcomeStore;
         _options = options;
     }
 
@@ -22,7 +22,7 @@ public sealed class FetcherHealthService : IFetcherHealthService
     {
         var reachable = await _client.CheckSidecarReachable(ct);
         var window = TimeSpan.FromMinutes(_options.RecentWindowMinutes);
-        var outcomes = _outcomeMonitor.GetRecentOutcomes(window);
+        var outcomes = await _outcomeStore.GetRecentOutcomes(window, ct);
         var isDegraded = !reachable || HasOnlyFailedRecently(outcomes);
 
         return new FetcherHealthView(

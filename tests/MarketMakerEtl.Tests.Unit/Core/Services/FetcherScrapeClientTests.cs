@@ -4,6 +4,7 @@ using System.Text.Json;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
@@ -17,15 +18,15 @@ public class FetcherScrapeClientTests
         new("http://fetcher.test", TimeSpan.FromSeconds(timeoutSeconds));
 
     private static FetcherScrapeClient CreateClient(
-        HttpMessageHandler handler, IFetchOutcomeMonitor outcomeMonitor, int timeoutSeconds = 30) =>
-        new(new HttpClient(handler), Options(timeoutSeconds), outcomeMonitor);
+        HttpMessageHandler handler, IFetchOutcomeStore outcomeStore, int timeoutSeconds = 30) =>
+        new(new HttpClient(handler), Options(timeoutSeconds), outcomeStore, NullLogger<FetcherScrapeClient>.Instance);
 
     [Test]
     public async Task Should_post_the_requested_url_and_return_the_raw_body_on_success()
     {
         var handler = new StubFetcherHandler(_ => Json("""{"kind":"item","body":"{\"data\":{}}"}"""));
-        var outcomeMonitor = Substitute.For<IFetchOutcomeMonitor>();
-        var client = CreateClient(handler, outcomeMonitor);
+        var outcomeStore = Substitute.For<IFetchOutcomeStore>();
+        var client = CreateClient(handler, outcomeStore);
 
         var body = await client.GetPageHtml(ItemUrl, CancellationToken.None);
 
@@ -35,38 +36,38 @@ public class FetcherScrapeClientTests
             Assert.That(body, Is.EqualTo("{\"data\":{}}"));
             Assert.That(document.RootElement.GetProperty("url").GetString(), Is.EqualTo(ItemUrl));
         });
-        outcomeMonitor.Received(1).Record(FetchOutcomeKind.Success);
+        await outcomeStore.Received(1).RecordOutcome(FetchOutcomeKind.Success, Arg.Any<CancellationToken>());
     }
 
     [Test]
     public void Should_throw_listing_not_found_for_a_404_response()
     {
         var handler = new StubFetcherHandler(_ => Json("""{"error":"not_found"}""", HttpStatusCode.NotFound));
-        var outcomeMonitor = Substitute.For<IFetchOutcomeMonitor>();
-        var client = CreateClient(handler, outcomeMonitor);
+        var outcomeStore = Substitute.For<IFetchOutcomeStore>();
+        var client = CreateClient(handler, outcomeStore);
 
         Assert.ThrowsAsync<ListingNotFoundException>(async () =>
             await client.GetPageHtml(ItemUrl, CancellationToken.None));
-        outcomeMonitor.Received(1).Record(FetchOutcomeKind.NotFound);
+        _ = outcomeStore.Received(1).RecordOutcome(FetchOutcomeKind.NotFound, Arg.Any<CancellationToken>());
     }
 
     [Test]
     public void Should_throw_fetch_infrastructure_unavailable_for_a_proxy_unavailable_response()
     {
         var handler = new StubFetcherHandler(_ => Json("""{"error":"proxy_unavailable"}""", HttpStatusCode.BadGateway));
-        var outcomeMonitor = Substitute.For<IFetchOutcomeMonitor>();
-        var client = CreateClient(handler, outcomeMonitor);
+        var outcomeStore = Substitute.For<IFetchOutcomeStore>();
+        var client = CreateClient(handler, outcomeStore);
 
         Assert.ThrowsAsync<FetchInfrastructureUnavailableException>(async () =>
             await client.GetPageHtml(ItemUrl, CancellationToken.None));
-        outcomeMonitor.Received(1).Record(FetchOutcomeKind.Infrastructure);
+        _ = outcomeStore.Received(1).RecordOutcome(FetchOutcomeKind.Infrastructure, Arg.Any<CancellationToken>());
     }
 
     [Test]
     public void Should_throw_fetch_infrastructure_unavailable_for_an_upstream_blocked_response()
     {
         var handler = new StubFetcherHandler(_ => Json("""{"error":"upstream_blocked"}""", HttpStatusCode.ServiceUnavailable));
-        var client = CreateClient(handler, Substitute.For<IFetchOutcomeMonitor>());
+        var client = CreateClient(handler, Substitute.For<IFetchOutcomeStore>());
 
         Assert.ThrowsAsync<FetchInfrastructureUnavailableException>(async () =>
             await client.GetPageHtml(ItemUrl, CancellationToken.None));
@@ -77,21 +78,21 @@ public class FetcherScrapeClientTests
     {
         var handler = new StubFetcherHandler(
             _ => Json("""{"error":"upstream_error","detail":"boom"}""", HttpStatusCode.BadGateway));
-        var outcomeMonitor = Substitute.For<IFetchOutcomeMonitor>();
-        var client = CreateClient(handler, outcomeMonitor);
+        var outcomeStore = Substitute.For<IFetchOutcomeStore>();
+        var client = CreateClient(handler, outcomeStore);
 
         var exception = Assert.ThrowsAsync<FetchFailedException>(async () =>
             await client.GetPageHtml(ItemUrl, CancellationToken.None));
 
         Assert.That(exception!.Message, Does.Contain("boom"));
-        outcomeMonitor.Received(1).Record(FetchOutcomeKind.Other);
+        _ = outcomeStore.Received(1).RecordOutcome(FetchOutcomeKind.Other, Arg.Any<CancellationToken>());
     }
 
     [Test]
     public void Should_throw_fetch_failed_for_an_unsupported_url_response()
     {
         var handler = new StubFetcherHandler(_ => Json("""{"error":"unsupported_url"}""", HttpStatusCode.BadRequest));
-        var client = CreateClient(handler, Substitute.For<IFetchOutcomeMonitor>());
+        var client = CreateClient(handler, Substitute.For<IFetchOutcomeStore>());
 
         Assert.ThrowsAsync<FetchFailedException>(async () =>
             await client.GetPageHtml(ItemUrl, CancellationToken.None));
@@ -104,7 +105,7 @@ public class FetcherScrapeClientTests
         {
             Content = new StringContent("boom", Encoding.UTF8, "text/plain")
         });
-        var client = CreateClient(handler, Substitute.For<IFetchOutcomeMonitor>());
+        var client = CreateClient(handler, Substitute.For<IFetchOutcomeStore>());
 
         Assert.ThrowsAsync<FetchFailedException>(async () =>
             await client.GetPageHtml(ItemUrl, CancellationToken.None));
@@ -114,7 +115,7 @@ public class FetcherScrapeClientTests
     public void Should_throw_fetch_failed_for_a_malformed_success_body()
     {
         var handler = new StubFetcherHandler(_ => Json("not json"));
-        var client = CreateClient(handler, Substitute.For<IFetchOutcomeMonitor>());
+        var client = CreateClient(handler, Substitute.For<IFetchOutcomeStore>());
 
         Assert.ThrowsAsync<FetchFailedException>(async () =>
             await client.GetPageHtml(ItemUrl, CancellationToken.None));
@@ -124,7 +125,7 @@ public class FetcherScrapeClientTests
     public void Should_throw_fetch_infrastructure_unavailable_when_the_sidecar_cannot_be_reached()
     {
         var handler = new StubFetcherHandler(_ => throw new HttpRequestException("connection refused"));
-        var client = CreateClient(handler, Substitute.For<IFetchOutcomeMonitor>());
+        var client = CreateClient(handler, Substitute.For<IFetchOutcomeStore>());
 
         Assert.ThrowsAsync<FetchInfrastructureUnavailableException>(async () =>
             await client.GetPageHtml(ItemUrl, CancellationToken.None));
@@ -134,7 +135,7 @@ public class FetcherScrapeClientTests
     public void Should_throw_fetch_infrastructure_unavailable_rather_than_operation_cancelled_on_timeout()
     {
         var handler = new StubFetcherHandler(neverResponds: true);
-        var client = CreateClient(handler, Substitute.For<IFetchOutcomeMonitor>(), timeoutSeconds: 1);
+        var client = CreateClient(handler, Substitute.For<IFetchOutcomeStore>(), timeoutSeconds: 1);
 
         Assert.ThrowsAsync<FetchInfrastructureUnavailableException>(async () =>
             await client.GetPageHtml(ItemUrl, CancellationToken.None));
@@ -144,14 +145,14 @@ public class FetcherScrapeClientTests
     public void Should_propagate_caller_cancellation()
     {
         var handler = new StubFetcherHandler(neverResponds: true);
-        var outcomeMonitor = Substitute.For<IFetchOutcomeMonitor>();
-        var client = CreateClient(handler, outcomeMonitor, timeoutSeconds: 30);
+        var outcomeStore = Substitute.For<IFetchOutcomeStore>();
+        var client = CreateClient(handler, outcomeStore, timeoutSeconds: 30);
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
         Assert.CatchAsync<OperationCanceledException>(async () =>
             await client.GetPageHtml(ItemUrl, cts.Token));
-        outcomeMonitor.DidNotReceiveWithAnyArgs().Record(default);
+        _ = outcomeStore.DidNotReceiveWithAnyArgs().RecordOutcome(default, default);
     }
 
     private static HttpResponseMessage Json(string body, HttpStatusCode statusCode = HttpStatusCode.OK) => new(statusCode)
