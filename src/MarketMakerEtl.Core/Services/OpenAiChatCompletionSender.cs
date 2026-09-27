@@ -21,41 +21,90 @@ internal static class OpenAiChatCompletionSender
 
         for (var attempt = 0; ; attempt++)
         {
-            var response = await PostOnce(http, options, body, deadline, ct);
-            if (response.IsSuccessStatusCode)
+            var outcome = await Attempt(http, options, body, deadline, ct);
+            if (outcome.Content is not null)
             {
-                var envelope = await response.Content.ReadAsStringAsync(deadline.Token);
-                return ExtractMessageContent(envelope);
+                return outcome.Content;
             }
 
-            if (!IsRetryable(response.StatusCode) || attempt >= MaxAttempts - 1)
+            if (attempt >= MaxAttempts - 1 || !outcome.Retryable)
             {
-                var errorBody = await TryReadBody(response, deadline.Token);
-                throw new ListingClassifierException(
-                    $"OpenAI returned {(int)response.StatusCode} {response.ReasonPhrase}: {errorBody}");
+                throw outcome.Failure!;
             }
 
-            await Task.Delay(ComputeBackoff(attempt), timeProvider, deadline.Token);
+            await Delay(ComputeBackoff(attempt), timeProvider, deadline, options, ct);
+        }
+    }
+
+    private static async Task<AttemptOutcome> Attempt(
+        HttpClient http, OpenAiOptions options, JsonObject body, CancellationTokenSource deadline, CancellationToken ct)
+    {
+        HttpResponseMessage response;
+        try
+        {
+            response = await PostOnce(http, options, body, deadline.Token);
+        }
+        catch (HttpRequestException ex)
+        {
+            return AttemptOutcome.Failed(
+                new ListingClassifierException($"OpenAI request failed: {ex.Message}", ex), retryable: true);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return AttemptOutcome.Failed(BuildTimeout(options), retryable: false);
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            var envelope = await ReadResponseBody(response, deadline, options, ct);
+            return AttemptOutcome.Succeeded(ExtractMessageContent(envelope));
+        }
+
+        var errorBody = await TryReadBody(response, deadline.Token);
+        return AttemptOutcome.Failed(
+            new ListingClassifierException($"OpenAI returned {(int)response.StatusCode} {response.ReasonPhrase}: {errorBody}"),
+            retryable: IsRetryable(response.StatusCode));
+    }
+
+    private static async Task<string> ReadResponseBody(
+        HttpResponseMessage response, CancellationTokenSource deadline, OpenAiOptions options, CancellationToken ct)
+    {
+        try
+        {
+            return await response.Content.ReadAsStringAsync(deadline.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw BuildTimeout(options);
+        }
+    }
+
+    private static async Task Delay(
+        TimeSpan delay, TimeProvider timeProvider, CancellationTokenSource deadline, OpenAiOptions options, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(delay, timeProvider, deadline.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw BuildTimeout(options);
         }
     }
 
     private static async Task<HttpResponseMessage> PostOnce(
-        HttpClient http, OpenAiOptions options, JsonObject body, CancellationTokenSource deadline, CancellationToken ct)
+        HttpClient http, OpenAiOptions options, JsonObject body, CancellationToken ct)
     {
-        try
+        using var request = new HttpRequestMessage(HttpMethod.Post, ChatCompletionsUrl)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, ChatCompletionsUrl)
-            {
-                Content = JsonContent.Create(body)
-            };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
-            return await http.SendAsync(request, deadline.Token);
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            throw ListingClassifierException.Timeout($"OpenAI request timed out after {options.TimeoutSeconds}s.");
-        }
+            Content = JsonContent.Create(body)
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
+        return await http.SendAsync(request, ct);
     }
+
+    private static ListingClassifierException BuildTimeout(OpenAiOptions options) =>
+        ListingClassifierException.Timeout($"OpenAI request timed out after {options.TimeoutSeconds}s.");
 
     private static string ExtractMessageContent(string envelope)
     {
@@ -94,5 +143,19 @@ internal static class OpenAiChatCompletionSender
         {
             return string.Empty;
         }
+    }
+
+    private sealed class AttemptOutcome
+    {
+        public string? Content { get; private init; }
+
+        public ListingClassifierException? Failure { get; private init; }
+
+        public bool Retryable { get; private init; }
+
+        public static AttemptOutcome Succeeded(string content) => new() { Content = content };
+
+        public static AttemptOutcome Failed(ListingClassifierException failure, bool retryable) =>
+            new() { Failure = failure, Retryable = retryable };
     }
 }

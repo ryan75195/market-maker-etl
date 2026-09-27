@@ -1,6 +1,5 @@
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
-using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Models.Scheduling;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
@@ -11,7 +10,7 @@ using static MarketMakerEtl.Core.ConfigurationValueReader;
 
 namespace MarketMakerEtl.Core;
 
-public static class ServiceCollectionExtensions
+public static partial class ServiceCollectionExtensions
 {
     private const string DefaultFetcherBaseUrl = "http://127.0.0.1:8766";
     private const int DefaultFetcherTimeoutSeconds = 240;
@@ -40,16 +39,7 @@ public static class ServiceCollectionExtensions
     private const bool DefaultFamilyInScopeOnly = true;
     private const int DefaultDetailBacklogInfrastructureBackoffBaseSeconds = 1;
     private const int DefaultDetailBacklogInfrastructureBackoffMaxSeconds = 1800;
-    private const int DefaultClassifierTickMinutes = 5;
-    private const int DefaultClassifierMaxListingsPerTick = 2000;
-    private const int DefaultClassifierDegradedAfterFailedBatches = 5;
-    private const double DefaultClassificationReviewThreshold = 0.9;
     private const int DefaultBusyTimeoutMs = 10000;
-    private const string DefaultOpenAiModel = "gpt-6-luna";
-    private const string DefaultOpenAiReasoningEffort = "low";
-    private const int DefaultOpenAiBatchSize = 25;
-    private const int DefaultOpenAiMaxConcurrency = 6;
-    private const int DefaultOpenAiTimeoutSeconds = 120;
 
     public static IServiceCollection AddCoreServices(this IServiceCollection services)
     {
@@ -119,6 +109,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IListingRefreshSchedulingService, ListingRefreshSchedulingService>();
         services.AddSingleton<IDetailBacklogService, DetailBacklogService>();
         services.AddSingleton<IListingClassificationStore, ListingClassificationStore>();
+        services.AddSingleton<IClassificationThrottleService, ClassificationThrottleService>();
         services.AddSingleton<IListingClassificationService, ListingClassificationService>();
         services.AddSingleton<IClassificationReviewStore, ClassificationReviewStore>();
         services.AddSingleton<IPriceGroupListingStore, PriceGroupListingStore>();
@@ -204,24 +195,6 @@ public static class ServiceCollectionExtensions
                 configuration,
                 "DetailBacklog:InfrastructureBackoffMaxSeconds",
                 DefaultDetailBacklogInfrastructureBackoffMaxSeconds));
-
-    private static ClassifierOptions BuildClassifierOptions(IConfiguration? configuration) =>
-        new(
-            ReadInt(configuration, "Classifier:TickMinutes", DefaultClassifierTickMinutes),
-            ReadInt(configuration, "Classifier:MaxListingsPerTick", DefaultClassifierMaxListingsPerTick),
-            ReadInt(configuration, "Classifier:DegradedAfterFailedBatches", DefaultClassifierDegradedAfterFailedBatches));
-
-    private static ClassificationReviewOptions BuildClassificationReviewOptions(IConfiguration? configuration) =>
-        new(ReadDouble(configuration, "Classification:ReviewThreshold", DefaultClassificationReviewThreshold));
-
-    private static OpenAiOptions BuildOpenAiOptions(IConfiguration? configuration) =>
-        new(
-            ReadOptionalString(configuration, "OpenAI:ApiKey") ?? string.Empty,
-            ReadString(configuration, "OpenAI:Model", DefaultOpenAiModel),
-            ReadString(configuration, "OpenAI:ReasoningEffort", DefaultOpenAiReasoningEffort),
-            ReadInt(configuration, "OpenAI:BatchSize", DefaultOpenAiBatchSize),
-            ReadInt(configuration, "OpenAI:MaxConcurrency", DefaultOpenAiMaxConcurrency),
-            ReadInt(configuration, "OpenAI:TimeoutSeconds", DefaultOpenAiTimeoutSeconds));
 
     private static int BuildBusyTimeoutMs(IConfiguration? configuration) =>
         ReadInt(configuration, "Database:BusyTimeoutMs", DefaultBusyTimeoutMs);

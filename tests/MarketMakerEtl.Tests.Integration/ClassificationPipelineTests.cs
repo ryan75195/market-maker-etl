@@ -173,10 +173,12 @@ public class ClassificationPipelineTests
     {
         var families = new ProductFamilyStore(factory);
         var classifications = new ListingClassificationStore(factory);
-        var options = new ClassifierOptions(5, 2000, 5);
+        var options = new ClassifierOptions(5, 2000, 5, 5, 240);
         var openAiOptions = new OpenAiOptions("test-key", "gpt-6-luna", "low", 25, 6, 120);
+        var throttle = new ClassificationThrottleService(
+            options, TimeProvider.System, NullLogger<ClassificationThrottleService>.Instance);
         var service = new ListingClassificationService(
-            families, classifications, new StubClassifierClient(), options, openAiOptions);
+            families, classifications, new StubClassifierClient(), throttle, openAiOptions);
         return new ClassificationWorker(service, options, TimeProvider.System, NullLogger<ClassificationWorker>.Instance);
     }
 

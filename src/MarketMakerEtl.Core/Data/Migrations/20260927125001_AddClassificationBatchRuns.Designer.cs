@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace MarketMakerEtl.Core.Data.Migrations
 {
     [DbContext(typeof(EtlDbContext))]
-    [Migration("20260927120929_AddClassificationBatchRuns")]
+    [Migration("20260927125001_AddClassificationBatchRuns")]
     partial class AddClassificationBatchRuns
     {
         /// <inheritdoc />
@@ -126,6 +126,31 @@ namespace MarketMakerEtl.Core.Data.Migrations
                     b.HasIndex("ProductFamilyId", "CreatedUtc");
 
                     b.ToTable("DealSignals", (string)null);
+                });
+
+            modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.FetchOutcomeBucketEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("BucketStartUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BucketStartUtc", "Kind")
+                        .IsUnique();
+
+                    b.ToTable("FetchOutcomeBuckets", (string)null);
                 });
 
             modelBuilder.Entity("MarketMakerEtl.Core.Data.Entities.JobCategoryEntity", b =>

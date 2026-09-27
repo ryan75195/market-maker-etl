@@ -11,27 +11,27 @@ public sealed class ListingClassificationService : IListingClassificationService
     private readonly IProductFamilyStore _families;
     private readonly IListingClassificationStore _classifications;
     private readonly IListingClassifierClient _client;
-    private readonly ClassifierOptions _options;
+    private readonly IClassificationThrottleService _throttle;
     private readonly OpenAiOptions _openAiOptions;
 
     public ListingClassificationService(
         IProductFamilyStore families,
         IListingClassificationStore classifications,
         IListingClassifierClient client,
-        ClassifierOptions options,
+        IClassificationThrottleService throttle,
         OpenAiOptions openAiOptions)
     {
         _families = families;
         _classifications = classifications;
         _client = client;
-        _options = options;
+        _throttle = throttle;
         _openAiOptions = openAiOptions;
     }
 
     public async Task<ClassificationTickResult> ClassifyPending(
         Action<ClassificationBatchFailure> onBatchFailure, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(_openAiOptions.ApiKey))
+        if (string.IsNullOrEmpty(_openAiOptions.ApiKey) || _throttle.IsBackingOffFailures())
         {
             return new ClassificationTickResult(0, 0, 0, []);
         }
@@ -40,7 +40,9 @@ public sealed class ListingClassificationService : IListingClassificationService
             .Where(job => job.ProductFamilyId.HasValue)
             .ToList();
 
-        return await ClassifyJobs(jobs, onBatchFailure, ct);
+        var result = await ClassifyJobs(jobs, onBatchFailure, ct);
+        _throttle.ObserveTickResult(result);
+        return result;
     }
 
     private async Task<ClassificationTickResult> ClassifyJobs(
@@ -50,7 +52,8 @@ public sealed class ListingClassificationService : IListingClassificationService
         var listingsSelected = 0;
         var listingsClassified = 0;
         var failures = new List<ClassificationBatchFailure>();
-        var remainingBudget = _options.MaxListingsPerTick;
+        var probing = _throttle.IsProbingAfterFailures();
+        var remainingBudget = _throttle.ResolveTickBudget();
 
         foreach (var job in jobs)
         {
@@ -71,6 +74,11 @@ public sealed class ListingClassificationService : IListingClassificationService
             listingsClassified += outcome.Classified;
             remainingBudget -= outcome.Selected;
             failures.AddRange(outcome.Failures);
+
+            if (probing && outcome.Selected > 0 && outcome.Classified == 0)
+            {
+                break;
+            }
         }
 
         return new ClassificationTickResult(jobsProcessed, listingsSelected, listingsClassified, failures);

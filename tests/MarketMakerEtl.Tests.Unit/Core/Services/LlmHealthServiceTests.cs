@@ -8,7 +8,7 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 [TestFixture]
 public class LlmHealthServiceTests
 {
-    private static readonly ClassifierOptions ClassifierOpts = new(5, 2000, 5);
+    private static readonly ClassifierOptions ClassifierOpts = new(5, 2000, 5, 5, 240);
     private static readonly OpenAiOptions OpenAiOpts = new("test-key", "gpt-6-luna", "low", 25, 6, 120);
 
     [Test]

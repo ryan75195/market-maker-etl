@@ -9,7 +9,7 @@ namespace MarketMakerEtl.Tests.Unit.Etl.Workers;
 [TestFixture]
 public class ClassificationWorkerTests
 {
-    private static ClassifierOptions Options => new(5, 2000, 5);
+    private static ClassifierOptions Options => new(5, 2000, 5, 5, 240);
 
     [Test]
     public async Task Should_run_a_classification_tick_without_throwing()
