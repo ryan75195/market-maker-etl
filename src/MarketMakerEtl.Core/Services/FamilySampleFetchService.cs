@@ -9,16 +9,15 @@ namespace MarketMakerEtl.Core.Services;
 public sealed class FamilySampleFetchService : IFamilySampleFetchService
 {
     private const int MaxDetailConcurrency = 5;
+    private const int SearchPagesPerStatus = 2;
+    private const int SearchOffsetStep = 100;
 
-    private readonly ISearchPageService _search;
     private readonly IScrapeClient _client;
     private readonly MarketplaceAdapters _adapters;
     private readonly OnboardingOptions _options;
 
-    public FamilySampleFetchService(
-        ISearchPageService search, IScrapeClient client, MarketplaceAdapters adapters, OnboardingOptions options)
+    public FamilySampleFetchService(IScrapeClient client, MarketplaceAdapters adapters, OnboardingOptions options)
     {
-        _search = search;
         _client = client;
         _adapters = adapters;
         _options = options;
@@ -26,9 +25,8 @@ public sealed class FamilySampleFetchService : IFamilySampleFetchService
 
     public async Task<IReadOnlyList<FamilySampleListing>> FetchSample(string searchTerm, CancellationToken ct)
     {
-        var knownSold = new HashSet<string>(StringComparer.Ordinal);
-        var collected = await _search.Collect(searchTerm, Marketplace.Mercari, knownSold, ct);
-        var candidates = collected.Listings.Take(_options.MaxSampleListings).ToList();
+        var pooled = await FetchSearchPool(searchTerm, ct);
+        var candidates = SelectStratifiedSample(pooled);
         if (candidates.Count == 0)
         {
             return [];
@@ -38,6 +36,106 @@ public sealed class FamilySampleFetchService : IFamilySampleFetchService
         using var gate = new SemaphoreSlim(MaxDetailConcurrency);
         var results = await Task.WhenAll(candidates.Select(listing => FetchOne(listing, parser, gate, ct)));
         return results.ToList();
+    }
+
+    private async Task<IReadOnlyList<ListingSummary>> FetchSearchPool(string searchTerm, CancellationToken ct)
+    {
+        var urls = SelectUrlService();
+        var parser = SelectSearchParser();
+        var pooled = new Dictionary<string, ListingSummary>(StringComparer.Ordinal);
+
+        foreach (var sold in new[] { false, true })
+        {
+            for (var page = 0; page < SearchPagesPerStatus; page++)
+            {
+                await FetchSearchPage(searchTerm, sold, page * SearchOffsetStep, urls, parser, pooled, ct);
+            }
+        }
+
+        return pooled.Values.ToList();
+    }
+
+    private async Task FetchSearchPage(
+        string searchTerm,
+        bool sold,
+        int offset,
+        IPriceBandSearchUrlService urls,
+        ISearchPageParser parser,
+        Dictionary<string, ListingSummary> pooled,
+        CancellationToken ct)
+    {
+        var url = urls.BuildSearch(searchTerm, sold, minPrice: null, maxPrice: null, offset);
+        var html = await _client.GetPageHtml(url, ct);
+        var pageResult = parser.Parse(html);
+        foreach (var listing in pageResult.Listings)
+        {
+            pooled[listing.ListingId] = listing;
+        }
+    }
+
+    private IPriceBandSearchUrlService SelectUrlService() =>
+        _adapters.UrlServices.SingleOrDefault(service => service.Marketplace == Marketplace.Mercari)
+            as IPriceBandSearchUrlService
+        ?? throw new InvalidOperationException(
+            "Family sample fetch requires a Mercari search URL service that supports price-band offsets.");
+
+    private ISearchPageParser SelectSearchParser() =>
+        _adapters.SearchParsers.SingleOrDefault(parser => parser.Marketplace == Marketplace.Mercari)
+        ?? throw new InvalidOperationException("No search parser registered for Mercari.");
+
+    private IReadOnlyList<ListingSummary> SelectStratifiedSample(IReadOnlyList<ListingSummary> pooled)
+    {
+        var active = pooled.Where(listing => !listing.IsSold).OrderBy(PriceKey).ToList();
+        var sold = pooled.Where(listing => listing.IsSold).OrderBy(PriceKey).ToList();
+
+        var activeTarget = _options.MaxSampleListings / 2;
+        var soldTarget = _options.MaxSampleListings - activeTarget;
+        var activeSample = PickEvenlySpaced(active, activeTarget);
+        var soldSample = PickEvenlySpaced(sold, soldTarget);
+
+        var shortfall = _options.MaxSampleListings - activeSample.Count - soldSample.Count;
+        if (shortfall <= 0)
+        {
+            return activeSample.Concat(soldSample).ToList();
+        }
+
+        var activeLeftover = active.Except(activeSample).ToList();
+        var soldLeftover = sold.Except(soldSample).ToList();
+        var backfillSource = activeLeftover.Count >= soldLeftover.Count ? activeLeftover : soldLeftover;
+        var backfill = PickEvenlySpaced(backfillSource, shortfall);
+        return activeSample.Concat(soldSample).Concat(backfill).ToList();
+    }
+
+    private static decimal PriceKey(ListingSummary listing) => listing.Price ?? decimal.MaxValue;
+
+    private static IReadOnlyList<ListingSummary> PickEvenlySpaced(IReadOnlyList<ListingSummary> sorted, int take)
+    {
+        if (take <= 0 || sorted.Count == 0)
+        {
+            return [];
+        }
+
+        if (sorted.Count <= take)
+        {
+            return sorted;
+        }
+
+        var lastIndex = sorted.Count - 1;
+        var divisor = Math.Max(take - 1, 1);
+        var usedIndices = new HashSet<int>();
+        var picked = new List<ListingSummary>(take);
+        for (var i = 0; i < take; i++)
+        {
+            var index = (int)Math.Round(i * (double)lastIndex / divisor);
+            while (!usedIndices.Add(index) && index < lastIndex)
+            {
+                index++;
+            }
+
+            picked.Add(sorted[index]);
+        }
+
+        return picked;
     }
 
     private async Task<FamilySampleListing> FetchOne(
