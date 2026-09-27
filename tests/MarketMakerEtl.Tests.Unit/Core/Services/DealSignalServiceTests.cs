@@ -271,7 +271,7 @@ public class DealSignalServiceTests
     {
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         var reviewOptions = new ClassificationReviewOptions();
-        var priceGroupOptions = new PriceGroupOptions(0m, 0m);
+        var priceGroupOptions = new PriceGroupOptions(0m, 0m, 0m);
         var listingStore = new PriceGroupListingStore(factory, reviewOptions);
         var priceGroupQueryService = new PriceGroupQueryService(listingStore, TimeProvider.System, priceGroupOptions);
         var familyStore = new ProductFamilyStore(factory);

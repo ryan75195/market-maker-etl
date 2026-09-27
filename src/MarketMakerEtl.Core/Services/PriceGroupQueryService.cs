@@ -211,7 +211,7 @@ public sealed class PriceGroupQueryService : IPriceGroupQueryService
         PriceGroupOptions options)
     {
         var landedPrice = price.HasValue
-            ? PriceGroupNetCalculator.ComputeLandedPrice(price.Value, candidate.ShippingPayer, candidate.ShippingCost)
+            ? PriceGroupNetCalculator.ComputeLandedPrice(price.Value, candidate.ShippingPayer, candidate.ShippingCost, options)
             : (decimal?)null;
         var netProceeds = price.HasValue
             ? PriceGroupNetCalculator.ComputeNetProceeds(price.Value, candidate.ShippingPayer, candidate.ShippingCost, options)

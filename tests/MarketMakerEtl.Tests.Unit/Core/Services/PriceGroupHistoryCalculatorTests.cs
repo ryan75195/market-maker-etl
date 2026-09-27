@@ -9,7 +9,7 @@ public class PriceGroupHistoryCalculatorTests
     private static readonly DateTime NowUtc = new(2026, 9, 30, 15, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime MondayOfCurrentWeek = new(2026, 9, 28, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime MondayOfPreviousWeek = new(2026, 9, 21, 0, 0, 0, DateTimeKind.Utc);
-    private static readonly PriceGroupOptions Options = new(0.10m, 0.50m);
+    private static readonly PriceGroupOptions Options = new(0.10m, 0.50m, 0m);
 
     [Test]
     public void Should_align_week_buckets_to_utc_monday_and_place_a_sunday_sale_in_the_prior_week()

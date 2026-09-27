@@ -14,17 +14,19 @@ public class PriceGroupOptionsFactoryTests
         Assert.Multiple(() =>
         {
             Assert.That(options.SellerFeeRate, Is.EqualTo(0.10m));
-            Assert.That(options.SellerFeeFixed, Is.EqualTo(0.50m));
+            Assert.That(options.SellerFeeFixed, Is.EqualTo(0m));
+            Assert.That(options.BuyerFeeRate, Is.EqualTo(0.036m));
         });
     }
 
     [Test]
-    public void Should_read_seller_fee_rate_and_fixed_fee_from_configuration()
+    public void Should_read_seller_fee_rate_and_fixed_fee_and_buyer_fee_rate_from_configuration()
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["PriceGroups:SellerFeeRate"] = "0.12",
-            ["PriceGroups:SellerFeeFixed"] = "0.30"
+            ["PriceGroups:SellerFeeFixed"] = "0.30",
+            ["PriceGroups:BuyerFeeRate"] = "0.05"
         }).Build();
 
         var options = PriceGroupOptionsFactory.Build(configuration);
@@ -33,6 +35,7 @@ public class PriceGroupOptionsFactoryTests
         {
             Assert.That(options.SellerFeeRate, Is.EqualTo(0.12m));
             Assert.That(options.SellerFeeFixed, Is.EqualTo(0.30m));
+            Assert.That(options.BuyerFeeRate, Is.EqualTo(0.05m));
         });
     }
 
@@ -44,7 +47,8 @@ public class PriceGroupOptionsFactoryTests
         Assert.Multiple(() =>
         {
             Assert.That(options.SellerFeeRate, Is.EqualTo(0.10m));
-            Assert.That(options.SellerFeeFixed, Is.EqualTo(0.50m));
+            Assert.That(options.SellerFeeFixed, Is.EqualTo(0m));
+            Assert.That(options.BuyerFeeRate, Is.EqualTo(0.036m));
         });
     }
 }
