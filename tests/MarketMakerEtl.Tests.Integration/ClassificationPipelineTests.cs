@@ -179,7 +179,8 @@ public class ClassificationPipelineTests
             options, TimeProvider.System, NullLogger<ClassificationThrottleService>.Instance);
         var service = new ListingClassificationService(
             families, classifications, new StubClassifierClient(), throttle, openAiOptions);
-        return new ClassificationWorker(service, options, TimeProvider.System, NullLogger<ClassificationWorker>.Instance);
+        return new ClassificationWorker(
+            service, new StubBudgetService(), options, TimeProvider.System, NullLogger<ClassificationWorker>.Instance);
     }
 
     private static string FindSolutionRoot()
@@ -198,9 +199,18 @@ public class ClassificationPipelineTests
         throw new InvalidOperationException("Could not find solution root (no .slnx file found)");
     }
 
+    private sealed class StubBudgetService : IOpenAiBudgetService
+    {
+        public decimal MonthlyBudgetUsd => 20m;
+
+        public Task<decimal> GetMonthToDateSpend(CancellationToken ct) => Task.FromResult(0m);
+
+        public Task<bool> IsExhausted(CancellationToken ct) => Task.FromResult(false);
+    }
+
     private sealed class StubClassifierClient : IListingClassifierClient
     {
-        public Task<ClassifyResponse> Classify(ClassifyRequest request, CancellationToken ct)
+        public Task<ClassifyResponse> Classify(ClassifyRequest request, OpenAiUsagePurpose purpose, CancellationToken ct)
         {
             var answers = new Dictionary<string, ClassifyAnswer>
             {

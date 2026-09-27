@@ -73,7 +73,8 @@ public class SystemHealthServiceTests
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>())
             .Returns([new FamilyBacklogHealthView(1, "ps5-controller", 0, 0, FamilyState.Active, false)]);
         llmHealth.GetLlmHealth(Arg.Any<CancellationToken>())
-            .Returns(new LlmHealthView("gpt-6-luna", true, 0, 5, Degraded: true));
+            .Returns(new LlmHealthView(
+                "gpt-6-luna", true, 0, 5, Degraded: true, MonthToDateSpendUsd: 0m, MonthlyBudgetUsd: 20m, BudgetExhausted: false));
         var service = new SystemHealthService(jobHealth, familyHealth, fetcherHealth, llmHealth);
 
         var health = await service.GetHealth(CancellationToken.None);
@@ -95,12 +96,36 @@ public class SystemHealthServiceTests
         jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([]);
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>()).Returns([]);
         llmHealth.GetLlmHealth(Arg.Any<CancellationToken>())
-            .Returns(new LlmHealthView("gpt-6-luna", true, 0, 5, Degraded: true));
+            .Returns(new LlmHealthView(
+                "gpt-6-luna", true, 0, 5, Degraded: true, MonthToDateSpendUsd: 0m, MonthlyBudgetUsd: 20m, BudgetExhausted: false));
         var service = new SystemHealthService(jobHealth, familyHealth, fetcherHealth, llmHealth);
 
         var health = await service.GetHealth(CancellationToken.None);
 
         Assert.That(health.Status, Is.EqualTo(SystemHealthStatus.Ok));
+    }
+
+    [Test]
+    public async Task Should_report_degraded_when_the_monthly_openai_budget_is_exhausted()
+    {
+        var jobHealth = Substitute.For<IJobHealthService>();
+        var familyHealth = Substitute.For<IFamilyBacklogHealthService>();
+        var fetcherHealth = HealthyFetcher();
+        var llmHealth = Substitute.For<ILlmHealthService>();
+        jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([]);
+        familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>()).Returns([]);
+        llmHealth.GetLlmHealth(Arg.Any<CancellationToken>())
+            .Returns(new LlmHealthView(
+                "gpt-6-luna", true, 0, 0, Degraded: false, MonthToDateSpendUsd: 20m, MonthlyBudgetUsd: 20m, BudgetExhausted: true));
+        var service = new SystemHealthService(jobHealth, familyHealth, fetcherHealth, llmHealth);
+
+        var health = await service.GetHealth(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(health.Status, Is.EqualTo(SystemHealthStatus.Degraded));
+            Assert.That(health.Llm.BudgetExhausted, Is.True);
+        });
     }
 
     [Test]
@@ -176,7 +201,8 @@ public class SystemHealthServiceTests
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>())
             .Returns([new FamilyBacklogHealthView(1, "ps5-controller", 3, 2, FamilyState.Active, false)]);
         llmHealth.GetLlmHealth(Arg.Any<CancellationToken>())
-            .Returns(new LlmHealthView("gpt-6-luna", true, 2, 1, Degraded: false));
+            .Returns(new LlmHealthView(
+                "gpt-6-luna", true, 2, 1, Degraded: false, MonthToDateSpendUsd: 0m, MonthlyBudgetUsd: 20m, BudgetExhausted: false));
         var service = new SystemHealthService(jobHealth, familyHealth, fetcherHealth, llmHealth);
 
         var health = await service.GetHealth(CancellationToken.None);
@@ -206,7 +232,8 @@ public class SystemHealthServiceTests
     {
         var llmHealth = Substitute.For<ILlmHealthService>();
         llmHealth.GetLlmHealth(Arg.Any<CancellationToken>())
-            .Returns(new LlmHealthView("gpt-6-luna", true, 1, 0, Degraded: false));
+            .Returns(new LlmHealthView(
+                "gpt-6-luna", true, 1, 0, Degraded: false, MonthToDateSpendUsd: 0m, MonthlyBudgetUsd: 20m, BudgetExhausted: false));
         return llmHealth;
     }
 

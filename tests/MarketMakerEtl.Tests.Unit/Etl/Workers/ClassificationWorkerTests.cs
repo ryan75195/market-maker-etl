@@ -11,6 +11,13 @@ public class ClassificationWorkerTests
 {
     private static ClassifierOptions Options => new(5, 2000, 5, 5, 240);
 
+    private static IOpenAiBudgetService NotExhaustedBudget()
+    {
+        var budget = Substitute.For<IOpenAiBudgetService>();
+        budget.IsExhausted(Arg.Any<CancellationToken>()).Returns(false);
+        return budget;
+    }
+
     [Test]
     public async Task Should_run_a_classification_tick_without_throwing()
     {
@@ -22,6 +29,21 @@ public class ClassificationWorkerTests
         await worker.RunOnce(CancellationToken.None);
 
         await classification.Received(1)
+            .ClassifyPending(Arg.Any<Action<ClassificationBatchFailure>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_pause_without_calling_classify_pending_when_the_budget_is_exhausted()
+    {
+        var classification = Substitute.For<IListingClassificationService>();
+        var budget = Substitute.For<IOpenAiBudgetService>();
+        budget.IsExhausted(Arg.Any<CancellationToken>()).Returns(true);
+        budget.MonthlyBudgetUsd.Returns(20m);
+        var worker = CreateWorker(classification, budget);
+
+        await worker.RunOnce(CancellationToken.None);
+
+        await classification.DidNotReceive()
             .ClassifyPending(Arg.Any<Action<ClassificationBatchFailure>>(), Arg.Any<CancellationToken>());
     }
 
@@ -51,6 +73,7 @@ public class ClassificationWorkerTests
         Assert.That(async () => await worker.RunOnce(CancellationToken.None), Throws.Nothing);
     }
 
-    private static ClassificationWorker CreateWorker(IListingClassificationService classification) =>
-        new(classification, Options, TimeProvider.System, NullLogger<ClassificationWorker>.Instance);
+    private static ClassificationWorker CreateWorker(
+        IListingClassificationService classification, IOpenAiBudgetService? budget = null) =>
+        new(classification, budget ?? NotExhaustedBudget(), Options, TimeProvider.System, NullLogger<ClassificationWorker>.Instance);
 }

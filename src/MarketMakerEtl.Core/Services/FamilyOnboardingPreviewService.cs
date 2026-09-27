@@ -35,7 +35,7 @@ public sealed class FamilyOnboardingPreviewService : IFamilyOnboardingPreviewSer
             .ToList();
 
         var request = new ClassifyRequest(family.ModelName, questions, states, taxonomy.Guidance);
-        var response = await _classifier.Classify(request, ct);
+        var response = await _classifier.Classify(request, OpenAiUsagePurpose.OnboardingPreview, ct);
         var preview = OnboardingPreviewBuilder.Build(questions.Keys, snapshot.Sample, response);
         await _onboarding.SavePreview(familyId, preview, ct);
     }

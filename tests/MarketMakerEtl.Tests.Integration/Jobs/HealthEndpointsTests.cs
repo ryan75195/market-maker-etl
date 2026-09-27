@@ -3,6 +3,7 @@ using MarketMakerEtl.Api;
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Models.Families;
 using MarketMakerEtl.Core.Models.Health;
 using MarketMakerEtl.Core.Models.Jobs;
@@ -171,7 +172,39 @@ public class HealthEndpointsTests
         });
     }
 
-    private HttpClient CreateClient(bool fetcherReachable = true, string? apiKey = null)
+    [Test]
+    public async Task Should_report_month_to_date_spend_and_budget_when_within_budget()
+    {
+        var client = CreateClient(monthlyBudgetUsd: 20m);
+        await SeedOpenAiUsage(5m);
+
+        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response!.Llm.MonthToDateSpendUsd, Is.EqualTo(5m));
+            Assert.That(response.Llm.MonthlyBudgetUsd, Is.EqualTo(20m));
+            Assert.That(response.Llm.BudgetExhausted, Is.False);
+            Assert.That(response.Status, Is.EqualTo(SystemHealthStatus.Ok));
+        });
+    }
+
+    [Test]
+    public async Task Should_report_degraded_when_the_monthly_openai_budget_is_exhausted()
+    {
+        var client = CreateClient(monthlyBudgetUsd: 5m);
+        await SeedOpenAiUsage(5m);
+
+        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response!.Llm.BudgetExhausted, Is.True);
+            Assert.That(response.Status, Is.EqualTo(SystemHealthStatus.Degraded));
+        });
+    }
+
+    private HttpClient CreateClient(bool fetcherReachable = true, string? apiKey = null, decimal? monthlyBudgetUsd = null)
     {
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -185,6 +218,11 @@ public class HealthEndpointsTests
                     if (apiKey is not null)
                     {
                         settings["OpenAI:ApiKey"] = apiKey;
+                    }
+
+                    if (monthlyBudgetUsd is decimal budget)
+                    {
+                        settings["OpenAI:MonthlyBudgetUsd"] = budget.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     }
 
                     configuration.AddInMemoryCollection(settings);
@@ -295,6 +333,25 @@ public class HealthEndpointsTests
             IsEnabled = true,
             CreatedUtc = DateTime.UtcNow,
             ProductFamilyId = family.Id
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedOpenAiUsage(decimal costUsd)
+    {
+        var services = new ServiceCollection();
+        services.AddDbContextFactory<EtlDbContext>(options => options.UseSqlite($"Data Source={_databasePath}"));
+        await using var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        db.OpenAiUsageRecords.Add(new OpenAiUsageRecordEntity
+        {
+            RecordedUtc = DateTime.UtcNow,
+            Model = "gpt-6-luna",
+            Purpose = OpenAiUsagePurpose.Classification,
+            PromptTokens = 100,
+            CompletionTokens = 100,
+            CostUsd = costUsd
         });
         await db.SaveChangesAsync();
     }

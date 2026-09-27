@@ -118,7 +118,7 @@ public sealed class ListingClassificationService : IListingClassificationService
         try
         {
             var request = BuildRequest(modelName, taxonomy, targets);
-            var response = await _client.Classify(request, ct);
+            var response = await _client.Classify(request, OpenAiUsagePurpose.Classification, ct);
             var humanChoicesByListing = await _classifications.GetHumanChoices(
                 targets.Select(target => target.ListingEntityId).ToList(), ct)
                 ?? new Dictionary<int, IReadOnlyDictionary<string, string>>();

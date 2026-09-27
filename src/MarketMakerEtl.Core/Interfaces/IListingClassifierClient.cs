@@ -4,5 +4,5 @@ namespace MarketMakerEtl.Core.Interfaces;
 
 public interface IListingClassifierClient
 {
-    Task<ClassifyResponse> Classify(ClassifyRequest request, CancellationToken ct);
+    Task<ClassifyResponse> Classify(ClassifyRequest request, OpenAiUsagePurpose purpose, CancellationToken ct);
 }

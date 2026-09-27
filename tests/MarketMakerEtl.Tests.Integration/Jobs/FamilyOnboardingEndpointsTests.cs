@@ -5,6 +5,7 @@ using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Models.Families;
 using MarketMakerEtl.Core.Models.Onboarding;
+using MarketMakerEtl.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using NSubstitute;
@@ -146,6 +147,23 @@ public class FamilyOnboardingEndpointsTests : JobsApiTestBase
         });
     }
 
+    [Test]
+    public async Task Should_return_too_many_requests_when_the_openai_budget_is_exhausted()
+    {
+        using var throttledFactory = Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IFamilyDraftClient>();
+                services.AddSingleton(BuildBudgetExceededDraftClientStub());
+            }));
+        using var throttledClient = throttledFactory.CreateClient();
+
+        var response = await throttledClient.PostAsJsonAsync(
+            "/api/families/onboard", new StartOnboardingRequest("PS5 Controller", "ps5 controller"));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.TooManyRequests));
+    }
+
     private async Task<HttpResponseMessage> StartOnboardingResponse() =>
         await Client.PostAsJsonAsync(
             "/api/families/onboard", new StartOnboardingRequest("PS5 Controller", "ps5 controller"));
@@ -164,6 +182,14 @@ public class FamilyOnboardingEndpointsTests : JobsApiTestBase
         return stub;
     }
 
+    private static IFamilyDraftClient BuildBudgetExceededDraftClientStub()
+    {
+        var stub = Substitute.For<IFamilyDraftClient>();
+        stub.DraftTaxonomy(Arg.Any<FamilyDraftPrompt>(), Arg.Any<CancellationToken>())
+            .Returns<FamilyDraftResult>(_ => throw OpenAiBudgetExceededException.ForSpend(20m, 20m));
+        return stub;
+    }
+
     private static IFamilySampleFetchService BuildSampleFetchStub()
     {
         var stub = Substitute.For<IFamilySampleFetchService>();
@@ -179,7 +205,7 @@ public class FamilyOnboardingEndpointsTests : JobsApiTestBase
     private static IListingClassifierClient BuildClassifierStub()
     {
         var stub = Substitute.For<IListingClassifierClient>();
-        stub.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+        stub.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => BuildClassifyResponse(callInfo.Arg<ClassifyRequest>()));
         return stub;
     }

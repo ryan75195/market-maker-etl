@@ -1,10 +1,12 @@
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
+using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Models.Onboarding;
 using MarketMakerEtl.Core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
@@ -20,16 +22,29 @@ public class OpenAiFamilyDraftClientTests
     private static OpenAiOptions Options() => new("test-key", "gpt-6-luna", "low", 25, 6, 30);
 
     private static OnboardingOptions DraftOptions() =>
-        new("gpt-6-sol", "medium", 2.0m, 10.0m, 60, 500, 180);
+        new("gpt-6-sol", "medium", 60, 500, 180);
 
     private static FamilyDraftPrompt Prompt() =>
         new("PS5 Controller", "ps5 controller", [], null, null);
+
+    private static IOpenAiChatCompletionSender CreateSender()
+    {
+        var budget = Substitute.For<IOpenAiBudgetService>();
+        budget.IsExhausted(Arg.Any<CancellationToken>()).Returns(false);
+        var pricing = new OpenAiPricingOptions(
+            new Dictionary<string, OpenAiModelPricing>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["gpt-6-sol"] = new OpenAiModelPricing(2.0m, 10.0m)
+            },
+            new OpenAiModelPricing(2.0m, 10.0m));
+        return new OpenAiChatCompletionSender(TimeProvider.System, budget, Substitute.For<IOpenAiUsageStore>(), pricing);
+    }
 
     [Test]
     public async Task Should_draft_a_taxonomy_and_compute_cost_from_token_usage()
     {
         var handler = new StubHandler(_ => SuccessResponse(ValidTaxonomyContent, 120, 340));
-        var client = new OpenAiFamilyDraftClient(new HttpClient(handler), Options(), DraftOptions(), TimeProvider.System, NullLogger<OpenAiFamilyDraftClient>.Instance);
+        var client = new OpenAiFamilyDraftClient(new HttpClient(handler), Options(), DraftOptions(), CreateSender(), NullLogger<OpenAiFamilyDraftClient>.Instance);
 
         var result = await client.DraftTaxonomy(Prompt(), CancellationToken.None);
 
@@ -52,7 +67,7 @@ public class OpenAiFamilyDraftClientTests
             capturedBody = await request.Content!.ReadAsStringAsync();
             return SuccessResponse(ValidTaxonomyContent, 1, 1);
         });
-        var client = new OpenAiFamilyDraftClient(new HttpClient(handler), Options(), DraftOptions(), TimeProvider.System, NullLogger<OpenAiFamilyDraftClient>.Instance);
+        var client = new OpenAiFamilyDraftClient(new HttpClient(handler), Options(), DraftOptions(), CreateSender(), NullLogger<OpenAiFamilyDraftClient>.Instance);
 
         await client.DraftTaxonomy(Prompt(), CancellationToken.None);
 
@@ -70,7 +85,7 @@ public class OpenAiFamilyDraftClientTests
     public void Should_throw_when_the_drafted_taxonomy_does_not_gate_exactly_one_in_scope_choice()
     {
         var handler = new StubHandler(_ => SuccessResponse(UngatedTaxonomyContent, 1, 1));
-        var client = new OpenAiFamilyDraftClient(new HttpClient(handler), Options(), DraftOptions(), TimeProvider.System, NullLogger<OpenAiFamilyDraftClient>.Instance);
+        var client = new OpenAiFamilyDraftClient(new HttpClient(handler), Options(), DraftOptions(), CreateSender(), NullLogger<OpenAiFamilyDraftClient>.Instance);
 
         Assert.ThrowsAsync<TaxonomyParseException>(
             () => client.DraftTaxonomy(Prompt(), CancellationToken.None));

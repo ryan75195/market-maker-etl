@@ -26,15 +26,22 @@ public static class FamilyOnboardingEndpoints
         IFamilyOnboardingPreviewService preview,
         CancellationToken ct)
     {
-        var family = await drafting.StartOnboarding(request.Name, request.SearchTerm, request.Key, ct);
-        if (family is null)
+        try
         {
-            return Results.Conflict("A product family with that key already exists.");
-        }
+            var family = await drafting.StartOnboarding(request.Name, request.SearchTerm, request.Key, ct);
+            if (family is null)
+            {
+                return Results.Conflict("A product family with that key already exists.");
+            }
 
-        await preview.RunPreview(family.Id, ct);
-        var onboarding = await preview.GetOnboarding(family.Id, ct);
-        return Results.Created($"/api/families/{family.Id}/onboarding", onboarding);
+            await preview.RunPreview(family.Id, ct);
+            var onboarding = await preview.GetOnboarding(family.Id, ct);
+            return Results.Created($"/api/families/{family.Id}/onboarding", onboarding);
+        }
+        catch (OpenAiBudgetExceededException ex)
+        {
+            return BudgetExceededResult(ex);
+        }
     }
 
     private static async Task<IResult> GetOnboarding(
@@ -51,14 +58,21 @@ public static class FamilyOnboardingEndpoints
         IFamilyOnboardingPreviewService preview,
         CancellationToken ct)
     {
-        var family = await drafting.Regenerate(familyId, request.Feedback, ct);
-        if (family is null)
+        try
         {
-            return Results.NotFound();
-        }
+            var family = await drafting.Regenerate(familyId, request.Feedback, ct);
+            if (family is null)
+            {
+                return Results.NotFound();
+            }
 
-        await preview.RunPreview(familyId, ct);
-        return Results.Ok(await preview.GetOnboarding(familyId, ct));
+            await preview.RunPreview(familyId, ct);
+            return Results.Ok(await preview.GetOnboarding(familyId, ct));
+        }
+        catch (OpenAiBudgetExceededException ex)
+        {
+            return BudgetExceededResult(ex);
+        }
     }
 
     private static async Task<IResult> UpdateTaxonomy(
@@ -84,8 +98,15 @@ public static class FamilyOnboardingEndpoints
         }
 
         await families.AddTaxonomyVersion(familyId, questionsJson, ct);
-        await preview.RunPreview(familyId, ct);
-        return Results.Ok(await preview.GetOnboarding(familyId, ct));
+        try
+        {
+            await preview.RunPreview(familyId, ct);
+            return Results.Ok(await preview.GetOnboarding(familyId, ct));
+        }
+        catch (OpenAiBudgetExceededException ex)
+        {
+            return BudgetExceededResult(ex);
+        }
     }
 
     private static IResult? ValidateTaxonomy(string questionsJson)
@@ -158,4 +179,7 @@ public static class FamilyOnboardingEndpoints
     private static async Task<IResult> Reject(
         int familyId, IFamilyOnboardingLifecycleService lifecycle, CancellationToken ct) =>
         await lifecycle.Reject(familyId, ct) ? Results.NoContent() : Results.NotFound();
+
+    private static IResult BudgetExceededResult(OpenAiBudgetExceededException ex) =>
+        Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status429TooManyRequests);
 }

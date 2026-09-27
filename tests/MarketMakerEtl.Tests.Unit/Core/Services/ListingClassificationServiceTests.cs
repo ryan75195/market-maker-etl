@@ -94,7 +94,7 @@ public class ListingClassificationServiceTests
         var target = new ListingClassificationTarget(42, "Sony DualSense", "Games", "Accessories", "Controllers", "Sony", "Barely used.", false);
         classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
             .Returns([target]);
-        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>())
             .Returns(new ClassifyResponse(
                 "ps5-controller",
                 1,
@@ -144,7 +144,7 @@ public class ListingClassificationServiceTests
             {
                 [42] = new Dictionary<string, string> { ["item_type"] = "console" }
             });
-        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>())
             .Returns(new ClassifyResponse(
                 "ps5-controller",
                 1,
@@ -177,7 +177,7 @@ public class ListingClassificationServiceTests
         var target = new ListingClassificationTarget(7, "Title", null, null, null, null, null, false);
         classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
             .Returns([target]);
-        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>())
             .Returns<ClassifyResponse>(_ => throw new ListingClassifierException("classifier is down"));
 
         var service = new ListingClassificationService(families, classifications, client, Throttle(), OpenAiOpts());
@@ -214,7 +214,7 @@ public class ListingClassificationServiceTests
             .Returns(targets);
         classifications.GetListingsNeedingClassification(20, 100, Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([]);
-        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>())
             .Returns<ClassifyResponse>(_ => throw ListingClassifierException.Timeout(
                 "OpenAI request timed out after 120s."));
 
@@ -232,7 +232,7 @@ public class ListingClassificationServiceTests
             Assert.That(reportedFailures, Has.Count.EqualTo(1));
             Assert.That(reportedFailures[0].JobId, Is.EqualTo(10));
         });
-        await client.Received(1).Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>());
+        await client.Received(1).Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>());
         await families.Received(1).GetFamily(2, Arg.Any<CancellationToken>());
     }
 
@@ -265,7 +265,7 @@ public class ListingClassificationServiceTests
         var target = new ListingClassificationTarget(42, "Sony DualSense", null, null, null, null, null, false);
         classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
             .Returns([target]);
-        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>())
             .Returns(new ClassifyResponse(
                 "ps5-controller",
                 1,
@@ -296,7 +296,7 @@ public class ListingClassificationServiceTests
         var targets = new[] { new ListingClassificationTarget(1, "First", null, null, null, null, null, false) };
         classifications.GetListingsNeedingClassification(10, 100, Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(targets);
-        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>())
             .Returns<ClassifyResponse>(_ => throw new ListingClassifierException("OpenAI returned 401 Unauthorized"));
         var throttle = Throttle(budget: 25);
         throttle.IsProbingAfterFailures().Returns(true);
@@ -328,7 +328,7 @@ public class ListingClassificationServiceTests
         };
         classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
             .Returns(targets);
-        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>())
             .Returns(new ClassifyResponse(
                 "ps5-controller",
                 1,
@@ -383,7 +383,7 @@ public class ListingClassificationServiceTests
         var target = new ListingClassificationTarget(42, "Sony DualSense", null, null, null, null, null, false);
         classifications.GetListingsNeedingClassification(10, 100, 2000, Arg.Any<CancellationToken>())
             .Returns([target]);
-        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+        client.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>())
             .Returns(new ClassifyResponse(
                 "ps5-controller",
                 1,
