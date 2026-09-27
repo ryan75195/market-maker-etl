@@ -1,0 +1,27 @@
+[project]
+name = "mmfetch"
+version = "0.1.0"
+description = "HTTP sidecar that fetches Mercari item and search data directly via curl_cffi, replacing the browser-based scraper"
+requires-python = ">=3.10"
+dependencies = [
+    "curl_cffi>=0.7",
+    "fastapi",
+    "uvicorn",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "httpx",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mmfetch*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
