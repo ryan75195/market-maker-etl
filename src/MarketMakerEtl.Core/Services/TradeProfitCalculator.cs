@@ -4,8 +4,8 @@ namespace MarketMakerEtl.Core.Services;
 
 public static class TradeProfitCalculator
 {
-    public static decimal ComputeBuyFees(decimal buyPrice, decimal? buyFees, PriceGroupOptions options) =>
-        buyFees ?? buyPrice * options.BuyerFeeRate;
+    public static decimal ComputeBuyFees(decimal buyPrice, decimal buyShipping, decimal? buyFees, PriceGroupOptions options) =>
+        buyFees ?? (buyPrice + buyShipping) * options.BuyerFeeRate;
 
     public static decimal ComputeSellFees(decimal sellPrice, decimal? sellFees, PriceGroupOptions options) =>
         sellFees ?? (sellPrice * options.SellerFeeRate) + options.SellerFeeFixed;

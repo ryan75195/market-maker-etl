@@ -11,15 +11,23 @@ public class TradeProfitCalculatorTests
     [Test]
     public void Should_default_buy_fees_from_the_buyer_fee_rate_when_omitted()
     {
-        var buyFees = TradeProfitCalculator.ComputeBuyFees(100m, null, Options);
+        var buyFees = TradeProfitCalculator.ComputeBuyFees(100m, 0m, null, Options);
 
         Assert.That(buyFees, Is.EqualTo(3.6m));
     }
 
     [Test]
+    public void Should_default_buy_fees_from_the_buyer_fee_rate_applied_to_price_plus_shipping()
+    {
+        var buyFees = TradeProfitCalculator.ComputeBuyFees(100m, 20m, null, Options);
+
+        Assert.That(buyFees, Is.EqualTo(4.32m));
+    }
+
+    [Test]
     public void Should_use_the_explicit_buy_fees_when_provided_instead_of_defaulting()
     {
-        var buyFees = TradeProfitCalculator.ComputeBuyFees(100m, 9.99m, Options);
+        var buyFees = TradeProfitCalculator.ComputeBuyFees(100m, 0m, 9.99m, Options);
 
         Assert.That(buyFees, Is.EqualTo(9.99m));
     }

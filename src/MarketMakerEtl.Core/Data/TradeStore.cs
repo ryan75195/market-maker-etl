@@ -12,17 +12,20 @@ public sealed class TradeStore : ITradeStore
 {
     private readonly IDbContextFactory<EtlDbContext> _factory;
     private readonly PriceGroupOptions _priceGroupOptions;
+    private readonly TimeProvider _timeProvider;
 
-    public TradeStore(IDbContextFactory<EtlDbContext> factory, PriceGroupOptions priceGroupOptions)
+    public TradeStore(IDbContextFactory<EtlDbContext> factory, PriceGroupOptions priceGroupOptions, TimeProvider timeProvider)
     {
         _factory = factory;
         _priceGroupOptions = priceGroupOptions;
+        _timeProvider = timeProvider;
     }
 
     public async Task<TradeView> CreateTrade(NewTrade trade, CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
-        var nowUtc = DateTime.UtcNow;
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        var buyShipping = trade.BuyShipping ?? 0m;
         var entity = new TradeEntity
         {
             DealSignalId = trade.DealSignalId,
@@ -31,8 +34,8 @@ public sealed class TradeStore : ITradeStore
             PriceGroupKeyJson = SerializeGroupKey(trade.PriceGroupKey),
             BoughtUtc = trade.BoughtUtc,
             BuyPrice = trade.BuyPrice,
-            BuyShipping = trade.BuyShipping ?? 0m,
-            BuyFees = TradeProfitCalculator.ComputeBuyFees(trade.BuyPrice, trade.BuyFees, _priceGroupOptions),
+            BuyShipping = buyShipping,
+            BuyFees = TradeProfitCalculator.ComputeBuyFees(trade.BuyPrice, buyShipping, trade.BuyFees, _priceGroupOptions),
             Status = TradeStatus.Open,
             Notes = trade.Notes,
             CreatedUtc = nowUtc,
@@ -59,7 +62,7 @@ public sealed class TradeStore : ITradeStore
         entity.SellFees = TradeProfitCalculator.ComputeSellFees(sale.SellPrice, sale.SellFees, _priceGroupOptions);
         entity.Status = sale.Status ?? TradeStatus.Sold;
         entity.Notes = sale.Notes ?? entity.Notes;
-        entity.UpdatedUtc = DateTime.UtcNow;
+        entity.UpdatedUtc = _timeProvider.GetUtcNow().UtcDateTime;
 
         await db.SaveChangesAsync(ct);
         return await MapToView(db, entity, ct);

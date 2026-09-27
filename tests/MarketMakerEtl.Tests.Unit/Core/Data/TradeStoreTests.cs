@@ -5,6 +5,7 @@ using MarketMakerEtl.Core.Models.PriceGroups;
 using MarketMakerEtl.Core.Models.Trades;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Data;
 
@@ -15,11 +16,13 @@ public class TradeStoreTests
 
     private string _databasePath = null!;
     private ServiceProvider _provider = null!;
+    private FakeTimeProvider _timeProvider = null!;
 
     [SetUp]
     public void SetUp()
     {
         _databasePath = Path.Combine(Path.GetTempPath(), $"mm-etl-trade-store-{Guid.NewGuid():N}.db");
+        _timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var services = new ServiceCollection();
         services.AddDbContextFactory<EtlDbContext>(options =>
             options.UseSqlite($"Data Source={_databasePath}"));
@@ -66,6 +69,39 @@ public class TradeStoreTests
             Assert.That(trade.Status, Is.EqualTo(TradeStatus.Open));
             Assert.That(trade.PriceGroupKey!["model"], Is.EqualTo("dualsense"));
         });
+    }
+
+    [Test]
+    public async Task Should_default_buy_fees_from_the_buyer_fee_rate_applied_to_price_plus_shipping()
+    {
+        var store = CreateStore();
+        var newTrade = BuildNewTrade(buyPrice: 100m) with { BuyShipping = 20m };
+
+        var trade = await store.CreateTrade(newTrade, CancellationToken.None);
+
+        Assert.That(trade.BuyFees, Is.EqualTo(4.32m));
+    }
+
+    [Test]
+    public async Task Should_stamp_created_and_updated_utc_from_the_injected_time_provider()
+    {
+        var store = CreateStore();
+
+        var trade = await store.CreateTrade(BuildNewTrade(buyPrice: 10m), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(trade.CreatedUtc, Is.EqualTo(_timeProvider.GetUtcNow().UtcDateTime));
+            Assert.That(trade.UpdatedUtc, Is.EqualTo(_timeProvider.GetUtcNow().UtcDateTime));
+        });
+
+        _timeProvider.Advance(TimeSpan.FromDays(1));
+        var sold = await store.RecordSale(
+            trade.Id,
+            new TradeSale(trade.BoughtUtc.AddDays(1), 20m, 0m, 0m, null, null),
+            CancellationToken.None);
+
+        Assert.That(sold!.UpdatedUtc, Is.EqualTo(_timeProvider.GetUtcNow().UtcDateTime));
     }
 
     [Test]
@@ -280,5 +316,5 @@ public class TradeStoreTests
     }
 
     private TradeStore CreateStore() =>
-        new(_provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(), Options);
+        new(_provider.GetRequiredService<IDbContextFactory<EtlDbContext>>(), Options, _timeProvider);
 }
