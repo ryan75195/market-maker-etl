@@ -3,7 +3,6 @@ using MarketMakerEtl.Api;
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Interfaces;
-using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Models.Families;
 using MarketMakerEtl.Core.Models.Health;
 using MarketMakerEtl.Core.Models.Jobs;
@@ -45,9 +44,9 @@ public class HealthEndpointsTests
     }
 
     [Test]
-    public async Task Should_report_ok_when_jobs_are_healthy_and_the_classifier_is_reachable()
+    public async Task Should_report_ok_when_jobs_are_healthy()
     {
-        var client = CreateClient(classifierReachable: true);
+        var client = CreateClient();
         await CreateHealthyJob(client);
 
         var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
@@ -56,7 +55,6 @@ public class HealthEndpointsTests
         {
             Assert.That(response!.Status, Is.EqualTo(SystemHealthStatus.Ok));
             Assert.That(response.DatabaseReachable, Is.True);
-            Assert.That(response.Classifier.Reachable, Is.True);
             Assert.That(response.Jobs.Single().IsStale, Is.False);
             Assert.That(response.Fetcher.SidecarReachable, Is.True);
         });
@@ -65,7 +63,7 @@ public class HealthEndpointsTests
     [Test]
     public async Task Should_report_degraded_when_the_fetcher_sidecar_is_unreachable()
     {
-        var client = CreateClient(classifierReachable: true, fetcherReachable: false);
+        var client = CreateClient(fetcherReachable: false);
         await CreateHealthyJob(client);
 
         var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
@@ -80,7 +78,7 @@ public class HealthEndpointsTests
     [Test]
     public async Task Should_report_degraded_when_the_recent_fetch_window_has_no_successes()
     {
-        var client = CreateClient(classifierReachable: true, fetcherReachable: true);
+        var client = CreateClient(fetcherReachable: true);
         await CreateHealthyJob(client);
         await SeedFetchOutcomes(FetchOutcomeKind.Infrastructure, 10);
 
@@ -97,7 +95,7 @@ public class HealthEndpointsTests
     [Test]
     public async Task Should_report_degraded_when_an_enabled_job_has_no_completed_run()
     {
-        var client = CreateClient(classifierReachable: true);
+        var client = CreateClient();
         await CreateJob(client, "stale search", intervalHours: 1);
 
         var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
@@ -112,7 +110,7 @@ public class HealthEndpointsTests
     [Test]
     public async Task Should_report_degraded_when_the_last_run_of_a_job_failed()
     {
-        var client = CreateClient(classifierReachable: true);
+        var client = CreateClient();
         var job = await CreateJob(client, "failed search", intervalHours: 24);
         await SeedRun(job.Id, ScrapeRunStatus.Failed, DateTime.UtcNow);
 
@@ -127,35 +125,55 @@ public class HealthEndpointsTests
     }
 
     [Test]
-    public async Task Should_report_degraded_when_the_classifier_is_unreachable_and_a_family_exists()
+    public async Task Should_report_degraded_when_the_llm_is_degraded_and_a_family_exists()
     {
-        var client = CreateClient(classifierReachable: false);
+        var client = CreateClient();
         await CreateFamily(client, "ps5-controller");
+        await SeedFailedBatchRuns(5);
 
         var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
 
         Assert.Multiple(() =>
         {
             Assert.That(response!.Status, Is.EqualTo(SystemHealthStatus.Degraded));
-            Assert.That(response.Classifier.Reachable, Is.False);
+            Assert.That(response.Llm.Degraded, Is.True);
         });
     }
 
-    private HttpClient CreateClient(bool classifierReachable, bool fetcherReachable = true)
+    [Test]
+    public async Task Should_report_the_configured_model_and_whether_an_api_key_is_set()
+    {
+        var client = CreateClient(apiKey: "sk-test");
+
+        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response!.Llm.HasApiKey, Is.True);
+            Assert.That(response.Llm.Model, Is.EqualTo("gpt-6-luna"));
+        });
+    }
+
+    private HttpClient CreateClient(bool fetcherReachable = true, string? apiKey = null)
     {
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
                 builder.ConfigureAppConfiguration((_, configuration) =>
                 {
-                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                    var settings = new Dictionary<string, string?>
                     {
                         ["Database:ConnectionString"] = $"Data Source={_databasePath}"
-                    });
+                    };
+                    if (apiKey is not null)
+                    {
+                        settings["OpenAI:ApiKey"] = apiKey;
+                    }
+
+                    configuration.AddInMemoryCollection(settings);
                 });
                 builder.ConfigureServices(services =>
                 {
-                    services.AddSingleton<IListingClassifierClient>(new StubClassifierClient(classifierReachable));
                     services.AddSingleton<IFetcherHealthClient>(new StubFetcherHealthClient(fetcherReachable));
                 });
             });
@@ -216,21 +234,23 @@ public class HealthEndpointsTests
         }
     }
 
-    private sealed class StubClassifierClient : IListingClassifierClient
+    private async Task SeedFailedBatchRuns(int count)
     {
-        private readonly bool _reachable;
-
-        public StubClassifierClient(bool reachable)
+        var services = new ServiceCollection();
+        services.AddDbContextFactory<EtlDbContext>(options => options.UseSqlite($"Data Source={_databasePath}"));
+        await using var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        for (var i = 0; i < count; i++)
         {
-            _reachable = reachable;
+            db.ClassificationBatchRuns.Add(new ClassificationBatchRunEntity
+            {
+                RanUtc = DateTime.UtcNow,
+                Succeeded = false
+            });
         }
 
-        public Task<ClassifyResponse> Classify(ClassifyRequest request, CancellationToken ct) =>
-            throw new NotSupportedException();
-
-        public Task<ClassifierHealthCheckResult> CheckHealth(CancellationToken ct) =>
-            Task.FromResult(new ClassifierHealthCheckResult(
-                "http://stub", _reachable, _reachable ? ["ps5-controller"] : []));
+        await db.SaveChangesAsync();
     }
 
     private sealed class StubFetcherHealthClient : IFetcherHealthClient

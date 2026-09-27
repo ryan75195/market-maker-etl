@@ -14,7 +14,7 @@ public static class TaxonomyDocumentParser
             throw new TaxonomyParseException("Taxonomy document must be a JSON object.");
         }
 
-        return new TaxonomyDocument(ReadFamily(root), ReadVersion(root), ReadQuestions(root));
+        return new TaxonomyDocument(ReadFamily(root), ReadVersion(root), ReadQuestions(root), ReadGuidance(root));
     }
 
     private static JsonDocument ParseDocument(string questionsJson)
@@ -42,6 +42,21 @@ public static class TaxonomyDocumentParser
         }
 
         return value.GetString() ?? string.Empty;
+    }
+
+    private static string? ReadGuidance(JsonElement root)
+    {
+        if (!root.TryGetProperty("guidance", out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new TaxonomyParseException("guidance must be a string.");
+        }
+
+        return value.GetString();
     }
 
     private static int ReadVersion(JsonElement root) =>

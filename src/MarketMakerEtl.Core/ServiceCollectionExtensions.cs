@@ -1,6 +1,5 @@
 using MarketMakerEtl.Core.Data;
 using MarketMakerEtl.Core.Interfaces;
-using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Models.Scheduling;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
@@ -11,7 +10,7 @@ using static MarketMakerEtl.Core.ConfigurationValueReader;
 
 namespace MarketMakerEtl.Core;
 
-public static class ServiceCollectionExtensions
+public static partial class ServiceCollectionExtensions
 {
     private const string DefaultFetcherBaseUrl = "http://127.0.0.1:8766";
     private const int DefaultFetcherTimeoutSeconds = 240;
@@ -40,12 +39,6 @@ public static class ServiceCollectionExtensions
     private const bool DefaultFamilyInScopeOnly = true;
     private const int DefaultDetailBacklogInfrastructureBackoffBaseSeconds = 1;
     private const int DefaultDetailBacklogInfrastructureBackoffMaxSeconds = 1800;
-    private const string DefaultClassifierBaseUrl = "";
-    private const int DefaultClassifierBatchSize = 64;
-    private const int DefaultClassifierTickMinutes = 5;
-    private const int DefaultClassifierMaxListingsPerTick = 2000;
-    private const int DefaultClassifierTimeoutSeconds = 120;
-    private const double DefaultClassificationReviewThreshold = 0.9;
     private const int DefaultBusyTimeoutMs = 10000;
 
     public static IServiceCollection AddCoreServices(this IServiceCollection services)
@@ -77,6 +70,7 @@ public static class ServiceCollectionExtensions
             configuration, detailFetchOptions.MaxDetailFetchAttempts, detailFetchOptions.MaxConcurrentDetailFetches));
         services.AddSingleton(BuildClassifierOptions(configuration));
         services.AddSingleton(BuildClassificationReviewOptions(configuration));
+        services.AddSingleton(_ => BuildOpenAiOptions(configuration));
         services.AddSingleton(PriceGroupOptionsFactory.Build(configuration));
         services.AddSingleton(DealsOptionsFactory.Build(configuration));
         services.AddSingleton(BacktestOptionsFactory.Build(configuration));
@@ -92,7 +86,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IFetchOutcomeStore, FetchOutcomeStore>();
         services.AddHttpClient<IScrapeClient, FetcherScrapeClient>();
         services.AddHttpClient<IFetcherHealthClient, FetcherHealthClient>();
-        services.AddHttpClient<IListingClassifierClient, HttpListingClassifierClient>(
+        services.AddHttpClient<IListingClassifierClient, OpenAiListingClassifierClient>(
             client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddMarketplaceAdapterServices();
         services.AddSingleton<IScrapeRunStateService, ScrapeRunStateService>();
@@ -115,6 +109,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IListingRefreshSchedulingService, ListingRefreshSchedulingService>();
         services.AddSingleton<IDetailBacklogService, DetailBacklogService>();
         services.AddSingleton<IListingClassificationStore, ListingClassificationStore>();
+        services.AddSingleton<IClassificationThrottleService, ClassificationThrottleService>();
         services.AddSingleton<IListingClassificationService, ListingClassificationService>();
         services.AddSingleton<IClassificationReviewStore, ClassificationReviewStore>();
         services.AddSingleton<IPriceGroupListingStore, PriceGroupListingStore>();
@@ -143,6 +138,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IJobHealthService, JobHealthService>();
         services.AddSingleton<IFamilyBacklogHealthService, FamilyBacklogHealthService>();
         services.AddSingleton<IFetcherHealthService, FetcherHealthService>();
+        services.AddSingleton<ILlmHealthService, LlmHealthService>();
         services.AddSingleton<ISystemHealthService, SystemHealthService>();
         return services;
     }
@@ -199,17 +195,6 @@ public static class ServiceCollectionExtensions
                 configuration,
                 "DetailBacklog:InfrastructureBackoffMaxSeconds",
                 DefaultDetailBacklogInfrastructureBackoffMaxSeconds));
-
-    private static ClassifierOptions BuildClassifierOptions(IConfiguration? configuration) =>
-        new(
-            ReadString(configuration, "Classifier:BaseUrl", DefaultClassifierBaseUrl),
-            ReadInt(configuration, "Classifier:BatchSize", DefaultClassifierBatchSize),
-            ReadInt(configuration, "Classifier:TickMinutes", DefaultClassifierTickMinutes),
-            ReadInt(configuration, "Classifier:MaxListingsPerTick", DefaultClassifierMaxListingsPerTick),
-            ReadInt(configuration, "Classifier:TimeoutSeconds", DefaultClassifierTimeoutSeconds));
-
-    private static ClassificationReviewOptions BuildClassificationReviewOptions(IConfiguration? configuration) =>
-        new(ReadDouble(configuration, "Classification:ReviewThreshold", DefaultClassificationReviewThreshold));
 
     private static int BuildBusyTimeoutMs(IConfiguration? configuration) =>
         ReadInt(configuration, "Database:BusyTimeoutMs", DefaultBusyTimeoutMs);

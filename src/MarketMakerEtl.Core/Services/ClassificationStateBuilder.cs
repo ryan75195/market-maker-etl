@@ -1,3 +1,4 @@
+using System.Globalization;
 using MarketMakerEtl.Core.Models.Classification;
 
 namespace MarketMakerEtl.Core.Services;
@@ -7,9 +8,15 @@ public static class ClassificationStateBuilder
     private const int MaxDescriptionLength = 1200;
 
     public static ClassifyListingState BuildState(ListingClassificationTarget target) =>
-        new(target.Title, BuildMercariCategory(target), target.Brand, TruncateDescription(target.Description));
+        new(
+            target.ListingEntityId.ToString(CultureInfo.InvariantCulture),
+            target.Title,
+            TruncateDescription(target.Description),
+            BuildCategory(target),
+            target.Brand,
+            target.IsSold);
 
-    private static string? BuildMercariCategory(ListingClassificationTarget target)
+    private static string? BuildCategory(ListingClassificationTarget target)
     {
         var parts = new[] { target.Category0Name, target.Category1Name, target.Category2Name }
             .Where(part => !string.IsNullOrEmpty(part));

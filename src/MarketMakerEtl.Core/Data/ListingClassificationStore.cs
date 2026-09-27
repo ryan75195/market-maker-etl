@@ -166,8 +166,41 @@ public sealed class ListingClassificationStore : IListingClassificationStore
         entity.ClassifiedUtc = classifiedUtc;
     }
 
+    public async Task RecordBatchOutcome(bool succeeded, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        db.ClassificationBatchRuns.Add(new ClassificationBatchRunEntity
+        {
+            RanUtc = DateTime.UtcNow,
+            Succeeded = succeeded
+        });
+        await SqliteBusyRetry.ExecuteAsync(() => db.SaveChangesAsync(ct), ct);
+    }
+
+    public async Task<IReadOnlyList<ClassificationBatchRunView>> GetRecentBatchOutcomes(int count, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var runs = await db.ClassificationBatchRuns
+            .OrderByDescending(r => r.RanUtc)
+            .Take(count)
+            .ToListAsync(ct);
+        return runs.Select(MapToBatchRunView).ToList();
+    }
+
+    public async Task<IReadOnlyList<ClassificationBatchRunView>> GetBatchOutcomesSince(DateTime sinceUtc, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var runs = await db.ClassificationBatchRuns
+            .Where(r => r.RanUtc >= sinceUtc)
+            .ToListAsync(ct);
+        return runs.Select(MapToBatchRunView).ToList();
+    }
+
     internal static ListingClassificationTarget MapToTarget(ListingEntity listing) =>
-        new(listing.Id, listing.Title, listing.Category0Name, listing.Category1Name, listing.Category2Name, listing.Brand, listing.Description);
+        new(listing.Id, listing.Title, listing.Category0Name, listing.Category1Name, listing.Category2Name, listing.Brand, listing.Description, listing.IsSold);
+
+    internal static ClassificationBatchRunView MapToBatchRunView(ClassificationBatchRunEntity entity) =>
+        new(entity.RanUtc, entity.Succeeded);
 
     internal static ListingClassificationAnswerView MapToAnswerView(ListingClassificationEntity entity) =>
         new(entity.Question, entity.Choice, entity.ResolvedChoice, entity.IsApplicable, entity.Confidence, entity.Agreement, entity.Source);
