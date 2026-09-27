@@ -5,4 +5,7 @@ public sealed record LlmHealthView(
     bool HasApiKey,
     int LastHourSucceeded,
     int LastHourFailed,
-    bool Degraded);
+    bool Degraded,
+    decimal MonthToDateSpendUsd,
+    decimal MonthlyBudgetUsd,
+    bool BudgetExhausted);

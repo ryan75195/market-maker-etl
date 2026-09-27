@@ -193,7 +193,7 @@ public class FamilySampleFetchServiceTests
         new(_client, new MarketplaceAdapters([_urls], [_searchParser], [_itemParser]), options);
 
     private static OnboardingOptions BuildOptions(int maxSampleListings, int maxDescriptionChars) =>
-        new("gpt-6-sol", "medium", 2.0m, 10.0m, maxSampleListings, maxDescriptionChars, 180);
+        new("gpt-6-sol", "medium", maxSampleListings, maxDescriptionChars, 180);
 
     private static ListingSummary BuildListing(string id, string url, decimal price, bool sold) =>
         new(id, "Title", price, "USD", url, sold, "Good", null, "Buy It Now");

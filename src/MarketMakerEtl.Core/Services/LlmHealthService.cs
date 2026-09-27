@@ -7,13 +7,18 @@ namespace MarketMakerEtl.Core.Services;
 public sealed class LlmHealthService : ILlmHealthService
 {
     private readonly IListingClassificationStore _classifications;
+    private readonly IOpenAiBudgetService _budget;
     private readonly OpenAiOptions _openAiOptions;
     private readonly ClassifierOptions _classifierOptions;
 
     public LlmHealthService(
-        IListingClassificationStore classifications, OpenAiOptions openAiOptions, ClassifierOptions classifierOptions)
+        IListingClassificationStore classifications,
+        IOpenAiBudgetService budget,
+        OpenAiOptions openAiOptions,
+        ClassifierOptions classifierOptions)
     {
         _classifications = classifications;
+        _budget = budget;
         _openAiOptions = openAiOptions;
         _classifierOptions = classifierOptions;
     }
@@ -27,7 +32,17 @@ public sealed class LlmHealthService : ILlmHealthService
         var succeeded = lastHour.Count(run => run.Succeeded);
         var failed = lastHour.Count(run => !run.Succeeded);
         var degraded = recent.Count == _classifierOptions.DegradedAfterFailedBatches && recent.All(run => !run.Succeeded);
+        var monthToDateSpend = await _budget.GetMonthToDateSpend(ct);
+        var budgetExhausted = await _budget.IsExhausted(ct);
 
-        return new LlmHealthView(_openAiOptions.Model, _openAiOptions.ApiKey.Length > 0, succeeded, failed, degraded);
+        return new LlmHealthView(
+            _openAiOptions.Model,
+            _openAiOptions.ApiKey.Length > 0,
+            succeeded,
+            failed,
+            degraded,
+            monthToDateSpend,
+            _budget.MonthlyBudgetUsd,
+            budgetExhausted);
     }
 }

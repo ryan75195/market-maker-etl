@@ -47,6 +47,8 @@ public sealed partial class EtlDbContext : DbContext
 
     public DbSet<ClassificationBatchRunEntity> ClassificationBatchRuns => Set<ClassificationBatchRunEntity>();
 
+    public DbSet<OpenAiUsageRecordEntity> OpenAiUsageRecords => Set<OpenAiUsageRecordEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureScrapeJobs(modelBuilder);
@@ -54,6 +56,7 @@ public sealed partial class EtlDbContext : DbContext
         ConfigureListings(modelBuilder);
         ConfigureCategories(modelBuilder);
         ConfigureFetchOutcomeBuckets(modelBuilder);
+        ConfigureOpenAiUsageRecords(modelBuilder);
 
         modelBuilder.Entity<SchedulerStateEntity>(entity =>
         {

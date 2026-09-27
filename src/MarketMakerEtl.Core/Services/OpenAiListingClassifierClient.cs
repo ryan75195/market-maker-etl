@@ -3,23 +3,23 @@ using MarketMakerEtl.Core.Models.Classification;
 
 namespace MarketMakerEtl.Core.Services;
 
-public sealed class OpenAiListingClassifierClient : IListingClassifierClient
+internal sealed class OpenAiListingClassifierClient : IListingClassifierClient
 {
     private readonly HttpClient _http;
     private readonly OpenAiOptions _options;
     private readonly ClassificationReviewOptions _reviewOptions;
-    private readonly TimeProvider _timeProvider;
+    private readonly IOpenAiChatCompletionSender _sender;
 
     public OpenAiListingClassifierClient(
-        HttpClient http, OpenAiOptions options, ClassificationReviewOptions reviewOptions, TimeProvider timeProvider)
+        HttpClient http, OpenAiOptions options, ClassificationReviewOptions reviewOptions, IOpenAiChatCompletionSender sender)
     {
         _http = http;
         _options = options;
         _reviewOptions = reviewOptions;
-        _timeProvider = timeProvider;
+        _sender = sender;
     }
 
-    public async Task<ClassifyResponse> Classify(ClassifyRequest request, CancellationToken ct)
+    public async Task<ClassifyResponse> Classify(ClassifyRequest request, OpenAiUsagePurpose purpose, CancellationToken ct)
     {
         if (request.States.Count == 0)
         {
@@ -28,7 +28,7 @@ public sealed class OpenAiListingClassifierClient : IListingClassifierClient
 
         var systemPrompt = OpenAiPromptBuilder.Build(request.Model, request.Questions, request.Guidance);
         var batches = Chunk(request.States, Math.Max(1, _options.BatchSize));
-        var batchResults = await ClassifyBatches(systemPrompt, request.Questions, batches, ct);
+        var batchResults = await ClassifyBatches(systemPrompt, request.Questions, batches, purpose, ct);
         var byId = MergeResults(batchResults);
         var results = request.States.Select(state => ResolveResult(byId, state)).ToList();
         return new ClassifyResponse(request.Model, 1, results);
@@ -38,13 +38,14 @@ public sealed class OpenAiListingClassifierClient : IListingClassifierClient
         string systemPrompt,
         IReadOnlyDictionary<string, ClassifyQuestion> questions,
         IReadOnlyList<IReadOnlyList<ClassifyListingState>> batches,
+        OpenAiUsagePurpose purpose,
         CancellationToken ct)
     {
         var throttle = new SemaphoreSlim(Math.Max(1, _options.MaxConcurrency));
         try
         {
             var tasks = batches
-                .Select(batch => ClassifyBatchThrottled(throttle, systemPrompt, questions, batch, ct))
+                .Select(batch => ClassifyBatchThrottled(throttle, systemPrompt, questions, batch, purpose, ct))
                 .ToList();
             return await Task.WhenAll(tasks);
         }
@@ -59,12 +60,13 @@ public sealed class OpenAiListingClassifierClient : IListingClassifierClient
         string systemPrompt,
         IReadOnlyDictionary<string, ClassifyQuestion> questions,
         IReadOnlyList<ClassifyListingState> batch,
+        OpenAiUsagePurpose purpose,
         CancellationToken ct)
     {
         await throttle.WaitAsync(ct);
         try
         {
-            return await ClassifySubBatch(systemPrompt, questions, batch, ct);
+            return await ClassifySubBatch(systemPrompt, questions, batch, purpose, ct);
         }
         finally
         {
@@ -76,13 +78,14 @@ public sealed class OpenAiListingClassifierClient : IListingClassifierClient
         string systemPrompt,
         IReadOnlyDictionary<string, ClassifyQuestion> questions,
         IReadOnlyList<ClassifyListingState> batch,
+        OpenAiUsagePurpose purpose,
         CancellationToken ct)
     {
         try
         {
             var body = OpenAiRequestBuilder.Build(
                 _options.Model, _options.ReasoningEffort, systemPrompt, questions, batch);
-            var result = await OpenAiChatCompletionSender.Send(_http, _options, _timeProvider, body, ct);
+            var result = await _sender.Send(_http, _options, purpose, body, ct);
             return OpenAiResponseParser.Parse(result.Content, questions, _reviewOptions.ReviewThreshold);
         }
         catch (ListingClassifierException ex)

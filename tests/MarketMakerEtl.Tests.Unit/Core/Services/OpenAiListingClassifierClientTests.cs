@@ -2,8 +2,10 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Services;
+using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
@@ -23,13 +25,26 @@ public class OpenAiListingClassifierClientTests
 
     private static ClassificationReviewOptions ReviewOptions() => new(0.9);
 
+    private static IOpenAiChatCompletionSender CreateSender()
+    {
+        var budget = Substitute.For<IOpenAiBudgetService>();
+        budget.IsExhausted(Arg.Any<CancellationToken>()).Returns(false);
+        var pricing = new OpenAiPricingOptions(
+            new Dictionary<string, OpenAiModelPricing>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["gpt-6-luna"] = new OpenAiModelPricing(0.10m, 0.50m)
+            },
+            new OpenAiModelPricing(2.0m, 10.0m));
+        return new OpenAiChatCompletionSender(TimeProvider.System, budget, Substitute.For<IOpenAiUsageStore>(), pricing);
+    }
+
     [Test]
     public async Task Should_post_a_taxonomy_derived_system_prompt_and_strict_json_schema()
     {
         var handler = new StubHandler(_ => Json(SuccessBody));
-        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), TimeProvider.System);
+        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), CreateSender());
 
-        await client.Classify(BuildRequest(), CancellationToken.None);
+        await client.Classify(BuildRequest(), OpenAiUsagePurpose.Classification, CancellationToken.None);
 
         using var document = JsonDocument.Parse(handler.RequestBodies.Single());
         var root = document.RootElement;
@@ -54,9 +69,9 @@ public class OpenAiListingClassifierClientTests
     public async Task Should_include_guidance_in_the_system_prompt_when_present()
     {
         var handler = new StubHandler(_ => Json(SuccessBody));
-        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), TimeProvider.System);
+        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), CreateSender());
 
-        await client.Classify(BuildRequest(guidance: "Treat iPhone SE as base model."), CancellationToken.None);
+        await client.Classify(BuildRequest(guidance: "Treat iPhone SE as base model."), OpenAiUsagePurpose.Classification, CancellationToken.None);
 
         using var document = JsonDocument.Parse(handler.RequestBodies.Single());
         var systemMessage = document.RootElement.GetProperty("messages")[0].GetProperty("content").GetString();
@@ -67,9 +82,9 @@ public class OpenAiListingClassifierClientTests
     public async Task Should_map_a_successful_response_into_classify_results()
     {
         var handler = new StubHandler(_ => Json(SuccessBody));
-        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), TimeProvider.System);
+        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), CreateSender());
 
-        var response = await client.Classify(BuildRequest(), CancellationToken.None);
+        var response = await client.Classify(BuildRequest(), OpenAiUsagePurpose.Classification, CancellationToken.None);
 
         var result = response.Results.Single();
         Assert.Multiple(() =>
@@ -92,7 +107,7 @@ public class OpenAiListingClassifierClientTests
             return Json($$"""{"labels":[{{labels}}]}""");
         });
         var client = new OpenAiListingClassifierClient(
-            new HttpClient(handler), Options(batchSize: 2, maxConcurrency: 1), ReviewOptions(), TimeProvider.System);
+            new HttpClient(handler), Options(batchSize: 2, maxConcurrency: 1), ReviewOptions(), CreateSender());
         var states = new[]
         {
             new ClassifyListingState("1", "First", null, null, null, false),
@@ -100,7 +115,7 @@ public class OpenAiListingClassifierClientTests
             new ClassifyListingState("3", "Third", null, null, null, false)
         };
 
-        var response = await client.Classify(BuildRequest(states), CancellationToken.None);
+        var response = await client.Classify(BuildRequest(states), OpenAiUsagePurpose.Classification, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -121,14 +136,14 @@ public class OpenAiListingClassifierClientTests
             }
             """;
         var handler = new StubHandler(_ => Json(partialBody));
-        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), TimeProvider.System);
+        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), CreateSender());
         var states = new[]
         {
             new ClassifyListingState("1", "First", null, null, null, false),
             new ClassifyListingState("2", "Second", null, null, null, false)
         };
 
-        var response = await client.Classify(BuildRequest(states), CancellationToken.None);
+        var response = await client.Classify(BuildRequest(states), OpenAiUsagePurpose.Classification, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -151,9 +166,9 @@ public class OpenAiListingClassifierClientTests
                 }
                 : Json(SuccessBody);
         });
-        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), TimeProvider.System);
+        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), CreateSender());
 
-        var response = await client.Classify(BuildRequest(), CancellationToken.None);
+        var response = await client.Classify(BuildRequest(), OpenAiUsagePurpose.Classification, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -169,9 +184,9 @@ public class OpenAiListingClassifierClientTests
         {
             Content = new StringContent("{\"error\":\"boom\"}", Encoding.UTF8, "application/json")
         });
-        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), TimeProvider.System);
+        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), CreateSender());
 
-        var response = await client.Classify(BuildRequest(), CancellationToken.None);
+        var response = await client.Classify(BuildRequest(), OpenAiUsagePurpose.Classification, CancellationToken.None);
 
         Assert.That(response.Results.Single().Error, Is.Not.Null);
     }
@@ -187,9 +202,9 @@ public class OpenAiListingClassifierClientTests
             }
             """;
         var handler = new StubHandler(_ => Json(ambiguousBody));
-        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), TimeProvider.System);
+        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), CreateSender());
 
-        var response = await client.Classify(BuildRequest(), CancellationToken.None);
+        var response = await client.Classify(BuildRequest(), OpenAiUsagePurpose.Classification, CancellationToken.None);
 
         Assert.That(response.Results.Single().Answers["item_type"].Confidence, Is.LessThan(0.9));
     }
@@ -205,9 +220,9 @@ public class OpenAiListingClassifierClientTests
             }
             """;
         var handler = new StubHandler(_ => Json(ambiguousBody));
-        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), TimeProvider.System);
+        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), CreateSender());
 
-        var response = await client.Classify(BuildRequest(), CancellationToken.None);
+        var response = await client.Classify(BuildRequest(), OpenAiUsagePurpose.Classification, CancellationToken.None);
 
         Assert.That(response.Results.Single().Answers["item_type"].Confidence, Is.LessThan(0.9));
     }
@@ -216,9 +231,9 @@ public class OpenAiListingClassifierClientTests
     public async Task Should_return_empty_results_without_calling_out_for_an_empty_batch()
     {
         var handler = new StubHandler(_ => throw new InvalidOperationException("should not be called"));
-        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), TimeProvider.System);
+        var client = new OpenAiListingClassifierClient(new HttpClient(handler), Options(), ReviewOptions(), CreateSender());
 
-        var response = await client.Classify(BuildRequest([]), CancellationToken.None);
+        var response = await client.Classify(BuildRequest([]), OpenAiUsagePurpose.Classification, CancellationToken.None);
 
         Assert.That(response.Results, Is.Empty);
     }

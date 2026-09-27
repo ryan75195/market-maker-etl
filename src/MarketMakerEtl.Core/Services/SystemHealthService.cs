@@ -76,6 +76,11 @@ public sealed class SystemHealthService : ISystemHealthService
             return SystemHealthStatus.Degraded;
         }
 
+        if (llm.BudgetExhausted)
+        {
+            return SystemHealthStatus.Degraded;
+        }
+
         if (database.Families.Any(family => family.State == FamilyState.Draft && family.HasEnabledScrapeJob))
         {
             return SystemHealthStatus.Degraded;

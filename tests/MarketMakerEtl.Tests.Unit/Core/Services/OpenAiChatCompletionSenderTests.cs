@@ -1,9 +1,11 @@
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
+using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Services;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 
 namespace MarketMakerEtl.Tests.Unit.Core.Services;
 
@@ -14,6 +16,34 @@ public class OpenAiChatCompletionSenderTests
 
     private static OpenAiOptions Options(int timeoutSeconds = 30) =>
         new("test-key", "gpt-6-luna", "low", 25, 6, timeoutSeconds);
+
+    private static OpenAiPricingOptions Pricing() =>
+        new(
+            new Dictionary<string, OpenAiModelPricing>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["gpt-6-luna"] = new OpenAiModelPricing(0.10m, 0.50m)
+            },
+            new OpenAiModelPricing(2.0m, 10.0m));
+
+    private static IOpenAiBudgetService NotExhaustedBudget()
+    {
+        var budget = Substitute.For<IOpenAiBudgetService>();
+        budget.IsExhausted(Arg.Any<CancellationToken>()).Returns(false);
+        budget.GetMonthToDateSpend(Arg.Any<CancellationToken>()).Returns(0m);
+        budget.MonthlyBudgetUsd.Returns(20m);
+        return budget;
+    }
+
+    private static OpenAiChatCompletionSender CreateSender(
+        TimeProvider? timeProvider = null,
+        IOpenAiBudgetService? budget = null,
+        IOpenAiUsageStore? usage = null,
+        OpenAiPricingOptions? pricing = null) =>
+        new(
+            timeProvider ?? TimeProvider.System,
+            budget ?? NotExhaustedBudget(),
+            usage ?? Substitute.For<IOpenAiUsageStore>(),
+            pricing ?? Pricing());
 
     [Test]
     public async Task Should_retry_a_transport_level_network_error_and_then_succeed()
@@ -27,8 +57,8 @@ public class OpenAiChatCompletionSenderTests
                 : SuccessResponse();
         });
 
-        var result = await OpenAiChatCompletionSender.Send(
-            new HttpClient(handler), Options(), TimeProvider.System, new JsonObject(), CancellationToken.None);
+        var result = await CreateSender().Send(
+            new HttpClient(handler), Options(), OpenAiUsagePurpose.Classification, new JsonObject(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -42,8 +72,8 @@ public class OpenAiChatCompletionSenderTests
     {
         var handler = new StubHandler(SuccessResponse);
 
-        var result = await OpenAiChatCompletionSender.Send(
-            new HttpClient(handler), Options(), TimeProvider.System, new JsonObject(), CancellationToken.None);
+        var result = await CreateSender().Send(
+            new HttpClient(handler), Options(), OpenAiUsagePurpose.Classification, new JsonObject(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -61,8 +91,8 @@ public class OpenAiChatCompletionSenderTests
                 """{"choices":[{"message":{"content":"hello"}}]}""", Encoding.UTF8, "application/json")
         });
 
-        var result = await OpenAiChatCompletionSender.Send(
-            new HttpClient(handler), Options(), TimeProvider.System, new JsonObject(), CancellationToken.None);
+        var result = await CreateSender().Send(
+            new HttpClient(handler), Options(), OpenAiUsagePurpose.Classification, new JsonObject(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -76,8 +106,8 @@ public class OpenAiChatCompletionSenderTests
     {
         var handler = new StubHandler(() => throw new HttpRequestException("connection reset"));
 
-        var exception = Assert.ThrowsAsync<ListingClassifierException>(() => OpenAiChatCompletionSender.Send(
-            new HttpClient(handler), Options(), TimeProvider.System, new JsonObject(), CancellationToken.None));
+        var exception = Assert.ThrowsAsync<ListingClassifierException>(() => CreateSender().Send(
+            new HttpClient(handler), Options(), OpenAiUsagePurpose.Classification, new JsonObject(), CancellationToken.None));
 
         Assert.That(exception!.IsTimeout, Is.False);
     }
@@ -88,8 +118,8 @@ public class OpenAiChatCompletionSenderTests
         var handler = new StubHandler(RateLimitedResponse);
         var fakeTime = new FakeTimeProvider(StartTime);
 
-        var exception = await CatchListingClassifierException(OpenAiChatCompletionSender.Send(
-            new HttpClient(handler), Options(timeoutSeconds: 0), fakeTime, new JsonObject(), CancellationToken.None));
+        var exception = await CatchListingClassifierException(CreateSender(timeProvider: fakeTime).Send(
+            new HttpClient(handler), Options(timeoutSeconds: 0), OpenAiUsagePurpose.Classification, new JsonObject(), CancellationToken.None));
 
         Assert.That(exception.IsTimeout, Is.True);
     }
@@ -102,8 +132,8 @@ public class OpenAiChatCompletionSenderTests
             Content = new StreamContent(new HangingStream())
         });
 
-        var exception = await CatchListingClassifierException(OpenAiChatCompletionSender.Send(
-            new HttpClient(handler), Options(timeoutSeconds: 0), TimeProvider.System, new JsonObject(), CancellationToken.None));
+        var exception = await CatchListingClassifierException(CreateSender().Send(
+            new HttpClient(handler), Options(timeoutSeconds: 0), OpenAiUsagePurpose.Classification, new JsonObject(), CancellationToken.None));
 
         Assert.That(exception.IsTimeout, Is.True);
     }
@@ -115,8 +145,56 @@ public class OpenAiChatCompletionSenderTests
         cts.Cancel();
         var handler = new StubHandler(SuccessResponse);
 
-        Assert.CatchAsync<OperationCanceledException>(() => OpenAiChatCompletionSender.Send(
-            new HttpClient(handler), Options(), TimeProvider.System, new JsonObject(), cts.Token));
+        Assert.CatchAsync<OperationCanceledException>(() => CreateSender().Send(
+            new HttpClient(handler), Options(), OpenAiUsagePurpose.Classification, new JsonObject(), cts.Token));
+    }
+
+    [Test]
+    public void Should_throw_a_budget_exceeded_exception_without_calling_the_http_client_when_the_budget_is_exhausted()
+    {
+        var called = false;
+        var handler = new StubHandler(() =>
+        {
+            called = true;
+            return SuccessResponse();
+        });
+
+        var budget = Substitute.For<IOpenAiBudgetService>();
+        budget.IsExhausted(Arg.Any<CancellationToken>()).Returns(true);
+        budget.GetMonthToDateSpend(Arg.Any<CancellationToken>()).Returns(20m);
+        budget.MonthlyBudgetUsd.Returns(20m);
+
+        Assert.ThrowsAsync<OpenAiBudgetExceededException>(() => CreateSender(budget: budget).Send(
+            new HttpClient(handler), Options(), OpenAiUsagePurpose.Classification, new JsonObject(), CancellationToken.None));
+
+        Assert.That(called, Is.False);
+    }
+
+    [Test]
+    public async Task Should_record_usage_with_the_cost_computed_from_configured_pricing_before_parsing_content()
+    {
+        var handler = new StubHandler(SuccessResponse);
+        var usage = Substitute.For<IOpenAiUsageStore>();
+
+        await CreateSender(usage: usage).Send(
+            new HttpClient(handler), Options(), OpenAiUsagePurpose.Classification, new JsonObject(), CancellationToken.None);
+
+        await usage.Received(1).Record(
+            "gpt-6-luna", OpenAiUsagePurpose.Classification, 12, 34, 0.0000182m, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Should_use_the_fallback_price_when_the_model_has_no_configured_pricing()
+    {
+        var handler = new StubHandler(SuccessResponse);
+        var usage = Substitute.For<IOpenAiUsageStore>();
+        var options = Options() with { Model = "gpt-unknown-model" };
+
+        await CreateSender(usage: usage).Send(
+            new HttpClient(handler), options, OpenAiUsagePurpose.Classification, new JsonObject(), CancellationToken.None);
+
+        await usage.Received(1).Record(
+            "gpt-unknown-model", OpenAiUsagePurpose.Classification, 12, 34, 0.000364m, Arg.Any<CancellationToken>());
     }
 
     private static async Task<ListingClassifierException> CatchListingClassifierException(

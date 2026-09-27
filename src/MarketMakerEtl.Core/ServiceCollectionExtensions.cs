@@ -71,6 +71,8 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton(BuildClassifierOptions(configuration));
         services.AddSingleton(BuildClassificationReviewOptions(configuration));
         services.AddSingleton(_ => BuildOpenAiOptions(configuration));
+        services.AddSingleton(_ => BuildOpenAiPricingOptions(configuration));
+        services.AddSingleton(_ => BuildOpenAiBudgetOptions(configuration));
         services.AddSingleton(BuildOnboardingOptions(configuration));
         services.AddSingleton(PriceGroupOptionsFactory.Build(configuration));
         services.AddSingleton(DealsOptionsFactory.Build(configuration));
@@ -85,6 +87,7 @@ public static partial class ServiceCollectionExtensions
     private static IServiceCollection AddCoreDomainServices(this IServiceCollection services)
     {
         services.AddSingleton<IFetchOutcomeStore, FetchOutcomeStore>();
+        services.AddOpenAiCoreServices();
         services.AddHttpClient<IScrapeClient, FetcherScrapeClient>();
         services.AddHttpClient<IFetcherHealthClient, FetcherHealthClient>();
         services.AddHttpClient<IListingClassifierClient, OpenAiListingClassifierClient>(

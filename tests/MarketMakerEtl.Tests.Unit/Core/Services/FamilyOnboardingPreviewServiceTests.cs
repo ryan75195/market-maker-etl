@@ -46,7 +46,7 @@ public class FamilyOnboardingPreviewServiceTests
 
         await _service.RunPreview(1, CancellationToken.None);
 
-        await _classifier.DidNotReceive().Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>());
+        await _classifier.DidNotReceive().Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -57,7 +57,7 @@ public class FamilyOnboardingPreviewServiceTests
 
         await _service.RunPreview(1, CancellationToken.None);
 
-        await _classifier.DidNotReceive().Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>());
+        await _classifier.DidNotReceive().Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -70,7 +70,7 @@ public class FamilyOnboardingPreviewServiceTests
             new FamilySampleListing("m2", "Title 2", "Desc 2", null, null, true, 15m, null)
         };
         _onboarding.GetSnapshot(1, Arg.Any<CancellationToken>()).Returns(BuildSnapshot(sample));
-        _classifier.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<CancellationToken>())
+        _classifier.Classify(Arg.Any<ClassifyRequest>(), Arg.Any<OpenAiUsagePurpose>(), Arg.Any<CancellationToken>())
             .Returns(new ClassifyResponse(
                 "ps5-controller",
                 1,
