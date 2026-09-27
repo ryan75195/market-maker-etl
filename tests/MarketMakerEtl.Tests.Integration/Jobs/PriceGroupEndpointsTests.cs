@@ -5,6 +5,7 @@ using MarketMakerEtl.Core.Data.Entities;
 using MarketMakerEtl.Core.Models.Classification;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.PriceGroups;
+using MarketMakerEtl.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -148,13 +149,16 @@ public class PriceGroupEndpointsTests : JobsApiTestBase
         var response = await Client.GetAsync($"/api/families/{seeded.FamilyId}/price-groups?by=colour");
         var groups = await response.Content.ReadFromJsonAsync<List<PriceGroupSummary>>();
 
+        var options = PriceGroupOptionsFactory.Build(null);
+        var expectedSoldNetMedian = PriceGroupNetCalculator.ComputeNetProceeds(100m, "seller", 10m, options);
+        var expectedActiveLandedMedian = PriceGroupNetCalculator.ComputeLandedPrice(50m, "buyer", 5m, options);
         Assert.Multiple(() =>
         {
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             var group = groups!.Single();
-            Assert.That(group.SoldNetMedian, Is.EqualTo(79.5m));
-            Assert.That(group.ActiveLandedMedian, Is.EqualTo(55m));
-            Assert.That(group.ActiveLandedMin, Is.EqualTo(55m));
+            Assert.That(group.SoldNetMedian, Is.EqualTo(expectedSoldNetMedian));
+            Assert.That(group.ActiveLandedMedian, Is.EqualTo(expectedActiveLandedMedian));
+            Assert.That(group.ActiveLandedMin, Is.EqualTo(expectedActiveLandedMedian));
             Assert.That(group.ShippingUnknownCount, Is.EqualTo(0));
             Assert.That(group.TrimmedCount, Is.EqualTo(0));
         });

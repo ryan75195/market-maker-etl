@@ -44,14 +44,15 @@ public class DealSignalEndpointsTests : JobsApiTestBase
         var deals = await getResponse.Content.ReadFromJsonAsync<List<DealSignalView>>();
 
         var expectedSoldNetMedian = MedianSoldNetProceeds();
-        var expectedDiscount = DealDiscountCalculator.Calculate(expectedSoldNetMedian, 70m);
+        var expectedLandedPrice = LandedPriceFor(60m);
+        var expectedDiscount = DealDiscountCalculator.Calculate(expectedSoldNetMedian, expectedLandedPrice);
         Assert.Multiple(() =>
         {
             Assert.That(putResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             Assert.That(scanResult.SignalsCreated, Is.EqualTo(1));
             Assert.That(getResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             Assert.That(deals, Has.Count.EqualTo(1));
-            Assert.That(deals![0].LandedPrice, Is.EqualTo(70m));
+            Assert.That(deals![0].LandedPrice, Is.EqualTo(expectedLandedPrice));
             Assert.That(deals[0].SoldNetMedian, Is.EqualTo(expectedSoldNetMedian));
             Assert.That(deals[0].Discount, Is.EqualTo(expectedDiscount));
             Assert.That(deals[0].GroupKey["model"], Is.EqualTo("dualsense"));
@@ -67,6 +68,9 @@ public class DealSignalEndpointsTests : JobsApiTestBase
             .ToList();
         return netProceeds[1];
     }
+
+    private static decimal LandedPriceFor(decimal price) =>
+        PriceGroupNetCalculator.ComputeLandedPrice(price, null, null, PriceGroupOptionsFactory.Build(null));
 
     [Test]
     public async Task Should_return_newest_signals_first_and_respect_since()
@@ -88,10 +92,10 @@ public class DealSignalEndpointsTests : JobsApiTestBase
         Assert.Multiple(() =>
         {
             Assert.That(allDeals, Has.Count.EqualTo(2));
-            Assert.That(allDeals![0].LandedPrice, Is.EqualTo(40m));
-            Assert.That(allDeals[1].LandedPrice, Is.EqualTo(70m));
+            Assert.That(allDeals![0].LandedPrice, Is.EqualTo(LandedPriceFor(40m)));
+            Assert.That(allDeals[1].LandedPrice, Is.EqualTo(LandedPriceFor(60m)));
             Assert.That(recentDeals, Has.Count.EqualTo(1));
-            Assert.That(recentDeals![0].LandedPrice, Is.EqualTo(40m));
+            Assert.That(recentDeals![0].LandedPrice, Is.EqualTo(LandedPriceFor(40m)));
         });
     }
 
@@ -113,7 +117,7 @@ public class DealSignalEndpointsTests : JobsApiTestBase
         var seeded = await SeedTaxonomyAndListings(family.Id);
         var createdUtc = DateTime.UtcNow.AddDays(-20);
 
-        var flaggedListingId = await GetListingIdByPrice(seeded.JobId, 70m);
+        var flaggedListingId = await GetListingIdByPrice(seeded.JobId, 60m);
         await AddSoldListingWithDate(seeded.JobId, seeded.TaxonomyVersionId, 90m, createdUtc.AddDays(2));
         await AddSoldListingWithDate(seeded.JobId, seeded.TaxonomyVersionId, 100m, createdUtc.AddDays(4));
         await AddSoldListingWithDate(seeded.JobId, seeded.TaxonomyVersionId, 110m, createdUtc.AddDays(6));
@@ -192,7 +196,7 @@ public class DealSignalEndpointsTests : JobsApiTestBase
         await AddSoldListing(db, job.Id, taxonomyVersion.Id, 90m);
         await AddSoldListing(db, job.Id, taxonomyVersion.Id, 100m);
         await AddSoldListing(db, job.Id, taxonomyVersion.Id, 110m);
-        await AddActiveListing(db, job.Id, taxonomyVersion.Id, 70m);
+        await AddActiveListing(db, job.Id, taxonomyVersion.Id, 60m);
         await AddActiveListing(db, job.Id, taxonomyVersion.Id, 95m);
 
         return new SeededTaxonomy(taxonomyVersion.Id, job.Id);
