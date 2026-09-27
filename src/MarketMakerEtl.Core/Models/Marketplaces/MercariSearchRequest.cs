@@ -7,4 +7,5 @@ public sealed record MercariSearchRequest(
     string? CategoryId = null,
     string? Condition = null,
     decimal? MinPrice = null,
-    decimal? MaxPrice = null);
+    decimal? MaxPrice = null,
+    int Offset = 0);

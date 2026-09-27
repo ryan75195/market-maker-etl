@@ -12,13 +12,16 @@ public sealed class MercariSearchUrlService : IEbaySearchUrlService, IPriceBandS
 
     public Marketplace Marketplace => Marketplace.Mercari;
 
-    public bool SupportsPagination => false;
+    public bool SupportsPagination => true;
 
     public string BuildSearch(string searchTerm, bool sold, int page) =>
         BuildSearch(new MercariSearchRequest(searchTerm, sold));
 
     public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice) =>
-        BuildSearch(new MercariSearchRequest(searchTerm, sold, MinPrice: minPrice, MaxPrice: maxPrice));
+        BuildSearch(searchTerm, sold, minPrice, maxPrice, offset: 0);
+
+    public string BuildSearch(string searchTerm, bool sold, decimal? minPrice, decimal? maxPrice, int offset) =>
+        BuildSearch(new MercariSearchRequest(searchTerm, sold, MinPrice: minPrice, MaxPrice: maxPrice, Offset: offset));
 
     public string BuildSearch(MercariSearchRequest request)
     {
@@ -33,6 +36,7 @@ public sealed class MercariSearchUrlService : IEbaySearchUrlService, IPriceBandS
         AddIfPresent(query, "itemConditions", request.Condition);
         AddIfPresent(query, "minPrice", FormatPrice(request.MinPrice));
         AddIfPresent(query, "maxPrice", FormatPrice(request.MaxPrice));
+        AddIfPresent(query, "offset", request.Offset > 0 ? request.Offset.ToString(CultureInfo.InvariantCulture) : null);
 
         return $"{_searchBase}?{string.Join('&', query)}";
     }

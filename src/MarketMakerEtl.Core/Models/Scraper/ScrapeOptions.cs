@@ -8,4 +8,5 @@ public sealed record ScrapeOptions(
     int MaxBackfillItemPageFetches = 400,
     int SearchPageMaxAttempts = 5,
     int SearchPageRetryBaseDelaySeconds = 5,
-    int SearchConcurrency = 3);
+    int SearchConcurrency = 3,
+    int MaxSearchPages = 10);

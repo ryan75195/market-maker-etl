@@ -23,6 +23,7 @@ public static class ServiceCollectionExtensions
     private const int DefaultSearchPageMaxAttempts = 5;
     private const int DefaultSearchPageRetryBaseDelaySeconds = 5;
     private const int DefaultSearchConcurrency = 3;
+    private const int DefaultMaxSearchPages = 10;
     private const string DefaultDatabaseFileName = "marketmakeretl.db";
     private const int DefaultTickMinutes = 5;
     private const int DefaultRefreshIntervalHours = 24;
@@ -148,7 +149,8 @@ public static class ServiceCollectionExtensions
             ReadInt(configuration, "Scrape:MaxBackfillItemPageFetches", DefaultMaxBackfillItemPageFetches),
             ReadInt(configuration, "Scrape:SearchPageMaxAttempts", DefaultSearchPageMaxAttempts),
             ReadInt(configuration, "Scrape:SearchPageRetryBaseDelaySeconds", DefaultSearchPageRetryBaseDelaySeconds),
-            ReadInt(configuration, "Scrape:SearchConcurrency", DefaultSearchConcurrency));
+            ReadInt(configuration, "Scrape:SearchConcurrency", DefaultSearchConcurrency),
+            ReadInt(configuration, "Scrape:MaxSearchPages", DefaultMaxSearchPages));
 
     private static ScheduleOptions BuildScheduleOptions(IConfiguration? configuration) =>
         new(

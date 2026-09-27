@@ -100,7 +100,8 @@ public sealed class SearchPageService : ISearchPageService
                 BuildBackfillPlanner(sold, itemParser, knownSoldListingIds),
                 _options.SearchPageMaxAttempts,
                 _options.SearchPageRetryBaseDelaySeconds,
-                _options.SearchConcurrency);
+                _options.SearchConcurrency,
+                _options.MaxSearchPages);
             var collector = new MercariPriceBandCollector(_client, bandUrls, parser, settings, _logger);
             return await collector.Collect(searchTerm, sold, merged, knownSoldListingIds, ct);
         }
@@ -136,7 +137,9 @@ public sealed class SearchPageService : ISearchPageService
             return null;
         }
 
-        return new SoldBackfillPlanner(
+        var planner = new SoldBackfillPlanner(
             _client, itemParser, _options.SoldBackfillDays, _options.MaxBackfillItemPageFetches, _timeProvider);
+        planner.ConfigureMaxSearchPages(_options.MaxSearchPages);
+        return planner;
     }
 }

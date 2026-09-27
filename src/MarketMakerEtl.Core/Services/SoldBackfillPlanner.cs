@@ -51,6 +51,7 @@ internal sealed class SoldBackfillPlanner
     private readonly Dictionary<string, Task<DateLookup>> _dateCache = new(StringComparer.Ordinal);
     private readonly object _cacheLock = new();
     private readonly ConcurrentDictionary<string, ItemPageListing> _resolvedDetails = new(StringComparer.Ordinal);
+    private int _pageCapacity = FullPageSize;
     private int _itemPageFetches;
 
     internal SoldBackfillPlanner(
@@ -66,6 +67,9 @@ internal sealed class SoldBackfillPlanner
         _timeProvider = timeProvider;
         CutoffUtc = timeProvider.GetUtcNow().UtcDateTime.AddDays(-soldBackfillDays);
     }
+
+    internal void ConfigureMaxSearchPages(int maxSearchPages) =>
+        _pageCapacity = Math.Max(1, maxSearchPages) * FullPageSize;
 
     internal DateTime CutoffUtc { get; }
 
@@ -92,9 +96,9 @@ internal sealed class SoldBackfillPlanner
         var oldest = await DateOf(page.Listings[lastIndex], ct);
         var oldestInWindow = oldest.Status == DateResolutionStatus.Resolved && !IsBeforeCutoff(oldest.Value);
         var reportedCount = page.TotalCount ?? page.Listings.Count;
-        var isFullPage = page.Listings.Count >= FullPageSize;
+        var isFullPage = page.Listings.Count >= _pageCapacity;
 
-        if (oldestInWindow && isFullPage && reportedCount > FullPageSize)
+        if (oldestInWindow && isFullPage && reportedCount > _pageCapacity)
         {
             return canSplit
                 ? SoldBackfillDecision.Split()
