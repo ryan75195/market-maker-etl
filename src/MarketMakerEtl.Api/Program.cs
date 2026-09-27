@@ -190,6 +190,7 @@ app.MapReviewEndpoints();
 app.MapPriceGroupEndpoints();
 app.MapHealthEndpoints();
 app.MapDealSignalEndpoints();
+app.MapTradeEndpoints();
 
 await app.RunAsync();
 

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Trades Ledger</title>
+<link rel="stylesheet" href="../review/style.css" />
+<link rel="stylesheet" href="trades.css" />
+</head>
+<body>
+<header>
+  <h1>Trades Ledger</h1>
+</header>
+
+<main>
+  <p id="error" class="error" hidden></p>
+
+  <section id="summary" class="panel">
+    <h2>Summary</h2>
+    <div id="summary-body" class="summary-grid"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Add a trade</h2>
+    <form id="trade-form" class="trade-form">
+      <label>
+        Deal signal id
+        <input id="field-deal-signal-id" type="number" min="1" />
+      </label>
+      <label>
+        Listing id
+        <input id="field-listing-id" type="number" min="1" />
+      </label>
+      <label>
+        Product family id
+        <input id="field-family-id" type="number" min="1" />
+      </label>
+      <label>
+        Price group key (JSON)
+        <input id="field-group-key" type="text" placeholder='{"model":"dualsense"}' />
+      </label>
+      <label>
+        Bought
+        <input id="field-bought-utc" type="datetime-local" required />
+      </label>
+      <label>
+        Buy price
+        <input id="field-buy-price" type="number" step="0.01" min="0" required />
+      </label>
+      <label>
+        Buy shipping
+        <input id="field-buy-shipping" type="number" step="0.01" min="0" />
+      </label>
+      <label>
+        Buy fees (blank = default)
+        <input id="field-buy-fees" type="number" step="0.01" min="0" />
+      </label>
+      <label class="wide">
+        Notes
+        <input id="field-notes" type="text" />
+      </label>
+      <button type="submit">Add trade</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Trades</h2>
+    <div id="trades-list"></div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
