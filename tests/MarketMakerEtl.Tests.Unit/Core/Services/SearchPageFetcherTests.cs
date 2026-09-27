@@ -87,7 +87,7 @@ public class SearchPageFetcherTests
     {
         var handler = new NeverTerminatingScrapeHandler();
         var options = new FetcherOptions("http://fetcher.test", TimeSpan.FromMilliseconds(20));
-        var client = new FetcherScrapeClient(new HttpClient(handler), options);
+        var client = new FetcherScrapeClient(new HttpClient(handler), options, Substitute.For<IFetchOutcomeMonitor>());
 
         var fetcher = new SearchPageFetcher(
             client, new MercariSearchParser(), maxAttempts: 2, baseDelaySeconds: 0, NullLogger.Instance);

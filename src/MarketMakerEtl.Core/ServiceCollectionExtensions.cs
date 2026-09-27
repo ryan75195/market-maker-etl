@@ -15,6 +15,8 @@ public static class ServiceCollectionExtensions
 {
     private const string DefaultFetcherBaseUrl = "http://127.0.0.1:8766";
     private const int DefaultFetcherTimeoutSeconds = 240;
+    private const int DefaultFetcherRecentWindowMinutes = 60;
+    private const int DefaultFetcherMinRecentAttemptsForDegraded = 10;
     private const int DefaultMaxPages = 2;
     private const bool DefaultCollectSold = true;
     private const int DefaultMaxBandsPerDirection = 200;
@@ -65,6 +67,7 @@ public static class ServiceCollectionExtensions
         IConfiguration? configuration)
     {
         services.AddSingleton(BuildFetcherOptions(configuration));
+        services.AddSingleton(BuildFetcherHealthOptions(configuration));
         services.AddSingleton(BuildScrapeOptions(configuration));
         services.AddSingleton(BuildScheduleOptions(configuration));
         services.AddSingleton(TimeProvider.System);
@@ -86,7 +89,9 @@ public static class ServiceCollectionExtensions
 
     private static IServiceCollection AddCoreDomainServices(this IServiceCollection services)
     {
+        services.AddSingleton<IFetchOutcomeMonitor, FetchOutcomeMonitor>();
         services.AddHttpClient<IScrapeClient, FetcherScrapeClient>();
+        services.AddHttpClient<IFetcherHealthClient, FetcherHealthClient>();
         services.AddHttpClient<IListingClassifierClient, HttpListingClassifierClient>(
             client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
@@ -131,6 +136,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<IJobHealthService, JobHealthService>();
         services.AddSingleton<IFamilyBacklogHealthService, FamilyBacklogHealthService>();
+        services.AddSingleton<IFetcherHealthService, FetcherHealthService>();
         services.AddSingleton<ISystemHealthService, SystemHealthService>();
         return services;
     }
@@ -139,6 +145,11 @@ public static class ServiceCollectionExtensions
         new(
             ReadString(configuration, "Fetcher:BaseUrl", DefaultFetcherBaseUrl),
             TimeSpan.FromSeconds(ReadInt(configuration, "Fetcher:TimeoutSeconds", DefaultFetcherTimeoutSeconds)));
+
+    private static FetcherHealthOptions BuildFetcherHealthOptions(IConfiguration? configuration) =>
+        new(
+            ReadInt(configuration, "Fetcher:RecentWindowMinutes", DefaultFetcherRecentWindowMinutes),
+            ReadInt(configuration, "Fetcher:DegradedMinAttempts", DefaultFetcherMinRecentAttemptsForDegraded));
 
     private static ScrapeOptions BuildScrapeOptions(IConfiguration? configuration) =>
         new(

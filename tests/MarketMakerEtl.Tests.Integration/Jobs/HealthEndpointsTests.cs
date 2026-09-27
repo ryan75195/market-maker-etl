@@ -9,6 +9,7 @@ using MarketMakerEtl.Core.Models.Health;
 using MarketMakerEtl.Core.Models.Jobs;
 using MarketMakerEtl.Core.Models.Marketplaces;
 using MarketMakerEtl.Core.Models.Runs;
+using MarketMakerEtl.Core.Models.Scraper;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -57,6 +58,43 @@ public class HealthEndpointsTests
             Assert.That(response.DatabaseReachable, Is.True);
             Assert.That(response.Classifier.Reachable, Is.True);
             Assert.That(response.Jobs.Single().IsStale, Is.False);
+            Assert.That(response.Fetcher.SidecarReachable, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task Should_report_degraded_when_the_fetcher_sidecar_is_unreachable()
+    {
+        var client = CreateClient(classifierReachable: true, fetcherReachable: false);
+        await CreateHealthyJob(client);
+
+        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response!.Status, Is.EqualTo(SystemHealthStatus.Degraded));
+            Assert.That(response.Fetcher.SidecarReachable, Is.False);
+        });
+    }
+
+    [Test]
+    public async Task Should_report_degraded_when_the_recent_fetch_window_has_no_successes()
+    {
+        var client = CreateClient(classifierReachable: true, fetcherReachable: true);
+        await CreateHealthyJob(client);
+        var outcomeMonitor = _factory!.Services.GetRequiredService<IFetchOutcomeMonitor>();
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            outcomeMonitor.Record(FetchOutcomeKind.Infrastructure);
+        }
+
+        var response = await client.GetFromJsonAsync<SystemHealthResponse>("/api/health", TestJsonOptions.Default);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response!.Status, Is.EqualTo(SystemHealthStatus.Degraded));
+            Assert.That(response.Fetcher.RecentInfrastructureFailureCount, Is.EqualTo(10));
+            Assert.That(response.Fetcher.RecentSuccessCount, Is.EqualTo(0));
         });
     }
 
@@ -107,7 +145,7 @@ public class HealthEndpointsTests
         });
     }
 
-    private HttpClient CreateClient(bool classifierReachable)
+    private HttpClient CreateClient(bool classifierReachable, bool fetcherReachable = true)
     {
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -120,7 +158,10 @@ public class HealthEndpointsTests
                     });
                 });
                 builder.ConfigureServices(services =>
-                    services.AddSingleton<IListingClassifierClient>(new StubClassifierClient(classifierReachable)));
+                {
+                    services.AddSingleton<IListingClassifierClient>(new StubClassifierClient(classifierReachable));
+                    services.AddSingleton<IFetcherHealthClient>(new StubFetcherHealthClient(fetcherReachable));
+                });
             });
         _client = _factory.CreateClient();
         return _client;
@@ -181,5 +222,17 @@ public class HealthEndpointsTests
         public Task<ClassifierHealthCheckResult> CheckHealth(CancellationToken ct) =>
             Task.FromResult(new ClassifierHealthCheckResult(
                 "http://stub", _reachable, _reachable ? ["ps5-controller"] : []));
+    }
+
+    private sealed class StubFetcherHealthClient : IFetcherHealthClient
+    {
+        private readonly bool _reachable;
+
+        public StubFetcherHealthClient(bool reachable)
+        {
+            _reachable = reachable;
+        }
+
+        public Task<bool> CheckSidecarReachable(CancellationToken ct) => Task.FromResult(_reachable);
     }
 }
