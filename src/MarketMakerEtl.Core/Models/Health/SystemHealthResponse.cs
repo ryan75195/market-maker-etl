@@ -7,4 +7,5 @@ public sealed record SystemHealthResponse(
     FetcherHealthView Fetcher,
     LlmHealthView Llm,
     SystemHealthBacklogs Backlogs,
-    IReadOnlyList<FamilyReviewView> Review);
+    IReadOnlyList<FamilyReviewView> Review,
+    IReadOnlyList<FamilyStateView> Families);

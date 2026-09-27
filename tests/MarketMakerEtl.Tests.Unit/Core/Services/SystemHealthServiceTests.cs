@@ -1,4 +1,5 @@
 using MarketMakerEtl.Core.Interfaces;
+using MarketMakerEtl.Core.Models.Families;
 using MarketMakerEtl.Core.Models.Health;
 using MarketMakerEtl.Core.Models.Runs;
 using MarketMakerEtl.Core.Services;
@@ -70,7 +71,7 @@ public class SystemHealthServiceTests
         var llmHealth = Substitute.For<ILlmHealthService>();
         jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([]);
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>())
-            .Returns([new FamilyBacklogHealthView(1, "ps5-controller", 0, 0)]);
+            .Returns([new FamilyBacklogHealthView(1, "ps5-controller", 0, 0, FamilyState.Active, false)]);
         llmHealth.GetLlmHealth(Arg.Any<CancellationToken>())
             .Returns(new LlmHealthView("gpt-6-luna", true, 0, 5, Degraded: true));
         var service = new SystemHealthService(jobHealth, familyHealth, fetcherHealth, llmHealth);
@@ -95,6 +96,44 @@ public class SystemHealthServiceTests
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>()).Returns([]);
         llmHealth.GetLlmHealth(Arg.Any<CancellationToken>())
             .Returns(new LlmHealthView("gpt-6-luna", true, 0, 5, Degraded: true));
+        var service = new SystemHealthService(jobHealth, familyHealth, fetcherHealth, llmHealth);
+
+        var health = await service.GetHealth(CancellationToken.None);
+
+        Assert.That(health.Status, Is.EqualTo(SystemHealthStatus.Ok));
+    }
+
+    [Test]
+    public async Task Should_report_degraded_when_a_draft_family_has_an_enabled_scrape_job()
+    {
+        var jobHealth = Substitute.For<IJobHealthService>();
+        var familyHealth = Substitute.For<IFamilyBacklogHealthService>();
+        var fetcherHealth = HealthyFetcher();
+        var llmHealth = HealthyLlm();
+        jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([]);
+        familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>())
+            .Returns([new FamilyBacklogHealthView(1, "ps5-controller", 0, 0, FamilyState.Draft, true)]);
+        var service = new SystemHealthService(jobHealth, familyHealth, fetcherHealth, llmHealth);
+
+        var health = await service.GetHealth(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(health.Status, Is.EqualTo(SystemHealthStatus.Degraded));
+            Assert.That(health.Families.Single().State, Is.EqualTo(FamilyState.Draft));
+        });
+    }
+
+    [Test]
+    public async Task Should_report_ok_when_a_draft_family_has_no_enabled_scrape_job()
+    {
+        var jobHealth = Substitute.For<IJobHealthService>();
+        var familyHealth = Substitute.For<IFamilyBacklogHealthService>();
+        var fetcherHealth = HealthyFetcher();
+        var llmHealth = HealthyLlm();
+        jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([]);
+        familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>())
+            .Returns([new FamilyBacklogHealthView(1, "ps5-controller", 0, 0, FamilyState.Draft, false)]);
         var service = new SystemHealthService(jobHealth, familyHealth, fetcherHealth, llmHealth);
 
         var health = await service.GetHealth(CancellationToken.None);
@@ -135,7 +174,7 @@ public class SystemHealthServiceTests
         jobHealth.GetJobHealth(Arg.Any<CancellationToken>()).Returns([]);
         jobHealth.GetPendingDetailFetchCount(Arg.Any<CancellationToken>()).Returns(5);
         familyHealth.GetFamilyBacklogHealth(Arg.Any<CancellationToken>())
-            .Returns([new FamilyBacklogHealthView(1, "ps5-controller", 3, 2)]);
+            .Returns([new FamilyBacklogHealthView(1, "ps5-controller", 3, 2, FamilyState.Active, false)]);
         llmHealth.GetLlmHealth(Arg.Any<CancellationToken>())
             .Returns(new LlmHealthView("gpt-6-luna", true, 2, 1, Degraded: false));
         var service = new SystemHealthService(jobHealth, familyHealth, fetcherHealth, llmHealth);
@@ -146,6 +185,7 @@ public class SystemHealthServiceTests
         {
             Assert.That(health.Backlogs.PendingDetailFetch, Is.EqualTo(5));
             Assert.That(health.Backlogs.Classification.Single().PendingCount, Is.EqualTo(3));
+            Assert.That(health.Families.Single().State, Is.EqualTo(FamilyState.Active));
             Assert.That(health.Review.Single().NeedsReviewCount, Is.EqualTo(2));
             Assert.That(health.Llm.Model, Is.EqualTo("gpt-6-luna"));
             Assert.That(health.Llm.HasApiKey, Is.True);

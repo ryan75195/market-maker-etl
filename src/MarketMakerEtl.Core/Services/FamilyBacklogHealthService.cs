@@ -56,9 +56,11 @@ public sealed class FamilyBacklogHealthService : IFamilyBacklogHealthService
     private async Task<FamilyBacklogHealthView> BuildFamilyHealth(
         ProductFamilyView family, IReadOnlyDictionary<int, List<JobView>> jobsByFamily, CancellationToken ct)
     {
+        var hasEnabledScrapeJob = HasEnabledScrapeJob(family.Id, jobsByFamily);
+
         if (family.LatestTaxonomyVersion is null)
         {
-            return new FamilyBacklogHealthView(family.Id, family.Key, 0, 0);
+            return new FamilyBacklogHealthView(family.Id, family.Key, 0, 0, family.State, hasEnabledScrapeJob);
         }
 
         var taxonomyVersionId = family.LatestTaxonomyVersion.Id;
@@ -66,8 +68,12 @@ public sealed class FamilyBacklogHealthService : IFamilyBacklogHealthService
         var reviewCounts = await _reviews.GetReviewSummary(
             family.Id, taxonomyVersionId, _reviewOptions.ReviewThreshold, ct);
 
-        return new FamilyBacklogHealthView(family.Id, family.Key, pending, reviewCounts.Sum(c => c.Count));
+        return new FamilyBacklogHealthView(
+            family.Id, family.Key, pending, reviewCounts.Sum(c => c.Count), family.State, hasEnabledScrapeJob);
     }
+
+    private static bool HasEnabledScrapeJob(int familyId, IReadOnlyDictionary<int, List<JobView>> jobsByFamily) =>
+        jobsByFamily.TryGetValue(familyId, out var jobs) && jobs.Any(job => job.IsEnabled);
 
     private async Task<int> CountPendingClassification(
         int familyId, int taxonomyVersionId, IReadOnlyDictionary<int, List<JobView>> jobsByFamily, CancellationToken ct)
