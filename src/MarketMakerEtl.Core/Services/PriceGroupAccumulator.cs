@@ -74,7 +74,7 @@ internal sealed class PriceGroupAccumulator
     {
         _activePrices.Add(price);
         _activeLandedPrices.Add(
-            PriceGroupNetCalculator.ComputeLandedPrice(price, candidate.ShippingPayer, candidate.ShippingCost));
+            PriceGroupNetCalculator.ComputeLandedPrice(price, candidate.ShippingPayer, candidate.ShippingCost, _options));
         CountShippingUnknown(candidate.ShippingPayer);
     }
 

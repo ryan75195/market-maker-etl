@@ -7,8 +7,14 @@ public static class PriceGroupNetCalculator
     private const string BuyerPaysShipping = "buyer";
     private const string SellerPaysShipping = "seller";
 
-    public static decimal ComputeLandedPrice(decimal price, string? shippingPayer, decimal? shippingCost) =>
-        IsBuyerPaid(shippingPayer) && shippingCost.HasValue ? price + shippingCost.Value : price;
+    public static decimal ComputeLandedPrice(
+        decimal price, string? shippingPayer, decimal? shippingCost, PriceGroupOptions options)
+    {
+        var priceWithShipping = IsBuyerPaid(shippingPayer) && shippingCost.HasValue
+            ? price + shippingCost.Value
+            : price;
+        return priceWithShipping * (1 + options.BuyerFeeRate);
+    }
 
     public static decimal ComputeNetProceeds(
         decimal soldPrice, string? shippingPayer, decimal? shippingCost, PriceGroupOptions options)

@@ -250,7 +250,7 @@ public class PriceGroupQueryServiceTests
         {
             BuildCandidate(1, "white", isSold: true, soldPrice: 100m, soldDaysAgo: 1, shippingPayer: "seller", shippingCost: 10m)
         };
-        var service = BuildService(candidates, new PriceGroupOptions(0.20m, 1.00m));
+        var service = BuildService(candidates, new PriceGroupOptions(0.20m, 1.00m, 0m));
 
         var groups = await service.GetPriceGroups(
             new PriceGroupQuery(1, EmptyWhere, ["colour"], 30, false, 1), CancellationToken.None);
@@ -405,7 +405,7 @@ public class PriceGroupQueryServiceTests
             BuildCandidateAt(2, "white", windowStart.AddDays(2), soldPrice: 100m),
             BuildCandidateAt(3, "white", windowStart.AddDays(3), soldPrice: 110m)
         };
-        var service = BuildService(candidates, new PriceGroupOptions(0m, 0m));
+        var service = BuildService(candidates, new PriceGroupOptions(0m, 0m, 0m));
 
         var result = await service.GetForwardWindowStats(
             new PriceGroupForwardWindowQuery(1, groupKey, windowStart, windowStart.AddDays(14), false),
@@ -435,7 +435,7 @@ public class PriceGroupQueryServiceTests
     private static IReadOnlyDictionary<string, string> EmptyWhere { get; } =
         new Dictionary<string, string>();
 
-    private static readonly PriceGroupOptions DefaultOptions = new(0.10m, 0.50m);
+    private static readonly PriceGroupOptions DefaultOptions = new(0.10m, 0.50m, 0m);
 
     private static PriceGroupQueryService BuildService(IReadOnlyList<PriceGroupListingCandidate> candidates) =>
         BuildService(candidates, DefaultOptions);

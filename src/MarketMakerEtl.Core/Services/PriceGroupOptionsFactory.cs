@@ -7,12 +7,14 @@ namespace MarketMakerEtl.Core.Services;
 public static class PriceGroupOptionsFactory
 {
     private const decimal DefaultSellerFeeRate = 0.10m;
-    private const decimal DefaultSellerFeeFixed = 0.50m;
+    private const decimal DefaultSellerFeeFixed = 0m;
+    private const decimal DefaultBuyerFeeRate = 0.036m;
 
     public static PriceGroupOptions Build(IConfiguration? configuration) =>
         new(
             ReadDecimal(configuration, "PriceGroups:SellerFeeRate", DefaultSellerFeeRate),
-            ReadDecimal(configuration, "PriceGroups:SellerFeeFixed", DefaultSellerFeeFixed));
+            ReadDecimal(configuration, "PriceGroups:SellerFeeFixed", DefaultSellerFeeFixed),
+            ReadDecimal(configuration, "PriceGroups:BuyerFeeRate", DefaultBuyerFeeRate));
 
     private static decimal ReadDecimal(IConfiguration? configuration, string key, decimal fallback)
     {
