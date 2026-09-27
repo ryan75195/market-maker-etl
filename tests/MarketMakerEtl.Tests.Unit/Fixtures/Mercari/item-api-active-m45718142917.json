@@ -1,0 +1,136 @@
+{
+  "data": {
+    "item": {
+      "__typename": "ItemDetail",
+      "id": "m45718142917",
+      "status": "on_sale",
+      "name": "Nintendo switch v1 bundle",
+      "price": 15000,
+      "lastSoldAt": null,
+      "description": "This listing is for a Nintendo Switch V1. Bundle comes with everything shown. System is in very good condition. Barely played. The Mario controllers are third party. Everything works fine.",
+      "discountRatio": 9,
+      "numLikes": 5,
+      "created": 1790461236,
+      "updated": 1790465672,
+      "originalPrice": 16500,
+      "categoryTitle": "Consoles",
+      "photos": [
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_1.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_1.jpg?1790465672&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_2.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_2.jpg?1790465672&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_3.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_3.jpg?1790465672&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_4.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_4.jpg?1790465672&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_5.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_5.jpg?1790465672&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_6.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_6.jpg?1790465672&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_7.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_7.jpg?1790465672&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_8.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_8.jpg?1790465672&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_9.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_9.jpg?1790465672&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_10.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_10.jpg?1790465672&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_11.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_11.jpg?1790465672&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_12.jpg?1790465672",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m45718142917_12.jpg?1790465672&width=200&height=200"
+        }
+      ],
+      "seller": {
+        "__typename": "PublicUser",
+        "id": 734240498,
+        "created": 1558807490,
+        "numSellItems": 1215,
+        "numSales": 1177,
+        "name": "thehallofpops",
+        "isProSeller": false,
+        "ratings": {
+          "count": 1560,
+          "average": 5
+        }
+      },
+      "itemCondition": {
+        "__typename": "ItemDetailItemCondition",
+        "id": 3,
+        "name": "Good"
+      },
+      "itemSize": null,
+      "itemCategory": {
+        "__typename": "MasterItemCategory",
+        "id": 797,
+        "level": 2,
+        "name": "Consoles"
+      },
+      "itemCategoryHierarchy": [
+        {
+          "__typename": "MasterItemCategory",
+          "id": 7,
+          "level": 0,
+          "name": "Electronics"
+        },
+        {
+          "__typename": "MasterItemCategory",
+          "id": 84,
+          "level": 1,
+          "name": "Video games & consoles"
+        },
+        {
+          "__typename": "MasterItemCategory",
+          "id": 797,
+          "level": 2,
+          "name": "Consoles"
+        }
+      ],
+      "brand": {
+        "__typename": "ItemDetailItemBrand",
+        "id": 4591,
+        "name": "Nintendo"
+      },
+      "shippingPayer": {
+        "__typename": "MasterShippingPayer",
+        "id": 2,
+        "name": "Seller",
+        "code": "seller"
+      },
+      "shippingFromArea": {
+        "__typename": "ShippingFromArea",
+        "id": 33,
+        "name": "New York"
+      },
+      "shippingClass": {
+        "__typename": "ItemDetailShippingClass",
+        "id": 0,
+        "fee": 0
+      },
+      "additionalAttributes": []
+    }
+  }
+}

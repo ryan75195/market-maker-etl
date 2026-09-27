@@ -90,7 +90,7 @@ internal static class MercariSearchPayloadParser
             BrandId: ReadNestedInt(item, "brand", "id"),
             ConditionId: ReadNestedInt(item, "itemCondition", "id"),
             SizeName: ReadNestedName(item, "itemSize"),
-            ColorName: ReadString(item, "color"),
+            ColorName: ReadNestedName(item, "color"),
             ShippingPayer: ReadNestedString(item, "shippingPayer", "code"),
             SellerId: ReadNestedLong(item, "seller", "sellerId"),
             Attributes: ReadCustomFacets(item),

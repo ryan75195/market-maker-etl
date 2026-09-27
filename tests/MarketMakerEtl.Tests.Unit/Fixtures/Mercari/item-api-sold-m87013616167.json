@@ -1,0 +1,104 @@
+{
+  "data": {
+    "item": {
+      "__typename": "ItemDetail",
+      "id": "m87013616167",
+      "status": "trading",
+      "name": "PowerA Enhanced Wireless Controller with Lumectra for Nintendo Switch - Black",
+      "price": 3200,
+      "lastSoldAt": 1790504253,
+      "description": "Hello, up for sale I have PowerA Enhanced Wireless Controller with Lumectra for Nintendo Switch - Black\nBrand new sealed item\nPlease see my detailed pictures of the item\nItem is on hand and will be shipped right away\nFree fast shipping from NYC\nCheck out my other items\nThanks for looking!",
+      "discountRatio": 20,
+      "numLikes": 9,
+      "created": 1764450562,
+      "updated": 1790504253,
+      "originalPrice": 4000,
+      "categoryTitle": "Accessories",
+      "photos": [
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m87013616167_1.jpg?1790491149",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m87013616167_1.jpg?1790491149&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m87013616167_2.jpg?1790491149",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m87013616167_2.jpg?1790491149&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m87013616167_3.jpg?1790491149",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m87013616167_3.jpg?1790491149&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m87013616167_4.jpg?1790491149",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m87013616167_4.jpg?1790491149&width=200&height=200"
+        }
+      ],
+      "seller": {
+        "__typename": "PublicUser",
+        "id": 787664299,
+        "created": 1585272414,
+        "numSellItems": 2349,
+        "numSales": 1906,
+        "name": "Brooklynshop11",
+        "isProSeller": false,
+        "ratings": {
+          "count": 1870,
+          "average": 5
+        }
+      },
+      "itemCondition": {
+        "__typename": "ItemDetailItemCondition",
+        "id": 1,
+        "name": "New"
+      },
+      "itemSize": null,
+      "itemCategory": {
+        "__typename": "MasterItemCategory",
+        "id": 798,
+        "level": 2,
+        "name": "Accessories"
+      },
+      "itemCategoryHierarchy": [
+        {
+          "__typename": "MasterItemCategory",
+          "id": 7,
+          "level": 0,
+          "name": "Electronics"
+        },
+        {
+          "__typename": "MasterItemCategory",
+          "id": 84,
+          "level": 1,
+          "name": "Video games & consoles"
+        },
+        {
+          "__typename": "MasterItemCategory",
+          "id": 798,
+          "level": 2,
+          "name": "Accessories"
+        }
+      ],
+      "brand": {
+        "__typename": "ItemDetailItemBrand",
+        "id": 5116,
+        "name": "Power A"
+      },
+      "shippingPayer": {
+        "__typename": "MasterShippingPayer",
+        "id": 2,
+        "name": "Seller",
+        "code": "seller"
+      },
+      "shippingFromArea": {
+        "__typename": "ShippingFromArea",
+        "id": 33,
+        "name": "New York"
+      },
+      "shippingClass": {
+        "__typename": "ItemDetailShippingClass",
+        "id": 2552,
+        "fee": 748
+      },
+      "additionalAttributes": []
+    }
+  }
+}

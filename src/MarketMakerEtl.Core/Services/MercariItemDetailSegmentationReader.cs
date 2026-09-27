@@ -5,29 +5,52 @@ namespace MarketMakerEtl.Core.Services;
 
 internal static class MercariItemDetailSegmentationReader
 {
-    public static MercariCategoryHierarchy? ReadCategoryHierarchy(JsonElement serverState, JsonElement item)
+    private const string AttributeKeyPrefix = "Attribute";
+
+    public static MercariCategoryHierarchy? ReadCategoryHierarchy(JsonElement item)
     {
-        if (!MercariItemDetailJsonParser.TryResolveRef(serverState, item, "itemCategory", out var category))
+        if (!item.TryGetProperty("itemCategoryHierarchy", out var hierarchy)
+            || hierarchy.ValueKind != JsonValueKind.Array)
         {
             return null;
         }
 
-        var level = MercariItemDetailJsonParser.ReadInt(category, "level");
-        var id = MercariItemDetailJsonParser.ReadInt(category, "id");
-        var name = MercariItemDetailJsonParser.ReadString(category, "name");
+        int? level0Id = null;
+        string? level0Name = null;
+        int? level1Id = null;
+        string? level1Name = null;
+        int? level2Id = null;
+        string? level2Name = null;
 
-        return level switch
+        foreach (var level in hierarchy.EnumerateArray())
         {
-            0 => new MercariCategoryHierarchy(Level0Id: id, Level0Name: name),
-            1 => new MercariCategoryHierarchy(Level1Id: id, Level1Name: name),
-            2 => new MercariCategoryHierarchy(Level2Id: id, Level2Name: name),
-            _ => null
-        };
+            var levelNumber = MercariItemDetailJsonParser.ReadInt(level, "level");
+            var id = MercariItemDetailJsonParser.ReadInt(level, "id");
+            var name = MercariItemDetailJsonParser.ReadString(level, "name");
+
+            switch (levelNumber)
+            {
+                case 0:
+                    level0Id = id;
+                    level0Name = name;
+                    break;
+                case 1:
+                    level1Id = id;
+                    level1Name = name;
+                    break;
+                case 2:
+                    level2Id = id;
+                    level2Name = name;
+                    break;
+            }
+        }
+
+        return new MercariCategoryHierarchy(level0Id, level0Name, level1Id, level1Name, level2Id, level2Name);
     }
 
-    public static MercariSellerProfile? ReadSellerProfile(JsonElement serverState, JsonElement item)
+    public static MercariSellerProfile? ReadSellerProfile(JsonElement item)
     {
-        if (!MercariItemDetailJsonParser.TryResolveRef(serverState, item, "seller", out var seller))
+        if (!MercariItemDetailJsonParser.TryResolveRef(item, "seller", out var seller))
         {
             return null;
         }
@@ -60,33 +83,31 @@ internal static class MercariItemDetailSegmentationReader
         }
 
         Dictionary<string, string>? result = null;
+        var index = 0;
 
         foreach (var attribute in attributes.EnumerateArray())
         {
-            var name = MercariItemDetailJsonParser.ReadString(attribute, "name")
-                ?? MercariItemDetailJsonParser.ReadString(attribute, "key");
-            var value = MercariItemDetailJsonParser.ReadString(attribute, "value");
+            var text = MercariItemDetailJsonParser.ReadString(attribute, "text");
 
-            if (name is null || value is null)
+            if (text is not null)
             {
-                continue;
+                result ??= [];
+                result[$"{AttributeKeyPrefix}{index}"] = text;
             }
 
-            result ??= [];
-            result[name] = value;
+            index++;
         }
 
         return result;
     }
 
-    public static int? ReadRefInt(JsonElement serverState, JsonElement item, string propertyName, string fieldName) =>
-        MercariItemDetailJsonParser.TryResolveRef(serverState, item, propertyName, out var resolved)
+    public static int? ReadRefInt(JsonElement item, string propertyName, string fieldName) =>
+        MercariItemDetailJsonParser.TryResolveRef(item, propertyName, out var resolved)
             ? MercariItemDetailJsonParser.ReadInt(resolved, fieldName)
             : null;
 
-    public static string? ReadRefString(
-        JsonElement serverState, JsonElement item, string propertyName, string fieldName) =>
-        MercariItemDetailJsonParser.TryResolveRef(serverState, item, propertyName, out var resolved)
+    public static string? ReadRefString(JsonElement item, string propertyName, string fieldName) =>
+        MercariItemDetailJsonParser.TryResolveRef(item, propertyName, out var resolved)
             ? MercariItemDetailJsonParser.ReadString(resolved, fieldName)
             : null;
 

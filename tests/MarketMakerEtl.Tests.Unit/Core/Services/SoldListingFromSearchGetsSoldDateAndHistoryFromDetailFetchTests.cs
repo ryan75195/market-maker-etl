@@ -12,7 +12,7 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 [TestFixture]
 public class SoldListingFromSearchGetsSoldDateAndHistoryFromDetailFetchTests
 {
-    private const string ListingUrl = "https://www.mercari.com/us/item/m44688360101/";
+    private const string ListingUrl = "https://www.mercari.com/us/item/m87013616167/";
 
     private string _databasePath = null!;
     private ServiceProvider _provider = null!;
@@ -49,7 +49,7 @@ public class SoldListingFromSearchGetsSoldDateAndHistoryFromDetailFetchTests
         var jobId = await SeedJob(factory);
         var listingEntityId = await SeedAlreadySoldListingWithNoSoldDate(factory, jobId);
         await SeedInitialScrapeSoldHistoryRow(factory, listingEntityId);
-        var html = ReadFixture("item-sold-m44688360101.html");
+        var html = ReadFixture("item-api-sold-m87013616167.json");
         var client = new StubScrapeClient(new Dictionary<string, string> { [ListingUrl] = html });
         var service = new ItemDetailFetchService(
             new ItemDetailStore(factory),
@@ -69,11 +69,11 @@ public class SoldListingFromSearchGetsSoldDateAndHistoryFromDetailFetchTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(listing.SoldPrice, Is.EqualTo(140.25m));
-            Assert.That(listing.SoldDate, Is.EqualTo(new DateTime(2026, 9, 23, 22, 21, 59, DateTimeKind.Utc)));
+            Assert.That(listing.SoldPrice, Is.EqualTo(32.00m));
+            Assert.That(listing.SoldDate, Is.EqualTo(new DateTime(2026, 9, 27, 10, 17, 33, DateTimeKind.Utc)));
             Assert.That(soldRows, Has.Count.EqualTo(1));
-            Assert.That(soldRows[0].SoldDateUtc, Is.EqualTo(new DateTime(2026, 9, 23, 22, 21, 59, DateTimeKind.Utc)));
-            Assert.That(soldRows[0].Price, Is.EqualTo(140.25m));
+            Assert.That(soldRows[0].SoldDateUtc, Is.EqualTo(new DateTime(2026, 9, 27, 10, 17, 33, DateTimeKind.Utc)));
+            Assert.That(soldRows[0].Price, Is.EqualTo(32.00m));
         });
     }
 
@@ -85,7 +85,7 @@ public class SoldListingFromSearchGetsSoldDateAndHistoryFromDetailFetchTests
             ListingEntityId = listingEntityId,
             Status = "Sold",
             Source = "InitialScrape",
-            Price = 140.25m,
+            Price = 32.00m,
             SoldDateUtc = null,
             ChangedUtc = DateTime.UtcNow
         });
@@ -106,13 +106,13 @@ public class SoldListingFromSearchGetsSoldDateAndHistoryFromDetailFetchTests
         await using var db = await factory.CreateDbContextAsync();
         var listing = new ListingEntity
         {
-            ListingId = "m44688360101",
+            ListingId = "m87013616167",
             ScrapeJobId = jobId,
             Marketplace = Marketplace.Mercari,
             Url = ListingUrl,
             ItemStatus = "Sold",
             IsSold = true,
-            Price = 140.25m,
+            Price = 32.00m,
             SoldPrice = null,
             SoldDate = null,
             CreatedUtc = DateTime.UtcNow

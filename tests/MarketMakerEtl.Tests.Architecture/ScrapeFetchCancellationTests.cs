@@ -9,7 +9,6 @@ public class ScrapeFetchCancellationTests
     private static readonly Type[] ScrapeFetchInterfaces =
     [
         typeof(IScrapeClient),
-        typeof(IScrapeContentStore),
         typeof(ISearchPageService)
     ];
 

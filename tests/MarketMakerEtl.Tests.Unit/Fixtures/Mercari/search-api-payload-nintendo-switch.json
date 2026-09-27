@@ -1,0 +1,789 @@
+{
+  "data": {
+    "search": {
+      "count": 10000,
+      "itemsList": [
+        {
+          "id": "m45718142917",
+          "name": "Nintendo switch v1 bundle",
+          "price": 15000,
+          "status": "on_sale",
+          "originalPrice": 16500,
+          "categoryId": 797,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m45718142917_1.jpg?1790465672"
+            }
+          ],
+          "itemCondition": {
+            "id": 3,
+            "name": "Good"
+          },
+          "brand": {
+            "id": 4591,
+            "name": "Nintendo"
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Consoles"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 797,
+              "name": "Consoles"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 734240498,
+            "sellerId": 734240498
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m33836847077",
+          "name": "Nintendo Switch V1 unpatched low serial number with Joy Cons",
+          "price": 16000,
+          "status": "on_sale",
+          "originalPrice": 16000,
+          "categoryId": 797,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m33836847077_1.jpg?1790445888"
+            }
+          ],
+          "itemCondition": {
+            "id": 3,
+            "name": "Good"
+          },
+          "brand": {
+            "id": 4591,
+            "name": "Nintendo"
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Consoles"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 797,
+              "name": "Consoles"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 617156518,
+            "sellerId": 617156518
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m23754529318",
+          "name": "For Nintendo Switch Joycons Pink and Pink",
+          "price": 2800,
+          "status": "on_sale",
+          "originalPrice": 2800,
+          "categoryId": 798,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m23754529318_1.jpg?1790453840"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New"
+          },
+          "brand": {
+            "id": 0,
+            "name": null
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Accessories"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 798,
+              "name": "Accessories"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 463374190,
+            "sellerId": 463374190
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m23909379530",
+          "name": "Nintendo Switch Games: Donkey Kong, Mario, Metroid, Pokemon ( Empty Cases )",
+          "price": 2400,
+          "status": "on_sale",
+          "originalPrice": 2400,
+          "categoryId": 796,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m23909379530_1.jpg?1788372745"
+            }
+          ],
+          "itemCondition": {
+            "id": 3,
+            "name": "Good"
+          },
+          "brand": {
+            "id": 4591,
+            "name": "Nintendo"
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Games"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 796,
+              "name": "Games"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 101149049,
+            "sellerId": 101149049
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m14809292749",
+          "name": "Nintendo Switch kiosk Game demo System - works",
+          "price": 38000,
+          "status": "on_sale",
+          "originalPrice": 38000,
+          "categoryId": 797,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m14809292749_1.jpg?1789941343"
+            }
+          ],
+          "itemCondition": {
+            "id": 3,
+            "name": "Good"
+          },
+          "brand": {
+            "id": 4591,
+            "name": "Nintendo"
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Consoles"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 797,
+              "name": "Consoles"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 958358990,
+            "sellerId": 958358990
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m18154291386",
+          "name": "Nintendo Switch OLED Model and Carrying Case and 2k19 Game and 512 Micro SDCard",
+          "price": 28500,
+          "status": "on_sale",
+          "originalPrice": 40000,
+          "categoryId": 797,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m18154291386_1.jpg?1790173408"
+            }
+          ],
+          "itemCondition": {
+            "id": 2,
+            "name": "Like new"
+          },
+          "brand": {
+            "id": 4591,
+            "name": "Nintendo"
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Consoles"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 797,
+              "name": "Consoles"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 638206196,
+            "sellerId": 638206196
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m58313703556",
+          "name": "Nintendo Switch v1   with original Joy Cons.  With minecraft game & 64 gb memory",
+          "price": 16100,
+          "status": "on_sale",
+          "originalPrice": 16100,
+          "categoryId": 797,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m58313703556_1.jpg?1789956453"
+            }
+          ],
+          "itemCondition": {
+            "id": 3,
+            "name": "Good"
+          },
+          "brand": {
+            "id": 4591,
+            "name": "Nintendo"
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Consoles"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 797,
+              "name": "Consoles"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 923496212,
+            "sellerId": 923496212
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m38135055301",
+          "name": "Nintendo Switch Joy-Con Comfort Grip Zelda Decayed Master",
+          "price": 3159,
+          "status": "on_sale",
+          "originalPrice": 3500,
+          "categoryId": 798,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m38135055301_1.jpg?1789735382"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New"
+          },
+          "brand": {
+            "id": 4591,
+            "name": "Nintendo"
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Accessories"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 798,
+              "name": "Accessories"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 373629563,
+            "sellerId": 373629563
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m42216984957",
+          "name": "Nintendo Switch Joy-Con Pair Controllers",
+          "price": 3999,
+          "status": "on_sale",
+          "originalPrice": 3999,
+          "categoryId": 798,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m42216984957_1.jpg?1790259329"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New"
+          },
+          "brand": {
+            "id": 4591,
+            "name": "Nintendo"
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Accessories"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 798,
+              "name": "Accessories"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 340281229,
+            "sellerId": 340281229
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m72772994382",
+          "name": "For Nintendo Switch Joycons Purple and Blue",
+          "price": 1500,
+          "status": "on_sale",
+          "originalPrice": 1500,
+          "categoryId": 798,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m72772994382_1.jpg?1789751473"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New"
+          },
+          "brand": {
+            "id": 0,
+            "name": null
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Accessories"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 798,
+              "name": "Accessories"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 463374190,
+            "sellerId": 463374190
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m40970263008",
+          "name": "Pokemon Sword for the Nintendo Switch",
+          "price": 3159,
+          "status": "on_sale",
+          "originalPrice": 3500,
+          "categoryId": 796,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m40970263008_1.jpg?1790207994"
+            }
+          ],
+          "itemCondition": {
+            "id": 2,
+            "name": "Like new"
+          },
+          "brand": {
+            "id": 4591,
+            "name": "Nintendo"
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Games"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 796,
+              "name": "Games"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 652848548,
+            "sellerId": 652848548
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m75852091092",
+          "name": "For Nintendo Switch Joycons Purple and Green Pastel",
+          "price": 3000,
+          "status": "on_sale",
+          "originalPrice": 3000,
+          "categoryId": 798,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m75852091092_1.jpg?1789513893"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New"
+          },
+          "brand": {
+            "id": 0,
+            "name": null
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Accessories"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 798,
+              "name": "Accessories"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 463374190,
+            "sellerId": 463374190
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m49797669236",
+          "name": "For Nintendo Switch Joycons Gray",
+          "price": 1800,
+          "status": "on_sale",
+          "originalPrice": 1800,
+          "categoryId": 798,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m49797669236_1.jpg?1790266733"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New"
+          },
+          "brand": {
+            "id": 0,
+            "name": null
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Accessories"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 798,
+              "name": "Accessories"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 463374190,
+            "sellerId": 463374190
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m96025183399",
+          "name": "For Nintendo Switch Joycons Purple and Green Pastel",
+          "price": 3000,
+          "status": "on_sale",
+          "originalPrice": 3000,
+          "categoryId": 798,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m96025183399_1.jpg?1790488121"
+            }
+          ],
+          "itemCondition": {
+            "id": 1,
+            "name": "New"
+          },
+          "brand": {
+            "id": 0,
+            "name": null
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Accessories"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 798,
+              "name": "Accessories"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 463374190,
+            "sellerId": 463374190
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        },
+        {
+          "id": "m10815627111",
+          "name": "Metroid Dread Nintendo Switch Game w/Case",
+          "price": 10000,
+          "status": "on_sale",
+          "originalPrice": 10000,
+          "categoryId": 796,
+          "color": null,
+          "photos": [
+            {
+              "imageUrl": "https://u-mercari-images.mercdn.net/photos/m10815627111_1.jpg?1790453372"
+            }
+          ],
+          "itemCondition": {
+            "id": 3,
+            "name": "Good"
+          },
+          "brand": {
+            "id": 4591,
+            "name": "Nintendo"
+          },
+          "itemSize": null,
+          "itemCategory": {
+            "name": "Games"
+          },
+          "itemCategoryHierarchy": [
+            {
+              "level": 0,
+              "id": 7,
+              "name": "Electronics"
+            },
+            {
+              "level": 1,
+              "id": 84,
+              "name": "Video games & consoles"
+            },
+            {
+              "level": 2,
+              "id": 796,
+              "name": "Games"
+            }
+          ],
+          "seller": {
+            "__typename": "PublicUser",
+            "id": 540847857,
+            "sellerId": 540847857
+          },
+          "shippingPayer": {
+            "code": null
+          },
+          "customFacetsList": []
+        }
+      ]
+    }
+  }
+}

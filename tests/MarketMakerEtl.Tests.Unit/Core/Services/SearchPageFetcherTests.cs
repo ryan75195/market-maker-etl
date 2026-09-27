@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text;
 using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
@@ -51,7 +50,7 @@ public class SearchPageFetcherTests
     }
 
     [Test]
-    public async Task Should_report_a_failure_with_the_challenge_message_after_exhausting_attempts()
+    public async Task Should_report_a_failure_with_the_unrecognised_payload_message_after_exhausting_attempts()
     {
         var client = Substitute.For<IScrapeClient>();
         client.GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(ChallengeHtml);
@@ -64,7 +63,7 @@ public class SearchPageFetcherTests
         Assert.Multiple(() =>
         {
             Assert.That(outcome.Result, Is.Null);
-            Assert.That(outcome.Failure!.Value.ErrorMessage, Is.EqualTo("Cloudflare challenge page"));
+            Assert.That(outcome.Failure!.Value.ErrorMessage, Is.EqualTo("Unrecognised search payload"));
         });
         await client.Received(3).GetPageHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -87,11 +86,8 @@ public class SearchPageFetcherTests
     public async Task Should_return_a_failed_outcome_after_exhausting_attempts_when_every_fetch_times_out()
     {
         var handler = new NeverTerminatingScrapeHandler();
-        var content = Substitute.For<IScrapeContentStore>();
-        var options = new ScrapeClientOptions(
-            "http://scraper.test", "key", TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(5));
-        var client = new HttpScrapeClient(
-            new HttpClient(handler), options, content, NullLogger<HttpScrapeClient>.Instance);
+        var options = new FetcherOptions("http://fetcher.test", TimeSpan.FromMilliseconds(20));
+        var client = new FetcherScrapeClient(new HttpClient(handler), options);
 
         var fetcher = new SearchPageFetcher(
             client, new MercariSearchParser(), maxAttempts: 2, baseDelaySeconds: 0, NullLogger.Instance);
@@ -108,22 +104,11 @@ public class SearchPageFetcherTests
 
     private sealed class NeverTerminatingScrapeHandler : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var path = request.RequestUri!.AbsolutePath;
-
-            var body = path switch
-            {
-                "/api/NewJob" => "{\"jobId\":\"job-1\"}",
-                "/api/GetStatus" => "{\"job\":{\"jobId\":\"job-1\",\"status\":\"processing\"}}",
-                _ => "[]"
-            };
-
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(body, Encoding.UTF8, "application/json")
-            });
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK);
         }
     }
 }

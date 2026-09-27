@@ -13,10 +13,8 @@ namespace MarketMakerEtl.Core;
 
 public static class ServiceCollectionExtensions
 {
-    private const string DefaultBaseUrl = "http://localhost:7126";
-    private const string DefaultApiKey = "";
-    private const string DefaultContentConnectionString = "UseDevelopmentStorage=true";
-    private const string DefaultContainerName = "html";
+    private const string DefaultFetcherBaseUrl = "http://127.0.0.1:8766";
+    private const int DefaultFetcherTimeoutSeconds = 30;
     private const int DefaultMaxPages = 2;
     private const bool DefaultCollectSold = true;
     private const int DefaultMaxBandsPerDirection = 200;
@@ -45,10 +43,6 @@ public static class ServiceCollectionExtensions
     private const double DefaultClassificationReviewThreshold = 0.9;
     private const int DefaultBusyTimeoutMs = 10000;
 
-    private static readonly TimeSpan DefaultFetchTimeout = TimeSpan.FromMinutes(5);
-
-    private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(5);
-
     public static IServiceCollection AddCoreServices(this IServiceCollection services)
     {
         return services.AddCoreServicesCore(configuration: null);
@@ -67,8 +61,7 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration? configuration)
     {
-        services.AddSingleton(BuildScrapeClientOptions(configuration));
-        services.AddSingleton(BuildScrapeContentOptions(configuration));
+        services.AddSingleton(BuildFetcherOptions(configuration));
         services.AddSingleton(BuildScrapeOptions(configuration));
         services.AddSingleton(BuildScheduleOptions(configuration));
         services.AddSingleton(TimeProvider.System);
@@ -90,10 +83,9 @@ public static class ServiceCollectionExtensions
 
     private static IServiceCollection AddCoreDomainServices(this IServiceCollection services)
     {
-        services.AddHttpClient<IScrapeClient, HttpScrapeClient>();
+        services.AddHttpClient<IScrapeClient, FetcherScrapeClient>();
         services.AddHttpClient<IListingClassifierClient, HttpListingClassifierClient>(
             client => client.Timeout = Timeout.InfiniteTimeSpan);
-        services.AddSingleton<IScrapeContentStore, BlobScrapeContentStore>();
         services.AddSingleton<IEbaySearchUrlService, EbaySearchUrlService>();
         services.AddSingleton<IEbaySearchUrlService, MercariSearchUrlService>();
         services.AddSingleton<IPriceBandSearchUrlService, MercariSearchUrlService>();
@@ -139,18 +131,10 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    private static ScrapeClientOptions BuildScrapeClientOptions(IConfiguration? configuration) =>
+    private static FetcherOptions BuildFetcherOptions(IConfiguration? configuration) =>
         new(
-            ReadString(configuration, "Scraper:BaseUrl", DefaultBaseUrl),
-            ReadString(configuration, "Scraper:ApiKey", DefaultApiKey),
-            DefaultFetchTimeout,
-            DefaultPollInterval,
-            ReadOptionalString(configuration, "Scraper:SessionReference"));
-
-    private static ScrapeContentOptions BuildScrapeContentOptions(IConfiguration? configuration) =>
-        new(
-            ReadString(configuration, "ContentStore:ConnectionString", DefaultContentConnectionString),
-            ReadString(configuration, "ContentStore:ContainerName", DefaultContainerName));
+            ReadString(configuration, "Fetcher:BaseUrl", DefaultFetcherBaseUrl),
+            TimeSpan.FromSeconds(ReadInt(configuration, "Fetcher:TimeoutSeconds", DefaultFetcherTimeoutSeconds)));
 
     private static ScrapeOptions BuildScrapeOptions(IConfiguration? configuration) =>
         new(

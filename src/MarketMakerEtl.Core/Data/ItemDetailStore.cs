@@ -9,6 +9,7 @@ namespace MarketMakerEtl.Core.Data;
 public sealed class ItemDetailStore : IItemDetailStore
 {
     private const string SoldStatus = "Sold";
+    private const string EndedStatus = "Ended";
     private const string OkDescriptionStatus = "ok";
     private const string FailedDescriptionStatus = "failed";
 
@@ -133,6 +134,22 @@ public sealed class ItemDetailStore : IItemDetailStore
             listing.DescriptionStatus = FailedDescriptionStatus;
         }
 
+        listing.UpdatedUtc = DateTime.UtcNow;
+        await SqliteBusyRetry.ExecuteAsync(() => db.SaveChangesAsync(ct), ct);
+    }
+
+    public async Task MarkListingRemoved(int listingEntityId, CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var listing = await db.Listings.FindAsync([listingEntityId], ct);
+
+        if (listing is null)
+        {
+            return;
+        }
+
+        listing.ItemStatus = EndedStatus;
+        listing.DetailFetchedUtc = DateTime.UtcNow;
         listing.UpdatedUtc = DateTime.UtcNow;
         await SqliteBusyRetry.ExecuteAsync(() => db.SaveChangesAsync(ct), ct);
     }

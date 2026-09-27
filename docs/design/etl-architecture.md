@@ -51,6 +51,15 @@ session reference is an optional field sent only when configured:
 The scraper must accept `SessionReference` on the request; the ETL depends on that
 producer contract and cannot test it from this repository.
 
+**Superseded (issue #121):** the Azure Functions scraper (`api/NewJob`/`api/GetStatus`/
+`api/GetResults`) and its blob content store were removed for Mercari. Mercari fetches now
+go through `FetcherScrapeClient`, a thin HTTP client for a local `mmfetch` sidecar
+(`Fetcher:BaseUrl`, default `http://127.0.0.1:8766`) that fetches a URL and returns its raw
+JSON body directly — no job polling, no blob indirection, no session reference. eBay parsing
+code is untouched, but eBay fetches now share the same `IScrapeClient` seam, which the
+Mercari-only sidecar rejects (`400 unsupported_url`); see the #121 PR description for that
+gap.
+
 ### 2. Runtime split: Api enqueues and reads; Etl executes
 
 The API never runs a scrape. It creates work and serves read models. The ETL host executes
@@ -93,8 +102,10 @@ The new service uses EF Core migrations and its own database.
 
 ### 8. Configuration
 
-Scraper base URL and API key, scrape concurrency, and the run deadline. No analysis
-configuration — analysis is out of scope for this repository.
+Scrape concurrency and the run deadline. No analysis configuration — analysis is out of
+scope for this repository. Fetcher base URL and timeout (`Fetcher:BaseUrl`,
+`Fetcher:TimeoutSeconds`) replaced the original scraper base URL/API key pair once the
+Azure Functions scraper was removed (issue #121).
 
 ### 9. Observability
 

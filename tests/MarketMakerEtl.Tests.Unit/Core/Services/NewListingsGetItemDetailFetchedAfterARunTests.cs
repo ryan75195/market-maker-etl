@@ -12,7 +12,7 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 [TestFixture]
 public class NewListingsGetItemDetailFetchedAfterARunTests
 {
-    private const string ListingUrl = "https://www.mercari.com/us/item/m71344610988/";
+    private const string ListingUrl = "https://www.mercari.com/us/item/m45718142917/";
 
     private string _databasePath = null!;
     private ServiceProvider _provider = null!;
@@ -47,8 +47,8 @@ public class NewListingsGetItemDetailFetchedAfterARunTests
     {
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
         var jobId = await SeedJob(factory);
-        var listingEntityId = await SeedListing(factory, jobId, "m71344610988", ListingUrl);
-        var html = ReadFixture("item-active-m71344610988.html");
+        var listingEntityId = await SeedListing(factory, jobId, "m45718142917", ListingUrl);
+        var html = ReadFixture("item-api-active-m45718142917.json");
         var client = new StubScrapeClient(new Dictionary<string, string> { [ListingUrl] = html });
         var service = new ItemDetailFetchService(
             new ItemDetailStore(factory),
@@ -63,13 +63,13 @@ public class NewListingsGetItemDetailFetchedAfterARunTests
         var listing = await db.Listings.SingleAsync(l => l.Id == listingEntityId);
         Assert.Multiple(() =>
         {
-            Assert.That(listing.Description, Does.StartWith("Hi!"));
-            Assert.That(listing.Description, Does.Contain("PlayStation 5 Digital Console"));
+            Assert.That(listing.Description, Does.StartWith("This listing is for a Nintendo Switch V1"));
+            Assert.That(listing.Description, Does.Contain("Nintendo Switch V1"));
             Assert.That(listing.DescriptionStatus, Is.EqualTo("ok"));
-            Assert.That(ListingImageUrlsJson.Deserialize(listing.ImageUrls), Has.Count.EqualTo(8));
+            Assert.That(ListingImageUrlsJson.Deserialize(listing.ImageUrls), Has.Count.EqualTo(12));
             Assert.That(listing.ShippingCost, Is.EqualTo(0m));
-            Assert.That(listing.Seller, Is.EqualTo("Nerd Mom Electronics"));
-            Assert.That(listing.OriginalPrice, Is.EqualTo(399.00m));
+            Assert.That(listing.Seller, Is.EqualTo("thehallofpops"));
+            Assert.That(listing.OriginalPrice, Is.EqualTo(165.00m));
             Assert.That(listing.DetailFetchedUtc, Is.Not.Null);
         });
     }

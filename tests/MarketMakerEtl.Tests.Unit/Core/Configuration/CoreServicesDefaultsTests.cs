@@ -13,28 +13,14 @@ public class CoreServicesDefaultsTests
     private static readonly IConfiguration EmptyConfiguration = new ConfigurationBuilder().Build();
 
     [Test]
-    public void Should_apply_scraper_client_defaults_when_configuration_is_empty()
+    public void Should_apply_fetcher_defaults_when_configuration_is_empty()
     {
-        var options = Resolve<ScrapeClientOptions>();
+        var options = Resolve<FetcherOptions>();
 
         Assert.Multiple(() =>
         {
-            Assert.That(options.BaseUrl, Is.EqualTo("http://localhost:7126"));
-            Assert.That(options.ApiKey, Is.Empty);
-            Assert.That(options.FetchTimeout, Is.EqualTo(TimeSpan.FromMinutes(5)));
-            Assert.That(options.PollInterval, Is.EqualTo(TimeSpan.FromSeconds(5)));
-        });
-    }
-
-    [Test]
-    public void Should_apply_content_store_defaults_when_configuration_is_empty()
-    {
-        var options = Resolve<ScrapeContentOptions>();
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(options.ConnectionString, Is.EqualTo("UseDevelopmentStorage=true"));
-            Assert.That(options.ContainerName, Is.EqualTo("html"));
+            Assert.That(options.BaseUrl, Is.EqualTo("http://127.0.0.1:8766"));
+            Assert.That(options.Timeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
         });
     }
 

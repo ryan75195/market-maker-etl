@@ -10,11 +10,11 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 [TestFixture]
 public class MercariSoldRefreshStoresUtcSoldDateTests
 {
-    private const string SoldUrl = "https://www.mercari.com/us/item/m44688360101/";
+    private const string SoldUrl = "https://www.mercari.com/us/item/m87013616167/";
 
     private static readonly string SoldItemPage =
         File.ReadAllText(Path.Combine(
-            TestContext.CurrentContext.TestDirectory, "Fixtures", "Mercari", "item-sold-m44688360101.html"));
+            TestContext.CurrentContext.TestDirectory, "Fixtures", "Mercari", "item-api-sold-m87013616167.json"));
 
     private string _databasePath = null!;
     private ServiceProvider _provider = null!;
@@ -62,13 +62,13 @@ public class MercariSoldRefreshStoresUtcSoldDateTests
         Assert.Multiple(() =>
         {
             Assert.That(listing.ItemStatus, Is.EqualTo("Sold"));
-            Assert.That(listing.SoldPrice, Is.EqualTo(140.25m));
+            Assert.That(listing.SoldPrice, Is.EqualTo(32.00m));
             Assert.That(listing.SoldDate!.Value.Year, Is.EqualTo(2026));
             Assert.That(listing.SoldDate.Value.Month, Is.EqualTo(9));
-            Assert.That(listing.SoldDate.Value.Day, Is.EqualTo(23));
-            Assert.That(listing.SoldDate.Value.Hour, Is.EqualTo(22));
-            Assert.That(listing.SoldDate.Value.Minute, Is.EqualTo(21));
-            Assert.That(listing.SoldDate.Value.Second, Is.EqualTo(59));
+            Assert.That(listing.SoldDate.Value.Day, Is.EqualTo(27));
+            Assert.That(listing.SoldDate.Value.Hour, Is.EqualTo(10));
+            Assert.That(listing.SoldDate.Value.Minute, Is.EqualTo(17));
+            Assert.That(listing.SoldDate.Value.Second, Is.EqualTo(33));
         });
     }
 
@@ -77,11 +77,11 @@ public class MercariSoldRefreshStoresUtcSoldDateTests
         await using var db = await factory.CreateDbContextAsync();
         var listing = new ListingEntity
         {
-            ListingId = "m44688360101",
+            ListingId = "m87013616167",
             Url = SoldUrl,
             ItemStatus = "Active",
             Marketplace = Marketplace.Mercari,
-            Price = 140.25m,
+            Price = 32.00m,
             IsSold = false,
             CreatedUtc = DateTime.UtcNow
         };

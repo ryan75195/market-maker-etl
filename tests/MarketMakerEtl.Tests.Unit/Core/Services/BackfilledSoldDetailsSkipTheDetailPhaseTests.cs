@@ -15,8 +15,8 @@ namespace MarketMakerEtl.Tests.Unit.Core.Services;
 public class BackfilledSoldDetailsSkipTheDetailPhaseTests
 {
     private const string SearchTerm = "ps5 controller";
-    private const string ListingId = "m44688360101";
-    private const string ListingUrl = "https://www.mercari.com/us/item/m44688360101/";
+    private const string ListingId = "m87013616167";
+    private const string ListingUrl = "https://www.mercari.com/us/item/m87013616167/";
 
     private string _databasePath = null!;
     private ServiceProvider _provider = null!;
@@ -50,7 +50,7 @@ public class BackfilledSoldDetailsSkipTheDetailPhaseTests
     public async Task Should_persist_a_backfilled_sold_listing_through_item_detail_store_and_skip_it_in_the_detail_phase()
     {
         var factory = _provider.GetRequiredService<IDbContextFactory<EtlDbContext>>();
-        var html = ReadFixture("item-sold-m44688360101.html");
+        var html = ReadFixture("item-api-sold-m87013616167.json");
         var client = new StubScrapeClient(new Dictionary<string, string> { [ListingUrl] = html });
         var itemParser = new MercariItemPageParser();
         var store = new ScrapeStore(factory, new ScrapeRunStateService());
@@ -73,18 +73,18 @@ public class BackfilledSoldDetailsSkipTheDetailPhaseTests
         await using var db = await factory.CreateDbContextAsync();
         var listing = await db.Listings.SingleAsync(l => l.ListingId == ListingId);
         var rawData = await db.ListingRawData.SingleOrDefaultAsync(r => r.ListingEntityId == listing.Id);
-        var seller = await db.Sellers.SingleOrDefaultAsync(s => s.SellerId == 993368787);
+        var seller = await db.Sellers.SingleOrDefaultAsync(s => s.SellerId == 787664299);
 
         Assert.Multiple(() =>
         {
-            Assert.That(listing.SoldPrice, Is.EqualTo(140.25m));
-            Assert.That(listing.SoldDate, Is.EqualTo(new DateTime(2026, 9, 23, 22, 21, 59, DateTimeKind.Utc)));
-            Assert.That(listing.Description, Does.Contain("Ps5 Controller Anniversary Edition"));
+            Assert.That(listing.SoldPrice, Is.EqualTo(32.00m));
+            Assert.That(listing.SoldDate, Is.EqualTo(new DateTime(2026, 9, 27, 10, 17, 33, DateTimeKind.Utc)));
+            Assert.That(listing.Description, Does.Contain("PowerA Enhanced Wireless Controller"));
             Assert.That(listing.DetailFetchedUtc, Is.Not.Null);
             Assert.That(rawData, Is.Not.Null);
             Assert.That(rawData!.ItemDetailJsonGzip, Is.Not.Null);
             Assert.That(seller, Is.Not.Null);
-            Assert.That(seller!.Name, Is.EqualTo("Tobey Maguire"));
+            Assert.That(seller!.Name, Is.EqualTo("Brooklynshop11"));
             Assert.That(client.RequestedUrls.Count(url => url == ListingUrl), Is.EqualTo(1));
         });
     }
@@ -109,7 +109,7 @@ public class BackfilledSoldDetailsSkipTheDetailPhaseTests
             var html = await _client.GetPageHtml(ListingUrl, ct);
             var detail = _itemParser.Parse(html)!;
             var listing = new ListingSummary(
-                ListingId, "PS5 DualSense Controller", 140.25m, "USD", ListingUrl, true, null, null, null);
+                ListingId, "PowerA Enhanced Wireless Controller", 32.00m, "USD", ListingUrl, true, null, null, null);
             var backfilledDetails = new Dictionary<string, ItemPageListing>(StringComparer.Ordinal)
             {
                 [ListingId] = detail,

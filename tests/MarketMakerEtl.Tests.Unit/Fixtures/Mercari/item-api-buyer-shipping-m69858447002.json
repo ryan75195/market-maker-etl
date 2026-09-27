@@ -1,0 +1,116 @@
+{
+  "data": {
+    "item": {
+      "__typename": "ItemDetail",
+      "id": "m69858447002",
+      "status": "on_sale",
+      "name": "Jordan 1 Retro High Black Vivid Pink Size 5Y USED",
+      "price": 4999,
+      "lastSoldAt": null,
+      "description": "Used, 100% authentic! \n\nOld release! \n\nSize: 5Y (6.5 Women\u2019s)\n\nShips out next business day, packaged safely! \n\nTons of pairs available on my page. \n\nFeel free to PM with any questions! \n\n500+ 5 \u2b50\ufe0f feedback, buy with confidence!! \n\nThank you.",
+      "discountRatio": 0,
+      "numLikes": 1,
+      "created": 1790037506,
+      "updated": 1790037506,
+      "originalPrice": 4999,
+      "categoryTitle": "Boys (4+)",
+      "photos": [
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m69858447002_1.jpg?1790037506",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m69858447002_1.jpg?1790037506&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m69858447002_2.jpg?1790037506",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m69858447002_2.jpg?1790037506&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m69858447002_3.jpg?1790037506",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m69858447002_3.jpg?1790037506&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m69858447002_4.jpg?1790037506",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m69858447002_4.jpg?1790037506&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m69858447002_5.jpg?1790037506",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m69858447002_5.jpg?1790037506&width=200&height=200"
+        },
+        {
+          "imageUrl": "https://u-mercari-images.mercdn.net/photos/m69858447002_6.jpg?1790037506",
+          "thumbnail": "https://u-mercari-images.mercdn.net/photos/m69858447002_6.jpg?1790037506&width=200&height=200"
+        }
+      ],
+      "seller": {
+        "__typename": "PublicUser",
+        "id": 682785776,
+        "created": 1661631072,
+        "numSellItems": 620,
+        "numSales": 538,
+        "name": "HBACollect",
+        "isProSeller": false,
+        "ratings": {
+          "count": 555,
+          "average": 5
+        }
+      },
+      "itemCondition": {
+        "__typename": "ItemDetailItemCondition",
+        "id": 1,
+        "name": "New"
+      },
+      "itemSize": {
+        "__typename": "ItemDetailItemSize",
+        "id": 140,
+        "name": "5"
+      },
+      "itemCategory": {
+        "__typename": "MasterItemCategory",
+        "id": 1932,
+        "level": 2,
+        "name": "Boys (4+)"
+      },
+      "itemCategoryHierarchy": [
+        {
+          "__typename": "MasterItemCategory",
+          "id": 3,
+          "level": 0,
+          "name": "Kids"
+        },
+        {
+          "__typename": "MasterItemCategory",
+          "id": 1884,
+          "level": 1,
+          "name": "Boys shoes"
+        },
+        {
+          "__typename": "MasterItemCategory",
+          "id": 1932,
+          "level": 2,
+          "name": "Boys (4+)"
+        }
+      ],
+      "brand": {
+        "__typename": "ItemDetailItemBrand",
+        "id": 115,
+        "name": "Air Jordan"
+      },
+      "shippingPayer": {
+        "__typename": "MasterShippingPayer",
+        "id": 1,
+        "name": "Buyer",
+        "code": "buyer"
+      },
+      "shippingFromArea": {
+        "__typename": "ShippingFromArea",
+        "id": 21,
+        "name": "Maryland"
+      },
+      "shippingClass": {
+        "__typename": "ItemDetailShippingClass",
+        "id": 2449,
+        "fee": 797
+      },
+      "additionalAttributes": []
+    }
+  }
+}
