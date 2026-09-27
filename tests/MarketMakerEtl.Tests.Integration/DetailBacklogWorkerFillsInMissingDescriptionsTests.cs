@@ -19,13 +19,17 @@ public class DetailBacklogWorkerFillsInMissingDescriptionsTests
     private const string FailingUrl = "https://www.mercari.com/us/item/m00000000002/";
 
     private const string MercariItemPage = """
-        <html>
-        <body>
-          <h1 data-testid="ItemName">Vintage Camera</h1>
-          <div data-testid="ItemPrice">$45</div>
-          <div data-testid="ItemDetailsDescription">Barely used, comes with original box.</div>
-        </body>
-        </html>
+        {
+          "data": {
+            "item": {
+              "id": "m00000000001",
+              "name": "Vintage Camera",
+              "status": "on_sale",
+              "price": 4500,
+              "description": "Barely used, comes with original box."
+            }
+          }
+        }
         """;
 
     private string _databasePath = null!;
