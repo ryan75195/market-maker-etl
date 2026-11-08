@@ -3,7 +3,6 @@ using MarketMakerEtl.Core.Interfaces;
 using MarketMakerEtl.Core.Models.Scheduling;
 using MarketMakerEtl.Core.Models.Scraper;
 using MarketMakerEtl.Core.Services;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using static MarketMakerEtl.Core.ConfigurationValueReader;
@@ -77,9 +76,7 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton(PriceGroupOptionsFactory.Build(configuration));
         services.AddSingleton(DealsOptionsFactory.Build(configuration));
         services.AddSingleton(BacktestOptionsFactory.Build(configuration));
-        services.AddDbContextFactory<EtlDbContext>(options =>
-            options.UseSqlite(BuildDatabaseConnectionString(configuration))
-                .AddInterceptors(new SqlitePragmaConnectionInterceptor(BuildBusyTimeoutMs(configuration))));
+        services.AddEtlDbContextFactory(configuration);
 
         return services.AddCoreDomainServices();
     }
@@ -206,25 +203,4 @@ public static partial class ServiceCollectionExtensions
                 configuration,
                 "DetailBacklog:InfrastructureBackoffMaxSeconds",
                 DefaultDetailBacklogInfrastructureBackoffMaxSeconds));
-
-    private static int BuildBusyTimeoutMs(IConfiguration? configuration) =>
-        ReadInt(configuration, "Database:BusyTimeoutMs", DefaultBusyTimeoutMs);
-
-    private static string BuildDatabaseConnectionString(IConfiguration? configuration)
-    {
-        var configured = configuration?["Database:ConnectionString"];
-        return string.IsNullOrWhiteSpace(configured)
-            ? $"Data Source={ResolveDefaultDatabasePath()}"
-            : configured;
-    }
-
-    private static string ResolveDefaultDatabasePath()
-    {
-        var directory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MarketMakerEtl");
-        Directory.CreateDirectory(directory);
-        return Path.Combine(directory, DefaultDatabaseFileName);
-    }
-
 }
